@@ -12,7 +12,9 @@ final class AppState: ObservableObject {
             "showOtherAdapters": false,
             "useBits": false,
             "hiddenAdapters": [],
-            "showTopApps": false
+            "showTopApps": false,
+            "uploadColor": "green",
+            "downloadColor": "blue"
         ])
         let monitor = NetworkMonitor()
         self.monitor = monitor

@@ -8,6 +8,8 @@ final class NetworkMonitor: ObservableObject {
     @Published var totals = RateTotals(rxRateBps: 0, txRateBps: 0)
     @Published var topApps: [AppTraffic] = []
     @Published var topAppsError: String? = nil
+    @Published var internalIP: String = "—"
+    @Published var externalIP: String = "—"
 
     private var timer: DispatchSourceTimer?
     private var lastSample: [String: InterfaceSample] = [:]
@@ -15,6 +17,8 @@ final class NetworkMonitor: ObservableObject {
     private var currentInterval: Double?
     private var lastTopAppsUpdate: Date?
     private var topAppsInFlight = false
+    private var lastExternalIPUpdate: Date?
+    private var externalIPInFlight = false
 
     func start(interval: Double) {
         let clamped = max(0.2, min(interval, 10.0))
@@ -84,6 +88,30 @@ final class NetworkMonitor: ObservableObject {
         lastUpdate = now
 
         updateTopAppsIfNeeded()
+        updateIPsIfNeeded()
+    }
+
+    private func updateIPsIfNeeded() {
+        internalIP = InterfaceSampler.primaryInternalIP()
+
+        let now = Date()
+        if let lastExternalIPUpdate, now.timeIntervalSince(lastExternalIPUpdate) < 60.0 { return }
+        guard !externalIPInFlight else { return }
+
+        externalIPInFlight = true
+        Task { [weak self] in
+            let ip = await Self.fetchExternalIP()
+            guard let self else { return }
+            self.externalIP = ip ?? "—"
+            self.lastExternalIPUpdate = Date()
+            self.externalIPInFlight = false
+        }
+    }
+
+    private static func fetchExternalIP() async -> String? {
+        guard let url = URL(string: "https://api.ipify.org") else { return nil }
+        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func updateTopAppsIfNeeded() {
@@ -334,5 +362,31 @@ enum InterfaceSampler {
         guard let previous, deltaTime > 0 else { return 0 }
         let delta = current >= previous ? current - previous : 0
         return Double(delta) / deltaTime
+    }
+
+    static func primaryInternalIP() -> String {
+        var pointer: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&pointer) == 0, let first = pointer else { return "—" }
+        defer { freeifaddrs(pointer) }
+
+        var fallback: String?
+        var current: UnsafeMutablePointer<ifaddrs>? = first
+        while let entry = current?.pointee {
+            defer { current = entry.ifa_next }
+            guard let sa = entry.ifa_addr,
+                  sa.pointee.sa_family == UInt8(AF_INET),
+                  (entry.ifa_flags & UInt32(IFF_UP)) != 0,
+                  (entry.ifa_flags & UInt32(IFF_LOOPBACK)) == 0 else { continue }
+            var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            guard getnameinfo(sa, socklen_t(sa.pointee.sa_len),
+                              &hostname, socklen_t(NI_MAXHOST),
+                              nil, 0, NI_NUMERICHOST) == 0 else { continue }
+            let ip = hostname.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+            guard !ip.isEmpty, ip != "0.0.0.0", !ip.hasPrefix("169.254") else { continue }
+            let ifName = String(cString: entry.ifa_name)
+            if ifName == "en0" { return ip }
+            if fallback == nil { fallback = ip }
+        }
+        return fallback ?? "—"
     }
 }

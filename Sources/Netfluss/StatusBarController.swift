@@ -27,7 +27,7 @@ final class StatusBarController: NSObject, ObservableObject {
 
         let contentView = MenuBarView()
             .environmentObject(monitor)
-            .frame(width: 320)
+            .frame(width: 340)
         popover.contentViewController = NSHostingController(rootView: contentView)
         popover.behavior = .transient
 
@@ -72,14 +72,31 @@ final class StatusBarController: NSObject, ObservableObject {
 
         upLabel.stringValue = upText
         downLabel.stringValue = downText
+
+        let uploadName = UserDefaults.standard.string(forKey: "uploadColor") ?? "green"
+        let downloadName = UserDefaults.standard.string(forKey: "downloadColor") ?? "blue"
+        upLabel.textColor = nsColor(for: uploadName, default: .systemGreen)
+        downLabel.textColor = nsColor(for: downloadName, default: .systemBlue)
+    }
+
+    private func nsColor(for name: String, default fallback: NSColor) -> NSColor {
+        switch name {
+        case "green":  return .systemGreen
+        case "blue":   return .systemBlue
+        case "orange": return .systemOrange
+        case "yellow": return .systemYellow
+        case "teal":   return .systemTeal
+        case "purple": return .systemPurple
+        case "pink":   return .systemPink
+        case "white":  return .white
+        default:       return fallback
+        }
     }
 
     private func configureLabels(in button: NSStatusBarButton) {
         let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
         upLabel.font = font
-        upLabel.textColor = .systemGreen
         downLabel.font = font
-        downLabel.textColor = .labelColor
 
         stackView.orientation = .vertical
         stackView.spacing = 1
