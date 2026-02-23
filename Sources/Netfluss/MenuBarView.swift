@@ -450,6 +450,17 @@ struct FooterBar: View {
             Spacer()
 
             Button {
+                AboutWindowController.shared.show()
+            } label: {
+                Label("About", systemImage: "info.circle")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button {
                 NSApplication.shared.terminate(nil)
             } label: {
                 Label("Quit", systemImage: "power")
