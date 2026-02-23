@@ -30,8 +30,10 @@ struct MenuBarView: View {
     @AppStorage("showOtherAdapters") private var showOtherAdapters: Bool = false
     @AppStorage("useBits") private var useBits: Bool = false
     @AppStorage("showTopApps") private var showTopApps: Bool = false
+    @AppStorage("theme") private var themeName: String = "system"
 
     var body: some View {
+        let theme = AppTheme.named(themeName)
         VStack(spacing: 0) {
             TotalRatesHeader(totals: monitor.totals, useBits: useBits)
 
@@ -78,6 +80,8 @@ struct MenuBarView: View {
             Divider()
             FooterBar()
         }
+        .background(theme.backgroundColor ?? .clear)
+        .environment(\.appTheme, theme)
     }
 
     private func filteredAdapters() -> [AdapterStatus] {
@@ -97,19 +101,21 @@ struct TotalRatesHeader: View {
     let totals: RateTotals
     let useBits: Bool
 
+    @Environment(\.appTheme) private var theme
+
     var body: some View {
         HStack(spacing: 0) {
             NetRateCell(
                 icon: "arrow.down",
                 label: "Download",
-                color: .blue,
+                color: theme.downloadColor,
                 rate: RateFormatter.formatRate(totals.rxRateBps, useBits: useBits)
             )
             Divider()
             NetRateCell(
                 icon: "arrow.up",
                 label: "Upload",
-                color: .green,
+                color: theme.uploadColor,
                 rate: RateFormatter.formatRate(totals.txRateBps, useBits: useBits)
             )
         }
@@ -149,6 +155,8 @@ struct AdapterCard: View {
     let useBits: Bool
     let isReconnecting: Bool
     var onReconnect: (() -> Void)? = nil
+
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -191,7 +199,7 @@ struct AdapterCard: View {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.down")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(theme.downloadColor)
                     Text(RateFormatter.formatRate(adapter.rxRateBps, useBits: useBits))
                         .font(.system(size: 11))
                         .monospacedDigit()
@@ -199,7 +207,7 @@ struct AdapterCard: View {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(theme.uploadColor)
                     Text(RateFormatter.formatRate(adapter.txRateBps, useBits: useBits))
                         .font(.system(size: 11))
                         .monospacedDigit()
@@ -215,7 +223,13 @@ struct AdapterCard: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 10)
-        .background(.quinary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background {
+            if let c = theme.cardColor {
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(c)
+            } else {
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quinary)
+            }
+        }
     }
 
     private func adapterIcon() -> String {
@@ -367,6 +381,8 @@ struct AppTrafficRow: View {
     let useBits: Bool
     let maxTotal: Double
 
+    @Environment(\.appTheme) private var theme
+
     private var total: Double { app.rxRateBps + app.txRateBps }
     private var fraction: Double { maxTotal > 0 ? min(1, total / maxTotal) : 0 }
 
@@ -382,7 +398,7 @@ struct AppTrafficRow: View {
                     HStack(spacing: 3) {
                         Image(systemName: "arrow.down")
                             .font(.system(size: 8))
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(theme.downloadColor)
                         Text(RateFormatter.formatRate(app.rxRateBps, useBits: useBits))
                             .font(.system(size: 10))
                             .monospacedDigit()
@@ -390,7 +406,7 @@ struct AppTrafficRow: View {
                     HStack(spacing: 3) {
                         Image(systemName: "arrow.up")
                             .font(.system(size: 8))
-                            .foregroundStyle(.green)
+                            .foregroundStyle(theme.uploadColor)
                         Text(RateFormatter.formatRate(app.txRateBps, useBits: useBits))
                             .font(.system(size: 10))
                             .monospacedDigit()
@@ -404,7 +420,7 @@ struct AppTrafficRow: View {
                         .fill(.quaternary)
                         .frame(height: 3)
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(.blue.opacity(0.6))
+                        .fill(theme.downloadColor.opacity(0.6))
                         .frame(width: geo.size.width * fraction, height: 3)
                 }
             }

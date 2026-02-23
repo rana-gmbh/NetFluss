@@ -49,6 +49,34 @@ struct ColorSwatchPicker: View {
     }
 }
 
+struct ThemeChip: View {
+    let theme: AppTheme
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 3) {
+                Circle()
+                    .fill(theme.downloadColor)
+                    .frame(width: 8, height: 8)
+                Circle()
+                    .fill(theme.uploadColor)
+                    .frame(width: 8, height: 8)
+            }
+            Text(theme.displayName)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(theme.textPrimary ?? .primary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(theme.backgroundColor ?? Color(NSColor.windowBackgroundColor), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(isSelected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: isSelected ? 2 : 1)
+        )
+    }
+}
+
 struct PreferencesView: View {
     @AppStorage("refreshInterval") private var refreshInterval: Double = 1.0
     @AppStorage("showInactive") private var showInactive: Bool = false
@@ -57,6 +85,9 @@ struct PreferencesView: View {
     @AppStorage("showTopApps") private var showTopApps: Bool = false
     @AppStorage("uploadColor") private var uploadColor: String = "green"
     @AppStorage("downloadColor") private var downloadColor: String = "blue"
+    @AppStorage("theme") private var themeName: String = "system"
+    @AppStorage("menuBarFontSize") private var menuBarFontSize: Double = 10.0
+    @AppStorage("menuBarFontDesign") private var menuBarFontDesign: String = "monospaced"
     @State private var hiddenAdapters: Set<String> = []
 
     @EnvironmentObject private var monitor: NetworkMonitor
@@ -93,11 +124,41 @@ struct PreferencesView: View {
             }
 
             Section("Appearance") {
-                LabeledContent("Upload ↑") {
-                    ColorSwatchPicker(selection: $uploadColor)
+                LabeledContent("Theme") {
+                    HStack(spacing: 6) {
+                        ForEach(AppTheme.all) { t in
+                            Button { themeName = t.id } label: {
+                                ThemeChip(theme: t, isSelected: themeName == t.id)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
-                LabeledContent("Download ↓") {
-                    ColorSwatchPicker(selection: $downloadColor)
+                if themeName == "system" {
+                    LabeledContent("Upload ↑") {
+                        ColorSwatchPicker(selection: $uploadColor)
+                    }
+                    LabeledContent("Download ↓") {
+                        ColorSwatchPicker(selection: $downloadColor)
+                    }
+                }
+                LabeledContent("Menu bar size") {
+                    HStack(spacing: 8) {
+                        Text("\(Int(menuBarFontSize)) pt")
+                            .monospacedDigit()
+                            .frame(width: 36, alignment: .trailing)
+                        Stepper("", value: $menuBarFontSize, in: 8...16, step: 1)
+                            .labelsHidden()
+                    }
+                }
+                LabeledContent("Menu bar font") {
+                    Picker("", selection: $menuBarFontDesign) {
+                        Text("Monospaced").tag("monospaced")
+                        Text("System").tag("default")
+                        Text("Rounded").tag("rounded")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 200)
                 }
             }
 
@@ -111,7 +172,7 @@ struct PreferencesView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 420, height: 540)
+        .frame(width: 420, height: 640)
         .onAppear {
             hiddenAdapters = Set(UserDefaults.standard.stringArray(forKey: "hiddenAdapters") ?? [])
         }

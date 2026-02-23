@@ -55,6 +55,7 @@ final class StatusBarController: NSObject, ObservableObject {
             popover.performClose(nil)
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
         }
     }
 
@@ -62,6 +63,10 @@ final class StatusBarController: NSObject, ObservableObject {
         let interval = UserDefaults.standard.double(forKey: "refreshInterval")
         let effectiveInterval = interval > 0 ? interval : 1.0
         monitor.start(interval: effectiveInterval)
+
+        let theme = AppTheme.named(UserDefaults.standard.string(forKey: "theme") ?? "system")
+        popover.appearance = theme.isDark ? NSAppearance(named: .darkAqua) : nil
+
         updateLabel()
     }
 
@@ -73,10 +78,40 @@ final class StatusBarController: NSObject, ObservableObject {
         upLabel.stringValue = upText
         downLabel.stringValue = downText
 
-        let uploadName = UserDefaults.standard.string(forKey: "uploadColor") ?? "green"
-        let downloadName = UserDefaults.standard.string(forKey: "downloadColor") ?? "blue"
-        upLabel.textColor = nsColor(for: uploadName, default: .systemGreen)
-        downLabel.textColor = nsColor(for: downloadName, default: .systemBlue)
+        let font = menuBarFont()
+        upLabel.font = font
+        downLabel.font = font
+
+        let theme = AppTheme.named(UserDefaults.standard.string(forKey: "theme") ?? "system")
+        if theme.id == "system" {
+            upLabel.textColor  = nsColor(for: UserDefaults.standard.string(forKey: "uploadColor")   ?? "green", default: .systemGreen)
+            downLabel.textColor = nsColor(for: UserDefaults.standard.string(forKey: "downloadColor") ?? "blue",  default: .systemBlue)
+        } else {
+            upLabel.textColor   = NSColor(theme.uploadColor)
+            downLabel.textColor = NSColor(theme.downloadColor)
+        }
+
+        // Keep the status item width snug to the content so the gap to the
+        // next menu bar icon stays consistent regardless of font size.
+        let attrs: [NSAttributedString.Key: Any] = [.font: font]
+        let upW   = (upText   as NSString).size(withAttributes: attrs).width
+        let downW = (downText as NSString).size(withAttributes: attrs).width
+        statusItem.length = ceil(max(upW, downW)) + 4  // 2 px padding each side
+    }
+
+    private func menuBarFont() -> NSFont {
+        let raw = UserDefaults.standard.double(forKey: "menuBarFontSize")
+        let size = max(8, min(16, raw > 0 ? raw : 10))
+        switch UserDefaults.standard.string(forKey: "menuBarFontDesign") ?? "monospaced" {
+        case "monospaced":
+            return .monospacedSystemFont(ofSize: size, weight: .medium)
+        case "rounded":
+            let base = NSFont.systemFont(ofSize: size, weight: .medium)
+            let desc = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
+            return NSFont(descriptor: desc, size: size) ?? .systemFont(ofSize: size, weight: .medium)
+        default:
+            return .systemFont(ofSize: size, weight: .medium)
+        }
     }
 
     private func nsColor(for name: String, default fallback: NSColor) -> NSColor {
@@ -94,10 +129,6 @@ final class StatusBarController: NSObject, ObservableObject {
     }
 
     private func configureLabels(in button: NSStatusBarButton) {
-        let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
-        upLabel.font = font
-        downLabel.font = font
-
         stackView.orientation = .vertical
         stackView.spacing = 1
         stackView.alignment = .leading
@@ -111,8 +142,7 @@ final class StatusBarController: NSObject, ObservableObject {
 
         NSLayoutConstraint.activate([
             stackView.centerYAnchor.constraint(equalTo: button.centerYAnchor),
-            stackView.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 2),
-            stackView.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -2)
+            stackView.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 2)
         ])
     }
 }
