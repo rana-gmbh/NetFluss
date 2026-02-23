@@ -9,7 +9,7 @@ final class PreferencesWindowController {
     func show(monitor: NetworkMonitor) {
         if let window {
             window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            window.orderFrontRegardless()
             return
         }
 
@@ -24,7 +24,7 @@ final class PreferencesWindowController {
         window.isReleasedWhenClosed = false
         window.center()
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        window.orderFrontRegardless()
 
         self.window = window
     }

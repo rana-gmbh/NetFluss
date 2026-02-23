@@ -7,21 +7,26 @@ final class AboutWindowController {
     private var window: NSWindow?
 
     func show() {
-        if let window {
+        // If the window is already visible, just raise it.
+        if let window, window.isVisible {
             window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            window.orderFrontRegardless()
             return
         }
 
+        // The window may have been closed — discard the stale reference
+        // and create a fresh one so UpdateChecker resets to idle.
+        window = nil
+
         let hosting = NSHostingController(rootView: AboutView())
-        let window = NSWindow(contentViewController: hosting)
-        window.title = "About Netfluss"
-        window.styleMask = [.titled, .closable]
-        window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 300, height: 420))
-        window.center()
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        self.window = window
+        let win = NSWindow(contentViewController: hosting)
+        win.title = "About Netfluss"
+        win.styleMask = [.titled, .closable]
+        win.isReleasedWhenClosed = false
+        win.setContentSize(NSSize(width: 300, height: 420))
+        win.center()
+        win.makeKeyAndOrderFront(nil)
+        win.orderFrontRegardless()
+        self.window = win
     }
 }

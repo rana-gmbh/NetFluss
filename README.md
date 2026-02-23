@@ -22,7 +22,7 @@ A minimal macOS menubar app showing real-time upload and download rates across a
   - ↺ reconnect button — cycles the adapter off and back on (Wi-Fi: no password needed; Ethernet: macOS admin dialog)
 - **IP addresses** — External, Internal, and Router IP, each with a one-click copy button
 - **Top Apps** — optional section listing the top 5 processes by current network traffic, with a relative usage bar per app (enable in Preferences)
-- **Footer** — quick access to Preferences and Quit
+- **Footer** — quick access to Preferences, About, and Quit
 
 ### Preferences
 - Refresh interval (0.5 – 5 seconds)
@@ -35,6 +35,11 @@ A minimal macOS menubar app showing real-time upload and download rates across a
 - Menu bar font size (8–16 pt stepper) and font style (Monospaced / System / Rounded)
 - Top Apps toggle
 
+### About
+- Version number with link to release notes on GitHub
+- Made by Rana GmbH — www.ranagmbh.de
+- Check for Updates — queries GitHub Releases, shows release notes and a Download button when a newer version is found
+
 ## Requirements
 
 - macOS 13 Ventura or later
@@ -42,7 +47,7 @@ A minimal macOS menubar app showing real-time upload and download rates across a
 
 ## Install
 
-Download `Netfluss-1.4.zip` from the [latest release](https://github.com/rana-gmbh/netfluss/releases/latest), unzip, and move `Netfluss.app` to `/Applications`.
+Download `Netfluss-1.5.zip` from the [latest release](https://github.com/rana-gmbh/netfluss/releases/latest), unzip, and move `Netfluss.app` to `/Applications`.
 
 **First launch — Gatekeeper:** right-click → Open → Open, or run once in Terminal:
 ```bash
