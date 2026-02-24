@@ -1,6 +1,7 @@
 # Netfluss
 
 [![GitHub release](https://img.shields.io/github/v/release/rana-gmbh/netfluss)](https://github.com/rana-gmbh/netfluss/releases/latest)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 A minimal macOS menubar app showing real-time upload and download rates across all active network adapters.
 
@@ -70,3 +71,8 @@ Or open `Package.swift` in Xcode, select the `Netfluss` scheme, and run.
 - Ethernet link speed is read from `ifi_baudrate` and may show `—` when unavailable.
 - External IP is fetched from `api.ipify.org` and cached for 60 seconds.
 - Top Apps reads per-connection byte counts from `netstat -n -b -v` and correlates them with process names via `proc_pidpath`. Only processes with active TCP/UDP connections appear in the list.
+
+## License
+
+Netfluss is released under the [GNU General Public License v3.0](LICENSE).
+Copyright © 2026 Rana GmbH
