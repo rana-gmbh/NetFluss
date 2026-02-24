@@ -48,7 +48,8 @@ A minimal macOS menubar app showing real-time upload and download rates across a
 
 - macOS 13 Ventura or later
 - Xcode 15+ or Swift 5.9+ toolchain (to build from source)
-
+- Currently only Apple Silicon. I plan a universal package for Intel+ARM for the next release (1.6)
+  
 ## Install
 
 Download `Netfluss-1.5.zip` from the [latest release](https://github.com/rana-gmbh/netfluss/releases/latest), unzip, and move `Netfluss.app` to `/Applications`.
