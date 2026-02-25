@@ -48,15 +48,17 @@ struct MenuBarView: View {
     @AppStorage("useBits") private var useBits: Bool = false
     @AppStorage("showTopApps") private var showTopApps: Bool = false
     @AppStorage("theme") private var themeName: String = "system"
+    @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
 
     var body: some View {
         let theme = AppTheme.named(themeName)
+        let adapters = filteredAdapters()
+        let headerTotals = totalsOnlyVisibleAdapters ? totals(for: adapters) : monitor.totals
         VStack(spacing: 0) {
-            TotalRatesHeader(totals: monitor.totals, useBits: useBits)
+            TotalRatesHeader(totals: headerTotals, useBits: useBits)
 
             Divider()
 
-            let adapters = filteredAdapters()
             let customNames = (try? JSONDecoder().decode([String: String].self,
                 from: UserDefaults.standard.data(forKey: "adapterCustomNames") ?? Data())) ?? [:]
             if adapters.isEmpty {
@@ -122,6 +124,16 @@ struct MenuBarView: View {
             }
         }
         return filtered
+    }
+
+    private func totals(for adapters: [AdapterStatus]) -> RateTotals {
+        var rx: Double = 0
+        var tx: Double = 0
+        for adapter in adapters {
+            rx += adapter.rxRateBps
+            tx += adapter.txRateBps
+        }
+        return RateTotals(rxRateBps: rx, txRateBps: tx)
     }
 }
 

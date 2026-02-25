@@ -37,7 +37,8 @@ final class AppState: ObservableObject {
             "menuBarFontDesign": "monospaced",
             "adapterOrder": [],
             "adapterCustomNames": Data(),
-            "menuBarMode": "rates"
+            "menuBarMode": "rates",
+            "totalsOnlyVisibleAdapters": false
         ])
         let monitor = NetworkMonitor()
         self.monitor = monitor

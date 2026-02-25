@@ -107,8 +107,9 @@ final class StatusBarController: NSObject, ObservableObject {
         statusItem.button?.imagePosition = .noImage
 
         let useBits = UserDefaults.standard.bool(forKey: "useBits")
-        let upText = "↑ \(RateFormatter.formatRate(monitor.totals.txRateBps, useBits: useBits))"
-        let downText = "↓ \(RateFormatter.formatRate(monitor.totals.rxRateBps, useBits: useBits))"
+        let totals = effectiveTotals()
+        let upText = "↑ \(RateFormatter.formatRate(totals.txRateBps, useBits: useBits))"
+        let downText = "↓ \(RateFormatter.formatRate(totals.rxRateBps, useBits: useBits))"
 
         upLabel.stringValue = upText
         downLabel.stringValue = downText
@@ -161,6 +162,28 @@ final class StatusBarController: NSObject, ObservableObject {
         case "white":  return .white
         default:       return fallback
         }
+    }
+
+    private func effectiveTotals() -> RateTotals {
+        let onlyVisible = UserDefaults.standard.bool(forKey: "totalsOnlyVisibleAdapters")
+        guard onlyVisible else { return monitor.totals }
+
+        let showInactive = UserDefaults.standard.bool(forKey: "showInactive")
+        let showOtherAdapters = UserDefaults.standard.bool(forKey: "showOtherAdapters")
+        let hidden = Set(UserDefaults.standard.stringArray(forKey: "hiddenAdapters") ?? [])
+
+        var rx: Double = 0
+        var tx: Double = 0
+
+        for adapter in monitor.adapters {
+            if !showOtherAdapters, adapter.type == .other { continue }
+            if !showInactive, adapter.rxRateBps == 0, adapter.txRateBps == 0, adapter.isUp == false { continue }
+            if hidden.contains(adapter.id) { continue }
+            rx += adapter.rxRateBps
+            tx += adapter.txRateBps
+        }
+
+        return RateTotals(rxRateBps: rx, txRateBps: tx)
     }
 
     private func configureLabels(in button: NSStatusBarButton) {
