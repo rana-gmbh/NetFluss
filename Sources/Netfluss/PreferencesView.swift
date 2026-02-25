@@ -106,6 +106,7 @@ struct PreferencesView: View {
     @AppStorage("menuBarFontSize") private var menuBarFontSize: Double = 10.0
     @AppStorage("menuBarFontDesign") private var menuBarFontDesign: String = "monospaced"
     @AppStorage("menuBarMode") private var menuBarMode: String = "rates"
+    @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
     @State private var hiddenAdapters: Set<String> = []
     @State private var adapterNames: [String: String] = [:]
     @State private var adapterOrder: [String] = []
@@ -184,6 +185,11 @@ struct PreferencesView: View {
                         )
                     }
                 }
+
+                Toggle("Only include visible adapters in totals", isOn: $totalsOnlyVisibleAdapters)
+                Text("When enabled, the Download/Upload summary and menu bar use only adapters that are visible here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Units") {
