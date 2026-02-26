@@ -63,9 +63,9 @@ Download `Netfluss-1.7.zip` from the [latest release](https://github.com/rana-gm
 Netfluss is notarized and signed with a Developer ID — Gatekeeper will clear it automatically on first launch.
 
 You can also use Homebrew to install Netfluss: 
-
+```bash
 brew install --cask rana-gmbh/netfluss/netfluss  
-
+```
 
 ## Build from source
 
