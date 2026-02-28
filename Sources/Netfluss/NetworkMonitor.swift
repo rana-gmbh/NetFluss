@@ -264,17 +264,24 @@ enum ProcessNetworkSampler {
                   let tx = UInt64(parts[txIndex]),
                   rx > 0 || tx > 0 else { continue }
 
-            // The process:pid token ends with :digits after the last colon.
-            // IPv6 address tokens (e.g. "2a02:810a:912:d5.57207") are excluded because
-            // their last colon-suffix contains a dot ("d5.57207"), so Int32 parsing fails.
-            guard let pidToken = parts.first(where: { token in
+            // Locate the PID. Two formats exist across macOS versions:
+            //   macOS 26+: "name:pid" token appended to the line
+            //   macOS 15:  dedicated numeric column at rxIndex + 4
+            //              (proto recv-q send-q local foreign [state] rx tx rhiwat shiwat pid …)
+            // IPv6 address tokens (e.g. "2a02:810a:912:d5.57207") are excluded from the
+            // token search because their last colon-suffix contains a dot, so Int32 parsing fails.
+            var pid: pid_t? = nil
+            if let pidToken = parts.first(where: { token in
                 token.contains(":") &&
                 token.split(separator: ":", omittingEmptySubsequences: true)
                      .last.flatMap({ Int32($0) }) != nil
-            }) else { continue }
-
-            guard let pid = pidToken.split(separator: ":").last.flatMap({ Int32($0) }),
-                  pid > 0 else { continue }
+            }) {
+                pid = pidToken.split(separator: ":").last.flatMap({ Int32($0) })
+            } else {
+                let pidIdx = rxIndex + 4
+                if pidIdx < parts.count { pid = Int32(parts[pidIdx]) }
+            }
+            guard let pid, pid > 0 else { continue }
 
             let prev = pidBytes[pid] ?? (rx: 0, tx: 0)
             pidBytes[pid] = (rx: prev.rx + rx, tx: prev.tx + tx)
