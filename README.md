@@ -49,7 +49,7 @@ A minimal macOS menubar app showing real-time upload and download rates across a
 ### About
 - Version number with link to release notes on GitHub
 - Made by Rana GmbH — www.ranagmbh.de
-- Check for Updates — queries GitHub Releases, shows release notes and a Download button when a newer version is found
+- If you want to support this project directly, please use https://buymeacoffee.com/robertrudolph
 
 ## Requirements
 
