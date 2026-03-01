@@ -107,7 +107,12 @@ struct PreferencesView: View {
     @AppStorage("menuBarFontSize") private var menuBarFontSize: Double = 10.0
     @AppStorage("menuBarFontDesign") private var menuBarFontDesign: String = "monospaced"
     @AppStorage("menuBarMode") private var menuBarMode: String = "rates"
+    @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "list"
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
+    @AppStorage("adapterGracePeriodEnabled") private var adapterGracePeriodEnabled: Bool = false
+    @AppStorage("adapterGracePeriodSeconds") private var adapterGracePeriodSeconds: Double = 3.0
+    @AppStorage("topAppsGracePeriodEnabled") private var topAppsGracePeriodEnabled: Bool = false
+    @AppStorage("topAppsGracePeriodSeconds") private var topAppsGracePeriodSeconds: Double = 3.0
     @State private var hiddenAdapters: Set<String> = []
     @State private var adapterNames: [String: String] = [:]
     @State private var adapterOrder: [String] = []
@@ -132,6 +137,18 @@ struct PreferencesView: View {
                 }
                 Toggle("Show inactive adapters", isOn: $showInactive)
                 Toggle("Show other adapters (VPN, virtual)", isOn: $showOtherAdapters)
+                Toggle("Hide adapters after inactivity", isOn: $adapterGracePeriodEnabled)
+                if adapterGracePeriodEnabled {
+                    LabeledContent("Hide after") {
+                        Picker("", selection: $adapterGracePeriodSeconds) {
+                            Text("3 s").tag(3.0)
+                            Text("5 s").tag(5.0)
+                            Text("10 s").tag(10.0)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 160)
+                    }
+                }
             }
 
             Section("Adapters") {
@@ -243,6 +260,14 @@ struct PreferencesView: View {
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 200)
                 }
+                LabeledContent("IP display") {
+                    Picker("", selection: $connectionStatusMode) {
+                        Text("List").tag("list")
+                        Text("Flow").tag("flow")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 160)
+                }
             }
 
             Section("Top Apps") {
@@ -251,6 +276,18 @@ struct PreferencesView: View {
                     Text("Shows the top 5 processes ranked by current network traffic.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
+                    Toggle("Keep apps visible after traffic stops", isOn: $topAppsGracePeriodEnabled)
+                    if topAppsGracePeriodEnabled {
+                        LabeledContent("Visible for") {
+                            Picker("", selection: $topAppsGracePeriodSeconds) {
+                                Text("3 s").tag(3.0)
+                                Text("5 s").tag(5.0)
+                                Text("10 s").tag(10.0)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(maxWidth: 160)
+                        }
+                    }
                 }
             }
 
@@ -273,7 +310,7 @@ struct PreferencesView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 420, height: 760)
+        .frame(width: 420, height: 820)
         .onAppear {
             hiddenAdapters = Set(UserDefaults.standard.stringArray(forKey: "hiddenAdapters") ?? [])
             adapterNames = loadAdapterNames()

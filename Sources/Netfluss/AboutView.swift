@@ -22,7 +22,7 @@ struct AboutView: View {
     @StateObject private var checker = UpdateChecker()
 
     private var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.7.1"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.8"
     }
 
     private var releaseNotesURL: URL {
@@ -72,6 +72,27 @@ struct AboutView: View {
 
             Divider()
 
+            // Support
+            VStack(spacing: 4) {
+                Text("If you want to support this project,")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 0) {
+                    Text("please consider to ")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Buy me a coffee ↗") {
+                        NSWorkspace.shared.open(URL(string: "https://buymeacoffee.com/robertrudolph")!)
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Color.accentColor)
+                    .font(.caption)
+                }
+            }
+            .padding(.vertical, 12)
+
+            Divider()
+
             // License
             VStack(spacing: 4) {
                 Text("Released under the")
@@ -95,7 +116,7 @@ struct AboutView: View {
                 .padding(.vertical, 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 300, height: 460)
+        .frame(width: 300, height: 520)
     }
 
     @ViewBuilder

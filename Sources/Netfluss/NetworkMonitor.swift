@@ -25,9 +25,11 @@ final class NetworkMonitor: ObservableObject {
     @Published var totals = RateTotals(rxRateBps: 0, txRateBps: 0)
     @Published var topApps: [AppTraffic] = []
     @Published var reconnectingAdapters: Set<String> = []
+    @Published var adapterGraceDeadlines: [String: Date] = [:]
     @Published var internalIP: String = "—"
     @Published var gatewayIP: String = "—"
     @Published var externalIP: String = "—"
+    @Published var externalIPCountryCode: String = ""
 
     private var timer: DispatchSourceTimer?
     private var lastSample: [String: InterfaceSample] = [:]
@@ -38,6 +40,8 @@ final class NetworkMonitor: ObservableObject {
     private var processSnapshot: [String: (rx: UInt64, tx: UInt64)] = [:]
     private var processSnapshotTime: Date?
     private var topAppsTaskInFlight = false
+    private var adapterLastActiveTime: [String: Date] = [:]
+    private var topAppLastActiveTime: [String: (lastSeen: Date, rxRate: Double, txRate: Double)] = [:]
 
     func start(interval: Double) {
         let clamped = max(0.2, min(interval, 10.0))
@@ -87,6 +91,7 @@ final class NetworkMonitor: ObservableObject {
                 wifiMode: wifiInfo?.mode,
                 wifiTxRateMbps: wifiInfo?.txRate,
                 wifiSSID: wifiInfo?.ssid,
+                wifiDetail: wifiInfo?.detail,
                 rxBytes: sample.rxBytes,
                 txBytes: sample.txBytes,
                 rxRateBps: rxRate,
@@ -101,6 +106,41 @@ final class NetworkMonitor: ObservableObject {
         totals = RateTotals(rxRateBps: totalRxRate, txRateBps: totalTxRate)
         lastSample = Dictionary(uniqueKeysWithValues: samples.map { ($0.name, $0) })
         lastUpdate = now
+
+        // Adapter grace period tracking
+        let graceEnabled = UserDefaults.standard.bool(forKey: "adapterGracePeriodEnabled")
+        let graceSeconds = UserDefaults.standard.double(forKey: "adapterGracePeriodSeconds")
+        let currentAdapterIDs = Set(updatedAdapters.map(\.id))
+
+        for adapter in updatedAdapters {
+            let hasBandwidth = adapter.rxRateBps > 0 || adapter.txRateBps > 0
+            if hasBandwidth {
+                adapterLastActiveTime[adapter.id] = now
+            } else if adapterLastActiveTime[adapter.id] == nil {
+                // First time seeing this adapter — give it an initial grace window
+                // so it doesn't vanish immediately on app start.
+                adapterLastActiveTime[adapter.id] = now
+            }
+        }
+
+        if graceEnabled {
+            var deadlines: [String: Date] = [:]
+            for adapter in updatedAdapters {
+                let hasBandwidth = adapter.rxRateBps > 0 || adapter.txRateBps > 0
+                if !hasBandwidth, let lastActive = adapterLastActiveTime[adapter.id] {
+                    let deadline = lastActive.addingTimeInterval(graceSeconds)
+                    if now < deadline {
+                        deadlines[adapter.id] = deadline
+                    }
+                }
+            }
+            adapterGraceDeadlines = deadlines
+        } else {
+            if !adapterGraceDeadlines.isEmpty { adapterGraceDeadlines = [:] }
+        }
+
+        // Clean up tracking for adapters no longer returned by getifaddrs
+        adapterLastActiveTime = adapterLastActiveTime.filter { currentAdapterIDs.contains($0.key) }
 
         updateTopApps()
         updateIPsIfNeeded()
@@ -131,12 +171,49 @@ final class NetworkMonitor: ObservableObject {
             if let prevTime = previousTime, !previousSnapshot.isEmpty {
                 let elapsed = sampleTime.timeIntervalSince(prevTime)
                 if elapsed >= 0.1 {
-                    self.topApps = ProcessNetworkSampler.rates(
+                    var apps = ProcessNetworkSampler.rates(
                         current: snapshot,
                         previous: previousSnapshot,
                         elapsed: elapsed,
                         limit: 5
                     )
+
+                    let topAppsGraceEnabled = UserDefaults.standard.bool(forKey: "topAppsGracePeriodEnabled")
+                    let topAppsGraceSeconds = UserDefaults.standard.double(forKey: "topAppsGracePeriodSeconds")
+                    let now = Date()
+
+                    // Update last-active tracking for currently active apps
+                    let activeNames = Set(apps.map(\.name))
+                    for app in apps {
+                        self.topAppLastActiveTime[app.name] = (lastSeen: now, rxRate: app.rxRateBps, txRate: app.txRateBps)
+                    }
+
+                    if topAppsGraceEnabled {
+                        // Re-insert recently-active apps that are no longer active
+                        for (name, entry) in self.topAppLastActiveTime {
+                            if activeNames.contains(name) { continue }
+                            let deadline = entry.lastSeen.addingTimeInterval(topAppsGraceSeconds)
+                            if now < deadline {
+                                apps.append(AppTraffic(id: name, name: name, rxRateBps: 0, txRateBps: 0))
+                            }
+                        }
+                        // Sort: active apps first by throughput, then grace apps by name
+                        apps.sort {
+                            let aTotal = $0.rxRateBps + $0.txRateBps
+                            let bTotal = $1.rxRateBps + $1.txRateBps
+                            if aTotal > 0 && bTotal == 0 { return true }
+                            if aTotal == 0 && bTotal > 0 { return false }
+                            if aTotal > 0 && bTotal > 0 { return aTotal > bTotal }
+                            return $0.name < $1.name
+                        }
+                        apps = Array(apps.prefix(5))
+                        // Clean up expired entries
+                        self.topAppLastActiveTime = self.topAppLastActiveTime.filter { now < $0.value.lastSeen.addingTimeInterval(topAppsGraceSeconds) }
+                    } else {
+                        self.topAppLastActiveTime.removeAll()
+                    }
+
+                    self.topApps = apps
                 }
             }
 
@@ -157,18 +234,24 @@ final class NetworkMonitor: ObservableObject {
 
         externalIPInFlight = true
         Task { [weak self] in
-            let ip = await Self.fetchExternalIP()
+            let result = await Self.fetchExternalIP()
             guard let self else { return }
-            self.externalIP = ip ?? "—"
+            self.externalIP = result?.ip ?? "—"
+            self.externalIPCountryCode = result?.countryCode ?? ""
             self.lastExternalIPUpdate = Date()
             self.externalIPInFlight = false
         }
     }
 
-    private static func fetchExternalIP() async -> String? {
-        guard let url = URL(string: "https://api.ipify.org") else { return nil }
-        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
-        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    private static func fetchExternalIP() async -> (ip: String, countryCode: String)? {
+        guard let url = URL(string: "https://ipapi.co/json/") else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue("Netfluss/1.0", forHTTPHeaderField: "User-Agent")
+        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ip = json["ip"] as? String else { return nil }
+        let country = json["country_code"] as? String ?? ""
+        return (ip: ip, countryCode: country)
     }
 
     // MARK: - Reconnect
@@ -432,6 +515,7 @@ enum InterfaceSampler {
         let mode: String
         let txRate: Double
         let ssid: String?
+        let detail: WifiDetail
     }
 
     static func wifiInfo() -> [String: WifiInfo] {
@@ -443,7 +527,17 @@ enum InterfaceSampler {
             let mode = wifiModeString(for: iface)
             let rate = iface.transmitRate()
             let ssid = iface.ssid()
-            map[name] = WifiInfo(mode: mode, txRate: rate, ssid: ssid)
+            let channel = iface.wlanChannel()
+            let detail = WifiDetail(
+                phyMode: phyModeString(iface.activePHYMode()),
+                security: securityString(iface.security()),
+                channelNumber: channel.map { Int($0.channelNumber) },
+                channelWidth: channel.map { channelWidthString($0.channelWidth) },
+                rssi: Int(iface.rssiValue()),
+                noise: Int(iface.noiseMeasurement()),
+                bssid: iface.bssid()
+            )
+            map[name] = WifiInfo(mode: mode, txRate: rate, ssid: ssid, detail: detail)
         }
         return map
     }
@@ -455,6 +549,53 @@ enum InterfaceSampler {
         case .band5GHz?: return "Wi-Fi (5 GHz)"
         case .band2GHz?: return "Wi-Fi (2.4 GHz)"
         default: return "Wi-Fi"
+        }
+    }
+
+    private static func phyModeString(_ mode: CWPHYMode) -> String {
+        switch mode {
+        case .modeNone: return "None"
+        case .mode11a: return "802.11a"
+        case .mode11b: return "802.11b"
+        case .mode11g: return "802.11g"
+        case .mode11n: return "Wi-Fi 4 (802.11n)"
+        case .mode11ac: return "Wi-Fi 5 (802.11ac)"
+        case .mode11ax: return "Wi-Fi 6 (802.11ax)"
+        @unknown default: return "Unknown"
+        }
+    }
+
+    private static func securityString(_ security: CWSecurity) -> String {
+        switch security {
+        case .none: return "Open"
+        case .WEP: return "WEP"
+        case .wpaPersonal: return "WPA Personal"
+        case .wpaPersonalMixed: return "WPA/WPA2 Personal"
+        case .wpa2Personal: return "WPA2 Personal"
+        case .personal: return "WPA3 Personal"
+        case .wpa3Personal: return "WPA3 Personal"
+        case .wpa3Transition: return "WPA2/WPA3 Personal"
+        case .dynamicWEP: return "Dynamic WEP"
+        case .wpaEnterprise: return "WPA Enterprise"
+        case .wpaEnterpriseMixed: return "WPA/WPA2 Enterprise"
+        case .wpa2Enterprise: return "WPA2 Enterprise"
+        case .enterprise: return "WPA3 Enterprise"
+        case .wpa3Enterprise: return "WPA3 Enterprise"
+        case .OWE: return "OWE"
+        case .oweTransition: return "OWE Transition"
+        case .unknown: return "Unknown"
+        @unknown default: return "Unknown"
+        }
+    }
+
+    private static func channelWidthString(_ width: CWChannelWidth) -> String {
+        switch width {
+        case .width20MHz: return "20 MHz"
+        case .width40MHz: return "40 MHz"
+        case .width80MHz: return "80 MHz"
+        case .width160MHz: return "160 MHz"
+        case .widthUnknown: return "Unknown"
+        @unknown default: return "Unknown"
         }
     }
 

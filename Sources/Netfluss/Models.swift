@@ -32,6 +32,7 @@ struct AdapterStatus: Identifiable {
     let wifiMode: String?
     let wifiTxRateMbps: Double?
     let wifiSSID: String?
+    let wifiDetail: WifiDetail?
     let rxBytes: UInt64
     let txBytes: UInt64
     let rxRateBps: Double
@@ -48,6 +49,16 @@ struct AppTraffic: Identifiable {
     let name: String
     let rxRateBps: Double
     let txRateBps: Double
+}
+
+struct WifiDetail {
+    let phyMode: String?
+    let security: String?
+    let channelNumber: Int?
+    let channelWidth: String?
+    let rssi: Int?
+    let noise: Int?
+    let bssid: String?
 }
 
 struct InterfaceSample {

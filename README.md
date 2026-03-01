@@ -27,7 +27,10 @@ A minimal macOS menubar app showing real-time upload and download rates across a
   - Per-card DL/UL rates with coloured arrows
   - Wi-Fi frequency band (2.4 GHz / 5 GHz / 6 GHz) or "Ethernet"
   - ↺ reconnect button — cycles the adapter off and back on (Wi-Fi: no password needed; Ethernet: macOS admin dialog)
-- **IP addresses** — External, Internal, and Router IP, each with a one-click copy button
+  - ℹ️ **Wi-Fi detail popover** — click the (i) button on any Wi-Fi card to see: Standard (e.g. Wi-Fi 6 / 802.11ax), Security (WPA3 Personal, etc.), Channel & Width, RSSI, Noise, SNR, ESSID, BSSID (with copy), and Tx Rate
+- **IP addresses** — two display modes:
+  - **List view** — External, Internal, and Router IP, each with a one-click copy button
+  - **Connection flow view** — visual network path from your Mac through the router (and VPN, if active) to the internet, with country flag for VPN exit nodes
 - **Top Apps** — optional section listing the top 5 processes by current network traffic, with a relative usage bar per app (enable in Preferences)
 - **Footer** — quick access to Preferences, About, and Quit
 
@@ -35,6 +38,7 @@ A minimal macOS menubar app showing real-time upload and download rates across a
 - Refresh interval (0.5 – 5 seconds)
 - Show/hide inactive adapters
 - Show/hide other adapters (VPN, virtual interfaces)
+- **Adapter grace period** — keep adapters visible for 3 s, 5 s, or 10 s after they go idle, so brief inactivity doesn't make cards flicker
 - Per-adapter visibility toggles, custom names (pencil button), and drag-to-reorder (≡ handle) — order and names are reflected in the popover
 - Adapter list scrolls when more than 6 interfaces are shown
 - Option to exclude hidden adapters from the total bandwidth shown in the header and menu bar
@@ -43,13 +47,16 @@ A minimal macOS menubar app showing real-time upload and download rates across a
 - Upload / Download label colours (8 swatches, System theme only)
 - **Menu bar display** — Rates (live ↑/↓ numbers, default) or Icon (network globe symbol)
 - Menu bar font size (8–16 pt stepper) and font style (Monospaced / System / Rounded)
+- **Connection status mode** — choose between the classic IP list or the new connection flow view
 - Top Apps toggle
+- **Top Apps grace period** — keep apps visible for 3 s, 5 s, or 10 s after their traffic stops, preventing the list from constantly reshuffling
 - **Launch at login** toggle
 
 ### About
 - Version number with link to release notes on GitHub
 - Made by Rana GmbH — www.ranagmbh.de
 - If you want to support this project directly, please use https://buymeacoffee.com/robertrudolph
+- Check for Updates — queries GitHub Releases, shows release notes and a Download button when a newer version is found
 
 ## Requirements
 
@@ -58,7 +65,7 @@ A minimal macOS menubar app showing real-time upload and download rates across a
 
 ## Install
 
-Download `Netfluss-1.7.1.zip` from the [latest release](https://github.com/rana-gmbh/netfluss/releases/latest), unzip, and move `Netfluss.app` to `/Applications`.
+Download `Netfluss-1.8.zip` from the [latest release](https://github.com/rana-gmbh/netfluss/releases/latest), unzip, and move `Netfluss.app` to `/Applications`.
 
 Netfluss is notarized and signed with a Developer ID — Gatekeeper will clear it automatically on first launch.
 

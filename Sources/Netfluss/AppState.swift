@@ -38,7 +38,12 @@ final class AppState {
             "adapterOrder": [],
             "adapterCustomNames": Data(),
             "menuBarMode": "rates",
-            "totalsOnlyVisibleAdapters": false
+            "totalsOnlyVisibleAdapters": false,
+            "adapterGracePeriodEnabled": false,
+            "adapterGracePeriodSeconds": 3.0,
+            "topAppsGracePeriodEnabled": false,
+            "topAppsGracePeriodSeconds": 3.0,
+            "connectionStatusMode": "list"
         ])
         let monitor = NetworkMonitor()
         self.monitor = monitor

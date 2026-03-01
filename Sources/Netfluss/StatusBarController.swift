@@ -170,6 +170,7 @@ final class StatusBarController: NSObject {
 
         let showInactive = UserDefaults.standard.bool(forKey: "showInactive")
         let showOtherAdapters = UserDefaults.standard.bool(forKey: "showOtherAdapters")
+        let graceEnabled = UserDefaults.standard.bool(forKey: "adapterGracePeriodEnabled")
         let hidden = Set(UserDefaults.standard.stringArray(forKey: "hiddenAdapters") ?? [])
 
         var rx: Double = 0
@@ -177,8 +178,13 @@ final class StatusBarController: NSObject {
 
         for adapter in monitor.adapters {
             if !showOtherAdapters, adapter.type == .other { continue }
-            if !showInactive, adapter.rxRateBps == 0, adapter.txRateBps == 0, adapter.isUp == false { continue }
             if hidden.contains(adapter.id) { continue }
+            let zeroBandwidth = adapter.rxRateBps == 0 && adapter.txRateBps == 0
+            if graceEnabled, zeroBandwidth {
+                if monitor.adapterGraceDeadlines[adapter.id] == nil { continue }
+            } else if !showInactive, zeroBandwidth, !adapter.isUp {
+                continue
+            }
             rx += adapter.rxRateBps
             tx += adapter.txRateBps
         }

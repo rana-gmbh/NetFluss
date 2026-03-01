@@ -11,9 +11,9 @@
     <key>CFBundleIdentifier</key>
     <string>com.local.netfluss</string>
     <key>CFBundleVersion</key>
-    <string>13</string>
+    <string>14</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.5</string>
+    <string>1.8</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>

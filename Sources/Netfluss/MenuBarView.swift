@@ -21,11 +21,13 @@ import AppKit
 struct MenuBarView: View {
     @EnvironmentObject private var monitor: NetworkMonitor
     @AppStorage("showInactive") private var showInactive: Bool = false
+    @AppStorage("adapterGracePeriodEnabled") private var adapterGracePeriodEnabled: Bool = false
     @AppStorage("showOtherAdapters") private var showOtherAdapters: Bool = false
     @AppStorage("useBits") private var useBits: Bool = false
     @AppStorage("showTopApps") private var showTopApps: Bool = false
     @AppStorage("theme") private var themeName: String = "system"
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
+    @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "list"
 
     // Height for one adapter card (padding + title row + spacing + rates row) + inter-card spacing.
     // Used to size the scroll area to show exactly 6 cards before scrolling kicks in.
@@ -76,11 +78,21 @@ struct MenuBarView: View {
             }
 
             Divider()
-            IPAddressSection(
-                externalIP: monitor.externalIP,
-                internalIP: monitor.internalIP,
-                gatewayIP: monitor.gatewayIP
-            )
+            if connectionStatusMode == "flow" {
+                ConnectionStatusSection(
+                    externalIP: monitor.externalIP,
+                    internalIP: monitor.internalIP,
+                    gatewayIP: monitor.gatewayIP,
+                    adapters: monitor.adapters,
+                    countryCode: monitor.externalIPCountryCode
+                )
+            } else {
+                IPAddressSection(
+                    externalIP: monitor.externalIP,
+                    internalIP: monitor.internalIP,
+                    gatewayIP: monitor.gatewayIP
+                )
+            }
 
             if showTopApps {
                 Divider()
@@ -103,8 +115,14 @@ struct MenuBarView: View {
         let hidden = Set(UserDefaults.standard.stringArray(forKey: "hiddenAdapters") ?? [])
         var filtered = monitor.adapters.filter { adapter in
             if !showOtherAdapters, adapter.type == .other { return false }
-            if !showInactive, adapter.rxRateBps == 0, adapter.txRateBps == 0, adapter.isUp == false { return false }
             if hidden.contains(adapter.id) { return false }
+            let zeroBandwidth = adapter.rxRateBps == 0 && adapter.txRateBps == 0
+            // Grace period: hide zero-bandwidth adapters after grace expires
+            if adapterGracePeriodEnabled, zeroBandwidth {
+                return monitor.adapterGraceDeadlines[adapter.id] != nil
+            }
+            // Original: hide fully-down adapters immediately when showInactive is off
+            if !showInactive, zeroBandwidth, !adapter.isUp { return false }
             return true
         }
         let order = UserDefaults.standard.stringArray(forKey: "adapterOrder") ?? []
@@ -193,6 +211,7 @@ struct AdapterCard: View {
     var onReconnect: (() -> Void)? = nil
 
     @Environment(\.appTheme) private var theme
+    @State private var showWifiDetail = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -218,6 +237,22 @@ struct AdapterCard: View {
                         }
                         .buttonStyle(.borderless)
                         .help("Reconnect")
+                    }
+                }
+                if adapter.type == .wifi, let detail = adapter.wifiDetail {
+                    Button { showWifiDetail.toggle() } label: {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Wi-Fi Details")
+                    .popover(isPresented: $showWifiDetail) {
+                        WifiDetailPopover(
+                            detail: detail,
+                            ssid: adapter.wifiSSID,
+                            txRate: adapter.wifiTxRateMbps
+                        )
                     }
                 }
                 let link = linkText()
@@ -308,6 +343,94 @@ struct AdapterCard: View {
     }
 }
 
+// MARK: - Wi-Fi Detail Popover
+
+struct WifiDetailPopover: View {
+    let detail: WifiDetail
+    let ssid: String?
+    let txRate: Double?
+
+    @State private var copiedBSSID = false
+
+    private var snr: Int? {
+        guard let rssi = detail.rssi, let noise = detail.noise else { return nil }
+        return rssi - noise
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let phyMode = detail.phyMode {
+                detailRow("Standard", phyMode)
+            }
+            if let security = detail.security {
+                detailRow("Security", security)
+            }
+            if let chNum = detail.channelNumber {
+                let width = detail.channelWidth ?? ""
+                let channelStr = width.isEmpty ? "Ch \(chNum)" : "Ch \(chNum) (\(width))"
+                detailRow("Channel", channelStr)
+            }
+            if let rssi = detail.rssi {
+                detailRow("RSSI", "\(rssi) dBm")
+            }
+            if let noise = detail.noise {
+                detailRow("Noise", "\(noise) dBm")
+            }
+            if let snr {
+                detailRow("SNR", "\(snr) dB")
+            }
+            if let ssid, !ssid.isEmpty {
+                detailRow("ESSID", ssid)
+            }
+            if let bssid = detail.bssid {
+                HStack(spacing: 4) {
+                    Text("BSSID")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 60, alignment: .leading)
+                    Text(bssid)
+                        .font(.system(size: 11, weight: .medium))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                    Spacer()
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(bssid, forType: .string)
+                        withAnimation(.easeInOut(duration: 0.15)) { copiedBSSID = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation(.easeInOut(duration: 0.15)) { copiedBSSID = false }
+                        }
+                    } label: {
+                        Image(systemName: copiedBSSID ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 10))
+                            .foregroundStyle(copiedBSSID ? .green : .secondary)
+                            .frame(width: 14)
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            if let rate = txRate, rate > 0 {
+                detailRow("Tx Rate", "\(Int(rate)) Mbps")
+            }
+        }
+        .padding(12)
+        .frame(width: 260)
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .frame(width: 60, alignment: .leading)
+            Text(value)
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(1)
+            Spacer()
+        }
+    }
+}
+
 // MARK: - IP Address Section
 
 struct IPAddressSection: View {
@@ -364,6 +487,148 @@ struct IPRow: View {
             .buttonStyle(.borderless)
             .disabled(ip == "—")
         }
+    }
+}
+
+// MARK: - Connection Status Section
+
+private let vpnPrefixes = ["utun", "ipsec", "ppp", "tun"]
+
+struct ConnectionStatusSection: View {
+    let externalIP: String
+    let internalIP: String
+    let gatewayIP: String
+    let adapters: [AdapterStatus]
+    let countryCode: String
+
+    private var activeVPNs: [AdapterStatus] {
+        let vpnIPs = Self.vpnInterfaceIPs()
+        return adapters.filter { adapter in
+            guard adapter.type == .other, adapter.isUp else { return false }
+            guard vpnPrefixes.contains(where: { adapter.id.hasPrefix($0) }) else { return false }
+            return vpnIPs[adapter.id] != nil
+        }
+    }
+
+    private static func vpnInterfaceIPs() -> [String: String] {
+        var result: [String: String] = [:]
+        var pointer: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&pointer) == 0, let first = pointer else { return result }
+        defer { freeifaddrs(pointer) }
+
+        var current: UnsafeMutablePointer<ifaddrs>? = first
+        while let entry = current?.pointee {
+            defer { current = entry.ifa_next }
+            guard let sa = entry.ifa_addr, sa.pointee.sa_family == UInt8(AF_INET) else { continue }
+            let name = String(cString: entry.ifa_name)
+            guard vpnPrefixes.contains(where: { name.hasPrefix($0) }) else { continue }
+            var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            guard getnameinfo(sa, socklen_t(sa.pointee.sa_len),
+                              &hostname, socklen_t(NI_MAXHOST),
+                              nil, 0, NI_NUMERICHOST) == 0 else { continue }
+            let ip = hostname.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+            if !ip.isEmpty { result[name] = ip }
+        }
+        return result
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ConnectionNode(icon: "laptopcomputer", label: "Internal", detail: internalIP, color: .blue)
+            ConnectionArrow()
+            ConnectionNode(icon: "wifi.router", label: "Router", detail: gatewayIP, color: .orange)
+            ConnectionArrow()
+            if !activeVPNs.isEmpty {
+                vpnNode
+                ConnectionArrow()
+            }
+            ConnectionNode(icon: "globe", label: "External", detail: externalIP, color: .green)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private var vpnNode: some View {
+        let flag = Self.flagEmoji(for: countryCode)
+        if activeVPNs.count == 1 {
+            let vpn = activeVPNs[0]
+            ConnectionNode(icon: "lock.shield", label: vpn.displayName, detail: vpn.id, color: .purple, flag: flag)
+        } else {
+            let names = activeVPNs.map(\.id).joined(separator: ", ")
+            ConnectionNode(icon: "lock.shield", label: "\(activeVPNs.count) VPNs", detail: names, color: .purple, flag: flag)
+        }
+    }
+
+    private static func flagEmoji(for code: String) -> String? {
+        let code = code.uppercased()
+        guard code.count == 2, code.unicodeScalars.allSatisfy({ $0.isASCII && $0.properties.isAlphabetic }) else { return nil }
+        let base: UInt32 = 0x1F1E6 - 0x41 // regional indicator A
+        let scalars = code.unicodeScalars.compactMap { UnicodeScalar(base + $0.value) }
+        guard scalars.count == 2 else { return nil }
+        return String(scalars.map { Character($0) })
+    }
+}
+
+struct ConnectionNode: View {
+    let icon: String
+    let label: String
+    let detail: String
+    let color: Color
+    var flag: String? = nil
+
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(detail, forType: .string)
+            withAnimation(.easeInOut(duration: 0.15)) { copied = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation(.easeInOut(duration: 0.15)) { copied = false }
+            }
+        } label: {
+            VStack(spacing: 3) {
+                if copied {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.green)
+                } else if let flag {
+                    Text(flag)
+                        .font(.system(size: 16))
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.primary)
+                }
+                Text(label)
+                    .font(.system(size: 9, weight: .semibold))
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.system(size: 9))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(color.opacity(0.12))
+            )
+        }
+        .buttonStyle(.borderless)
+        .disabled(detail == "—")
+    }
+}
+
+struct ConnectionArrow: View {
+    var body: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.tertiary)
+            .frame(width: 14)
     }
 }
 
