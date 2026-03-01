@@ -248,7 +248,7 @@ struct PreferencesView: View {
             Section("Top Apps") {
                 Toggle("Show top apps by network usage", isOn: $showTopApps)
                 if showTopApps {
-                    Text("Shows the top 10 processes ranked by current network traffic.")
+                    Text("Shows the top 5 processes ranked by current network traffic.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                 }

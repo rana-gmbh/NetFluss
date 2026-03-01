@@ -18,29 +18,6 @@
 import SwiftUI
 import AppKit
 
-struct MenuBarLabelView: View {
-    @EnvironmentObject private var monitor: NetworkMonitor
-    @AppStorage("refreshInterval") private var refreshInterval: Double = 1.0
-    @AppStorage("useBits") private var useBits: Bool = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text("↑ \(RateFormatter.formatRate(monitor.totals.txRateBps, useBits: useBits))")
-                .foregroundStyle(.green)
-            Text("↓ \(RateFormatter.formatRate(monitor.totals.rxRateBps, useBits: useBits))")
-                .foregroundStyle(.blue)
-        }
-        .font(.system(size: 10, weight: .medium))
-        .monospacedDigit()
-        .task {
-            monitor.start(interval: refreshInterval)
-        }
-        .onChange(of: refreshInterval) { newValue in
-            monitor.start(interval: newValue)
-        }
-    }
-}
-
 struct MenuBarView: View {
     @EnvironmentObject private var monitor: NetworkMonitor
     @AppStorage("showInactive") private var showInactive: Bool = false
@@ -109,7 +86,6 @@ struct MenuBarView: View {
                 Divider()
                 TopAppsSection(
                     topApps: monitor.topApps,
-                    error: monitor.topAppsError,
                     useBits: useBits
                 )
             }
@@ -395,7 +371,6 @@ struct IPRow: View {
 
 struct TopAppsSection: View {
     let topApps: [AppTraffic]
-    let error: String?
     let useBits: Bool
 
     private var maxTotal: Double {
@@ -413,7 +388,7 @@ struct TopAppsSection: View {
 
             ZStack(alignment: .topLeading) {
                 if topApps.isEmpty {
-                    Text(error.map { "Error: \($0)" } ?? "Gathering data…")
+                    Text("Gathering data…")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)

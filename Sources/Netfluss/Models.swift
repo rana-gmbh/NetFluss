@@ -24,8 +24,7 @@ enum AdapterType: String {
 }
 
 struct AdapterStatus: Identifiable {
-    let id: String
-    let name: String
+    let id: String          // BSD name (e.g. "en0")
     let displayName: String
     let type: AdapterType
     let isUp: Bool

@@ -20,7 +20,7 @@ import Combine
 import SwiftUI
 
 @MainActor
-final class StatusBarController: NSObject, ObservableObject {
+final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private let monitor: NetworkMonitor

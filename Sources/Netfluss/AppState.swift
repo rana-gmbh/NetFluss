@@ -18,7 +18,7 @@
 import Foundation
 
 @MainActor
-final class AppState: ObservableObject {
+final class AppState {
     let monitor: NetworkMonitor
     let statusBar: StatusBarController
 

@@ -24,7 +24,6 @@ final class NetworkMonitor: ObservableObject {
     @Published var adapters: [AdapterStatus] = []
     @Published var totals = RateTotals(rxRateBps: 0, txRateBps: 0)
     @Published var topApps: [AppTraffic] = []
-    @Published var topAppsError: String? = nil
     @Published var reconnectingAdapters: Set<String> = []
     @Published var internalIP: String = "—"
     @Published var gatewayIP: String = "—"
@@ -58,8 +57,7 @@ final class NetworkMonitor: ObservableObject {
     private func refresh() {
         let now = Date()
         let samples = InterfaceSampler.fetchSamples()
-        let typeMap = InterfaceSampler.interfaceTypes()
-        let displayMap = InterfaceSampler.interfaceDisplayNames()
+        let infoMap = InterfaceSampler.interfaceInfo()
         let wifiInfoMap = InterfaceSampler.wifiInfo()
 
         var updatedAdapters: [AdapterStatus] = []
@@ -73,15 +71,15 @@ final class NetworkMonitor: ObservableObject {
             let rxRate = InterfaceSampler.rate(current: sample.rxBytes, previous: previous?.rxBytes, deltaTime: deltaTime)
             let txRate = InterfaceSampler.rate(current: sample.txBytes, previous: previous?.txBytes, deltaTime: deltaTime)
 
-            let type = typeMap[sample.name] ?? .other
-            let displayName = displayMap[sample.name] ?? sample.name
+            let info = infoMap[sample.name]
+            let type = info?.type ?? .other
+            let displayName = info?.displayName ?? sample.name
             let wifiInfo = wifiInfoMap[sample.name]
             let isUp = (sample.flags & UInt32(IFF_UP)) != 0
             let linkSpeed = type == .ethernet ? sample.baudrate : nil
 
             let adapter = AdapterStatus(
                 id: sample.name,
-                name: sample.name,
                 displayName: displayName,
                 type: type,
                 isUp: isUp,
@@ -139,7 +137,6 @@ final class NetworkMonitor: ObservableObject {
                         elapsed: elapsed,
                         limit: 5
                     )
-                    self.topAppsError = nil
                 }
             }
 
@@ -178,22 +175,26 @@ final class NetworkMonitor: ObservableObject {
 
     func reconnect(adapter: AdapterStatus) {
         guard adapter.type == .wifi || adapter.type == .ethernet else { return }
-        reconnectingAdapters.insert(adapter.id)
+        let bsdName = adapter.id
+        // BSD names from getifaddrs are kernel-provided (e.g. "en0"), but validate
+        // before interpolating into a shell command as a defense-in-depth measure.
+        guard bsdName.allSatisfy({ $0.isLetter || $0.isNumber }) else { return }
+        reconnectingAdapters.insert(bsdName)
 
-        Task.detached(priority: .userInitiated) { [weak self, name = adapter.name, type = adapter.type, id = adapter.id] in
+        Task.detached(priority: .userInitiated) { [weak self, bsdName, type = adapter.type] in
             switch type {
             case .wifi:
-                let port = Self.hardwarePortName(for: name)
+                let port = Self.hardwarePortName(for: bsdName)
                 Self.runSync("/usr/sbin/networksetup", ["-setairportpower", port, "off"])
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 Self.runSync("/usr/sbin/networksetup", ["-setairportpower", port, "on"])
             case .ethernet:
-                let script = "do shell script \"ifconfig \(name) down && sleep 1 && ifconfig \(name) up\" with administrator privileges"
+                let script = "do shell script \"ifconfig \(bsdName) down && sleep 1 && ifconfig \(bsdName) up\" with administrator privileges"
                 Self.runSync("/usr/bin/osascript", ["-e", script])
             case .other:
                 break
             }
-            _ = await MainActor.run { [weak self] in self?.reconnectingAdapters.remove(id) }
+            _ = await MainActor.run { [weak self] in self?.reconnectingAdapters.remove(bsdName) }
         }
     }
 
@@ -232,8 +233,10 @@ final class NetworkMonitor: ObservableObject {
         p.standardOutput = pipe
         p.standardError = Pipe()
         guard (try? p.run()) != nil else { return "" }
+        // Read before waitUntilExit to avoid pipe-buffer deadlock.
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
-        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return String(data: data, encoding: .utf8) ?? ""
     }
 }
 
@@ -247,12 +250,11 @@ enum ProcessNetworkSampler {
         let output = runNetstat()
         var pidBytes: [pid_t: (rx: UInt64, tx: UInt64)] = [:]
 
-        for line in output.components(separatedBy: "\n") {
-            let parts = line.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        for line in output.split(separator: "\n") {
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
             guard parts.count >= 8 else { continue }
-            let proto = parts[0]
-            let isTCP = proto.hasPrefix("tcp")
-            let isUDP = proto.hasPrefix("udp")
+            let isTCP = parts[0].hasPrefix("tcp")
+            let isUDP = parts[0].hasPrefix("udp")
             guard isTCP || isUDP else { continue }
 
             // TCP: proto recv-q send-q local foreign STATE rxbytes txbytes ...
@@ -398,34 +400,30 @@ enum InterfaceSampler {
         return samples
     }
 
-    static func interfaceTypes() -> [String: AdapterType] {
-        guard let list = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface] else { return [:] }
-        var map: [String: AdapterType] = [:]
-        for iface in list {
-            guard let bsdName = SCNetworkInterfaceGetBSDName(iface) as String? else { continue }
-            if let type = SCNetworkInterfaceGetInterfaceType(iface) {
-                if CFEqual(type, kSCNetworkInterfaceTypeIEEE80211) {
-                    map[bsdName] = .wifi
-                } else if CFEqual(type, kSCNetworkInterfaceTypeEthernet) {
-                    map[bsdName] = .ethernet
-                } else {
-                    map[bsdName] = .other
-                }
-            } else {
-                map[bsdName] = .other
-            }
-        }
-        return map
+    struct InterfaceInfo {
+        let type: AdapterType
+        let displayName: String
     }
 
-    static func interfaceDisplayNames() -> [String: String] {
+    static func interfaceInfo() -> [String: InterfaceInfo] {
         guard let list = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface] else { return [:] }
-        var map: [String: String] = [:]
+        var map: [String: InterfaceInfo] = [:]
         for iface in list {
             guard let bsdName = SCNetworkInterfaceGetBSDName(iface) as String? else { continue }
-            if let name = SCNetworkInterfaceGetLocalizedDisplayName(iface) as String? {
-                map[bsdName] = name
+            let type: AdapterType
+            if let scType = SCNetworkInterfaceGetInterfaceType(iface) {
+                if CFEqual(scType, kSCNetworkInterfaceTypeIEEE80211) {
+                    type = .wifi
+                } else if CFEqual(scType, kSCNetworkInterfaceTypeEthernet) {
+                    type = .ethernet
+                } else {
+                    type = .other
+                }
+            } else {
+                type = .other
             }
+            let displayName = SCNetworkInterfaceGetLocalizedDisplayName(iface) as String? ?? bsdName
+            map[bsdName] = InterfaceInfo(type: type, displayName: displayName)
         }
         return map
     }
