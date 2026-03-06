@@ -45,6 +45,7 @@ final class AppState {
             "topAppsGracePeriodSeconds": 3.0,
             "connectionStatusMode": "list",
             "hiddenApps": [],
+            "externalIPv6": false,
             "showDNSSwitcher": false,
             "customDNSPresets": Data(),
             "hiddenDNSPresets": [],

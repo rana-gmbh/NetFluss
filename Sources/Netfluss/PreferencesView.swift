@@ -113,6 +113,7 @@ struct PreferencesView: View {
     @AppStorage("adapterGracePeriodSeconds") private var adapterGracePeriodSeconds: Double = 3.0
     @AppStorage("topAppsGracePeriodEnabled") private var topAppsGracePeriodEnabled: Bool = false
     @AppStorage("topAppsGracePeriodSeconds") private var topAppsGracePeriodSeconds: Double = 3.0
+    @AppStorage("externalIPv6") private var externalIPv6: Bool = false
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
     @State private var hiddenAdapters: Set<String> = []
     @State private var adapterNames: [String: String] = [:]
@@ -272,6 +273,14 @@ struct PreferencesView: View {
                     Picker("", selection: $connectionStatusMode) {
                         Text("List").tag("list")
                         Text("Flow").tag("flow")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 160)
+                }
+                LabeledContent("External IP") {
+                    Picker("", selection: $externalIPv6) {
+                        Text("IPv4").tag(false)
+                        Text("IPv6").tag(true)
                     }
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 160)

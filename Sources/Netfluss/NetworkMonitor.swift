@@ -41,6 +41,7 @@ final class NetworkMonitor: ObservableObject {
     private var currentInterval: Double?
     private var lastExternalIPUpdate: Date?
     private var externalIPInFlight = false
+    private var lastExternalIPv6Setting: Bool?
     private var processSnapshot: [String: (rx: UInt64, tx: UInt64)] = [:]
     private var processSnapshotTime: Date?
     private var topAppsTaskInFlight = false
@@ -250,8 +251,11 @@ final class NetworkMonitor: ObservableObject {
         }
 
         let now = Date()
-        if let lastExternalIPUpdate, now.timeIntervalSince(lastExternalIPUpdate) < 60.0 { return }
+        let currentIPv6 = UserDefaults.standard.bool(forKey: "externalIPv6")
+        let settingChanged = lastExternalIPv6Setting != nil && lastExternalIPv6Setting != currentIPv6
+        if !settingChanged, let lastExternalIPUpdate, now.timeIntervalSince(lastExternalIPUpdate) < 60.0 { return }
         guard !externalIPInFlight else { return }
+        lastExternalIPv6Setting = currentIPv6
 
         externalIPInFlight = true
         Task { [weak self] in
@@ -265,27 +269,34 @@ final class NetworkMonitor: ObservableObject {
     }
 
     private static func fetchExternalIP() async -> (ip: String, countryCode: String)? {
-        // Primary: ipwho.is (IP + country code)
-        if let url = URL(string: "https://ipwho.is/") {
+        let useIPv6 = UserDefaults.standard.bool(forKey: "externalIPv6")
+        let ipifyURL = useIPv6
+            ? "https://api64.ipify.org?format=json"
+            : "https://api.ipify.org?format=json"
+
+        // Get the IP address from ipify (IPv4 or IPv6 based on preference)
+        var ip: String?
+        if let url = URL(string: ipifyURL) {
+            let request = URLRequest(url: url, timeoutInterval: 8)
+            if let (data, _) = try? await URLSession.shared.data(for: request),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                ip = json["ip"] as? String
+            }
+        }
+        guard let ip else { return nil }
+
+        // Only fetch country code when the connection flow view is active (needs flag emoji)
+        let needsCountry = UserDefaults.standard.string(forKey: "connectionStatusMode") == "flow"
+        if needsCountry, let url = URL(string: "https://ipwho.is/\(ip)") {
             var request = URLRequest(url: url, timeoutInterval: 8)
             request.setValue("Netfluss/1.0", forHTTPHeaderField: "User-Agent")
             if let (data, _) = try? await URLSession.shared.data(for: request),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let ip = json["ip"] as? String {
-                let country = json["country_code"] as? String ?? ""
+               let country = json["country_code"] as? String {
                 return (ip: ip, countryCode: country)
             }
         }
-        // Fallback: api.ipify.org (IP only, very reliable)
-        if let url = URL(string: "https://api.ipify.org?format=json") {
-            let request = URLRequest(url: url, timeoutInterval: 8)
-            if let (data, _) = try? await URLSession.shared.data(for: request),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let ip = json["ip"] as? String {
-                return (ip: ip, countryCode: "")
-            }
-        }
-        return nil
+        return (ip: ip, countryCode: "")
     }
 
     // MARK: - DNS
