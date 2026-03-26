@@ -63,6 +63,18 @@ final class NetworkMonitor: ObservableObject {
     private var topAppLastActiveTime: [String: (lastSeen: Date, rxRate: Double, txRate: Double)] = [:]
     private var allAppLastSeen: [String: Date] = [:]
 
+    // Tick counter for throttling expensive operations
+    private var tickCount: UInt64 = 0
+    // Cached interface info (type/displayName) — rarely changes
+    private var cachedInterfaceInfo: [String: InterfaceSampler.InterfaceInfo] = [:]
+    // Reusable SCDynamicStore
+    private lazy var dynamicStore: SCDynamicStore? = SCDynamicStoreCreate(nil, "Netfluss" as CFString, nil, nil)
+    // Cached Wi-Fi info
+    private var _cachedWifiInfo: [String: InterfaceSampler.WifiInfo] = [:]
+    // Cached gateway/internal IP
+    private var _cachedGatewayIP: String = "—"
+    private var _cachedInternalIP: String = "—"
+
     func start(interval: Double) {
         let clamped = max(0.2, min(interval, 10.0))
         if currentInterval == clamped, timer != nil { return }
@@ -80,9 +92,26 @@ final class NetworkMonitor: ObservableObject {
 
     private func refresh() {
         let now = Date()
+        let tick = tickCount
+        tickCount &+= 1
+
         let samples = InterfaceSampler.fetchSamples()
-        let infoMap = InterfaceSampler.interfaceInfo()
-        let wifiInfoMap = InterfaceSampler.wifiInfo()
+
+        // Interface type/name info rarely changes — refresh every ~30 ticks
+        if tick % 30 == 0 || cachedInterfaceInfo.isEmpty {
+            cachedInterfaceInfo = InterfaceSampler.interfaceInfo()
+        }
+        let infoMap = cachedInterfaceInfo
+
+        // Wi-Fi details (CoreWLAN) — refresh every ~5 ticks
+        let wifiInfoMap: [String: InterfaceSampler.WifiInfo]
+        if tick % 5 == 0 {
+            let freshWifi = InterfaceSampler.wifiInfo()
+            _cachedWifiInfo = freshWifi
+            wifiInfoMap = freshWifi
+        } else {
+            wifiInfoMap = _cachedWifiInfo
+        }
 
         var updatedAdapters: [AdapterStatus] = []
         var totalRxRate: Double = 0
@@ -162,11 +191,22 @@ final class NetworkMonitor: ObservableObject {
         // Clean up tracking for adapters no longer returned by getifaddrs
         adapterLastActiveTime = adapterLastActiveTime.filter { currentAdapterIDs.contains($0.key) }
 
-        updateTopApps()
-        updateIPsIfNeeded()
-        updateFritzBox()
-        updateUniFi()
-        updateOpenWRT()
+        // Top Apps: every 3 ticks (~3s at 1Hz) — netstat is expensive
+        if tick % 3 == 0 {
+            updateTopApps()
+        }
+
+        // IPs and DNS: every 5 ticks — gateway/internal IP rarely change
+        if tick % 5 == 0 {
+            updateIPsIfNeeded(tick: tick)
+        }
+
+        // Router monitors: every 5 ticks — HTTP requests don't need 1Hz
+        if tick % 5 == 0 {
+            updateFritzBox()
+            updateUniFi()
+            updateOpenWRT()
+        }
     }
 
     // MARK: - Top Apps
@@ -260,10 +300,11 @@ final class NetworkMonitor: ObservableObject {
 
     // MARK: - IP Addresses
 
-    private func updateIPsIfNeeded() {
+    private func updateIPsIfNeeded(tick: UInt64) {
         internalIP = InterfaceSampler.primaryInternalIP()
-        gatewayIP = InterfaceSampler.defaultGatewayIP()
-        if UserDefaults.standard.bool(forKey: "showDNSSwitcher") {
+        gatewayIP = InterfaceSampler.defaultGatewayIP(store: dynamicStore)
+        // DNS check spawns a process — only every ~10 ticks
+        if tick % 10 == 0, UserDefaults.standard.bool(forKey: "showDNSSwitcher") {
             updateCurrentDNS()
         }
 
@@ -352,9 +393,10 @@ final class NetworkMonitor: ObservableObject {
         presets.removeAll { hidden.contains($0.id) }
         let order = UserDefaults.standard.stringArray(forKey: "dnsPresetOrder") ?? []
         if !order.isEmpty {
+            let orderIndex = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
             presets.sort {
-                let ai = order.firstIndex(of: $0.id) ?? Int.max
-                let bi = order.firstIndex(of: $1.id) ?? Int.max
+                let ai = orderIndex[$0.id] ?? Int.max
+                let bi = orderIndex[$1.id] ?? Int.max
                 return ai < bi
             }
         }
@@ -394,11 +436,10 @@ final class NetworkMonitor: ObservableObject {
         }
     }
 
-    private nonisolated static func primaryNetworkService() -> String {
-        // Find the primary interface from SCDynamicStore
-        let store = SCDynamicStoreCreate(nil, "Netfluss.DNS" as CFString, nil, nil)
+    private nonisolated static func primaryNetworkService(store: SCDynamicStore? = nil) -> String {
+        let s = store ?? SCDynamicStoreCreate(nil, "Netfluss.DNS" as CFString, nil, nil)
         let key = SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, kSCEntNetIPv4)
-        guard let dict = SCDynamicStoreCopyValue(store, key) as? [String: Any],
+        guard let dict = SCDynamicStoreCopyValue(s, key) as? [String: Any],
               let primaryInterface = dict["PrimaryInterface"] as? String else { return "" }
         return hardwarePortName(for: primaryInterface)
     }
@@ -633,9 +674,22 @@ final class NetworkMonitor: ObservableObject {
 
 enum ProcessNetworkSampler {
 
+    // PID→name cache: avoids repeated proc_pidpath + filesystem lookups.
+    // Cleared every ~10 samples (caller resets via clearNameCache()).
+    private static var pidNameCache: [pid_t: String] = [:]
+    private static var pidNameCacheAge: UInt64 = 0
+
+    static func clearNameCacheIfNeeded() {
+        pidNameCacheAge &+= 1
+        if pidNameCacheAge % 10 == 0 {
+            pidNameCache.removeAll(keepingCapacity: true)
+        }
+    }
+
     /// Snapshot: cumulative inet bytes per process name at a point in time.
     /// Uses `netstat -n -b -v` which exposes per-connection rxbytes/txbytes with process:pid.
     static func sample() -> [String: (rx: UInt64, tx: UInt64)] {
+        clearNameCacheIfNeeded()
         let output = runNetstat()
         var pidBytes: [pid_t: (rx: UInt64, tx: UInt64)] = [:]
 
@@ -678,10 +732,17 @@ enum ProcessNetworkSampler {
             pidBytes[pid] = (rx: prev.rx + rx, tx: prev.tx + tx)
         }
 
-        // Resolve PIDs to clean display names via proc_pidpath
+        // Resolve PIDs to clean display names via proc_pidpath (cached)
         var result: [String: (rx: UInt64, tx: UInt64)] = [:]
         for (pid, bytes) in pidBytes {
-            let name = processName(for: pid) ?? "PID \(pid)"
+            let name: String
+            if let cached = pidNameCache[pid] {
+                name = cached
+            } else {
+                let resolved = processName(for: pid) ?? "PID \(pid)"
+                pidNameCache[pid] = resolved
+                name = resolved
+            }
             let prev = result[name] ?? (rx: 0, tx: 0)
             result[name] = (rx: prev.rx + bytes.rx, tx: prev.tx + bytes.tx)
         }
@@ -729,20 +790,26 @@ enum ProcessNetworkSampler {
     }
 
     /// Best-effort process name: tries full path (for clean app names), falls back to proc_name.
+    /// Uses a shared buffer to avoid per-call heap allocations.
+    private static var pathBuffer = [CChar](repeating: 0, count: Int(PATH_MAX) * 4)
+
     private static func processName(for pid: pid_t) -> String? {
-        var pathBuf = [CChar](repeating: 0, count: Int(PATH_MAX) * 4)
-        let pathLen = pathBuf.withUnsafeMutableBytes {
+        let pathLen = pathBuffer.withUnsafeMutableBytes {
             proc_pidpath(pid, $0.baseAddress, UInt32($0.count))
         }
         if pathLen > 0 {
-            let path = pathBuf.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+            let path = pathBuffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
             // Strip .app bundle path: ".../Safari.app/Contents/MacOS/Safari" → "Safari"
-            let url = URL(fileURLWithPath: path)
             if let appRange = path.range(of: ".app/", options: .caseInsensitive) {
                 let appPath = String(path[path.startIndex..<appRange.lowerBound])
-                let name = URL(fileURLWithPath: appPath).lastPathComponent
+                if let lastSlash = appPath.lastIndex(of: "/") {
+                    let name = String(appPath[appPath.index(after: lastSlash)...])
+                    if !name.isEmpty { return name }
+                }
+                let name = appPath.isEmpty ? "" : (appPath as NSString).lastPathComponent
                 if !name.isEmpty { return name }
             }
+            let url = URL(fileURLWithPath: path)
             let name = url.deletingPathExtension().lastPathComponent
             if !name.isEmpty { return name }
         }
@@ -911,10 +978,10 @@ enum InterfaceSampler {
         return Double(delta) / deltaTime
     }
 
-    static func defaultGatewayIP() -> String {
-        let store = SCDynamicStoreCreate(nil, "Netfluss" as CFString, nil, nil)
+    static func defaultGatewayIP(store: SCDynamicStore? = nil) -> String {
+        let s = store ?? SCDynamicStoreCreate(nil, "Netfluss" as CFString, nil, nil)
         let key = SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, kSCEntNetIPv4)
-        guard let dict = SCDynamicStoreCopyValue(store, key) as? [String: Any],
+        guard let dict = SCDynamicStoreCopyValue(s, key) as? [String: Any],
               let router = dict[kSCPropNetIPv4Router as String] as? String,
               !router.isEmpty else { return "—" }
         return router

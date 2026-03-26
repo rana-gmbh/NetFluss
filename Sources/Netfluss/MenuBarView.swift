@@ -35,13 +35,17 @@ struct MenuBarView: View {
 
     private static let cardSpacing: CGFloat = 6   // VStack spacing between cards
     @State private var contentHeight: CGFloat = 0
+    // Cached JSON decode — updated via notification, not every render
+    @State private var cachedCustomNames: [String: String] = {
+        (try? JSONDecoder().decode([String: String].self,
+            from: UserDefaults.standard.data(forKey: "adapterCustomNames") ?? Data())) ?? [:]
+    }()
 
     var body: some View {
         let theme = AppTheme.named(themeName)
         let adapters = filteredAdapters()
         let headerTotals = totalsOnlyVisibleAdapters ? totals(for: adapters) : monitor.totals
-        let customNames = (try? JSONDecoder().decode([String: String].self,
-            from: UserDefaults.standard.data(forKey: "adapterCustomNames") ?? Data())) ?? [:]
+        let customNames = cachedCustomNames
 
         let screenMax = (NSScreen.main?.visibleFrame.height ?? 800) - 30
         let savedHeight = UserDefaults.standard.double(forKey: "popoverHeight")
@@ -57,6 +61,10 @@ struct MenuBarView: View {
         }
         .background(theme.backgroundColor ?? .clear)
         .environment(\.appTheme, theme)
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            cachedCustomNames = (try? JSONDecoder().decode([String: String].self,
+                from: UserDefaults.standard.data(forKey: "adapterCustomNames") ?? Data())) ?? [:]
+        }
     }
 
     private var cardSpacing: CGFloat { Self.cardSpacing }
@@ -166,9 +174,10 @@ struct MenuBarView: View {
         }
         let order = UserDefaults.standard.stringArray(forKey: "adapterOrder") ?? []
         if !order.isEmpty {
+            let orderIndex = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
             filtered.sort {
-                let ai = order.firstIndex(of: $0.id) ?? Int.max
-                let bi = order.firstIndex(of: $1.id) ?? Int.max
+                let ai = orderIndex[$0.id] ?? Int.max
+                let bi = orderIndex[$1.id] ?? Int.max
                 return ai != bi ? ai < bi
                      : $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
             }

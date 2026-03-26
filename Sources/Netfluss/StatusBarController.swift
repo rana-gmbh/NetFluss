@@ -32,6 +32,13 @@ final class StatusBarController: NSObject {
     private let upLabel = NSTextField(labelWithString: "")
     private let downLabel = NSTextField(labelWithString: "")
     private let stackView = NSStackView()
+    // Fixed-width constraints so arrows don't shift with proportional fonts
+    private var upLabelWidthConstraint: NSLayoutConstraint?
+    private var downLabelWidthConstraint: NSLayoutConstraint?
+    // Cached font to avoid recreating on every tick
+    private var cachedFont: NSFont?
+    private var cachedFontSize: Double = 0
+    private var cachedFontDesign: String = ""
 
     init(monitor: NetworkMonitor) {
         self.monitor = monitor
@@ -142,30 +149,25 @@ final class StatusBarController: NSObject {
             upFormatted = RateFormatter.formatRate(totals.txRateBps, useBits: useBits)
             downFormatted = RateFormatter.formatRate(totals.rxRateBps, useBits: useBits)
         }
-        let upText = "↑ \(upFormatted)"
-        let downText = "↓ \(downFormatted)"
-
-        upLabel.stringValue = upText
-        downLabel.stringValue = downText
 
         let font = menuBarFont()
-        upLabel.font = font
-        downLabel.font = font
 
         let theme = AppTheme.named(UserDefaults.standard.string(forKey: "theme") ?? "system")
+        let upColor: NSColor
+        let downColor: NSColor
         if theme.id == "system" {
-            upLabel.textColor  = nsColor(for: UserDefaults.standard.string(forKey: "uploadColor")   ?? "green", default: .systemGreen)
-            downLabel.textColor = nsColor(for: UserDefaults.standard.string(forKey: "downloadColor") ?? "blue",  default: .systemBlue)
+            upColor  = nsColor(for: UserDefaults.standard.string(forKey: "uploadColor")   ?? "green", default: .systemGreen)
+            downColor = nsColor(for: UserDefaults.standard.string(forKey: "downloadColor") ?? "blue",  default: .systemBlue)
         } else {
-            upLabel.textColor   = NSColor(theme.uploadColor)
-            downLabel.textColor = NSColor(theme.downloadColor)
+            upColor   = NSColor(theme.uploadColor)
+            downColor = NSColor(theme.downloadColor)
         }
 
         stackView.alignment = .leading
 
         // Fixed width: measure a reference string so the menu bar never shifts
         // when values cross unit boundaries (e.g. 999 KB/s → 1.2 MB/s).
-        let attrs: [NSAttributedString.Key: Any] = [.font: font]
+        let plainAttrs: [NSAttributedString.Key: Any] = [.font: font]
         let refText: String
         if pinnedUnit != "auto" {
             let dec = max(0, effectiveDecimals)
@@ -180,23 +182,44 @@ final class StatusBarController: NSObject {
         } else {
             refText = useBits ? "↓ 9.99 Mb/s" : "↓ 9.99 MB/s"
         }
-        let refW = (refText as NSString).size(withAttributes: attrs).width
-        statusItem.length = ceil(refW) + 4  // 2 px padding each side
+        let refW = ceil((refText as NSString).size(withAttributes: plainAttrs).width)
+        upLabelWidthConstraint?.constant = refW
+        downLabelWidthConstraint?.constant = refW
+        statusItem.length = refW + 4  // 2 px padding each side
+
+        let upText = "↑ \(upFormatted)"
+        let downText = "↓ \(downFormatted)"
+
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: upColor]
+        upLabel.attributedStringValue = NSAttributedString(string: upText, attributes: attrs)
+        downLabel.attributedStringValue = NSAttributedString(string: downText, attributes: [
+            .font: font, .foregroundColor: downColor
+        ])
     }
 
     private func menuBarFont() -> NSFont {
         let raw = UserDefaults.standard.double(forKey: "menuBarFontSize")
         let size = max(8, min(16, raw > 0 ? raw : 10))
-        switch UserDefaults.standard.string(forKey: "menuBarFontDesign") ?? "monospaced" {
+        let design = UserDefaults.standard.string(forKey: "menuBarFontDesign") ?? "monospaced"
+        // Return cached font if settings haven't changed
+        if let cached = cachedFont, cachedFontSize == size, cachedFontDesign == design {
+            return cached
+        }
+        let font: NSFont
+        switch design {
         case "monospaced":
-            return .monospacedSystemFont(ofSize: size, weight: .medium)
+            font = .monospacedSystemFont(ofSize: size, weight: .medium)
         case "rounded":
             let base = NSFont.systemFont(ofSize: size, weight: .medium)
             let desc = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
-            return NSFont(descriptor: desc, size: size) ?? .systemFont(ofSize: size, weight: .medium)
+            font = NSFont(descriptor: desc, size: size) ?? .systemFont(ofSize: size, weight: .medium)
         default:
-            return .systemFont(ofSize: size, weight: .medium)
+            font = .systemFont(ofSize: size, weight: .medium)
         }
+        cachedFont = font
+        cachedFontSize = size
+        cachedFontDesign = design
+        return font
     }
 
     private func nsColor(for name: String, default fallback: NSColor) -> NSColor {
@@ -250,13 +273,21 @@ final class StatusBarController: NSObject {
         stackView.addArrangedSubview(downLabel)
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
+        upLabel.translatesAutoresizingMaskIntoConstraints = false
+        downLabel.translatesAutoresizingMaskIntoConstraints = false
+        let upW = upLabel.widthAnchor.constraint(equalToConstant: 0)
+        let downW = downLabel.widthAnchor.constraint(equalToConstant: 0)
+        upLabelWidthConstraint = upW
+        downLabelWidthConstraint = downW
+
         button.title = ""
         button.image = nil
         button.addSubview(stackView)
 
         NSLayoutConstraint.activate([
             stackView.centerYAnchor.constraint(equalTo: button.centerYAnchor),
-            stackView.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -2)
+            stackView.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -2),
+            upW, downW
         ])
     }
 }
