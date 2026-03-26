@@ -33,15 +33,8 @@ struct MenuBarView: View {
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
     @AppStorage("openWRTEnabled") private var openWRTEnabled: Bool = false
 
-    // Height for one adapter card (padding + title row + spacing + rates row) + inter-card spacing.
-    // Used to size the scroll area to show exactly 6 cards before scrolling kicks in.
-    private static let cardHeight: CGFloat = 58   // per card incl. vertical padding
     private static let cardSpacing: CGFloat = 6   // VStack spacing between cards
-    private static let adapterListPadding: CGFloat = 20 // .padding(.vertical, 10) top+bottom
-    private static func adapterScrollHeight(for count: Int) -> CGFloat {
-        let n = CGFloat(min(count, 6))
-        return n * cardHeight + max(0, n - 1) * cardSpacing + adapterListPadding
-    }
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         let theme = AppTheme.named(themeName)
@@ -50,19 +43,39 @@ struct MenuBarView: View {
         let customNames = (try? JSONDecoder().decode([String: String].self,
             from: UserDefaults.standard.data(forKey: "adapterCustomNames") ?? Data())) ?? [:]
 
+        let screenMax = (NSScreen.main?.visibleFrame.height ?? 800) - 30
+        let savedHeight = UserDefaults.standard.double(forKey: "popoverHeight")
+        let heightLimit = savedHeight > 0 ? min(savedHeight, screenMax) : screenMax
+
+        let scrollHeight = min(contentHeight, heightLimit)
+
         VStack(spacing: 0) {
-            TotalRatesHeader(totals: headerTotals, useBits: useBits)
+            popoverContent(adapters: adapters, customNames: customNames, headerTotals: headerTotals)
+                .frame(height: contentHeight > 0 ? scrollHeight : nil)
 
-            Divider()
+            PopoverResizeHandle()
+        }
+        .background(theme.backgroundColor ?? .clear)
+        .environment(\.appTheme, theme)
+    }
 
-            if adapters.isEmpty {
-                Text("No active adapters")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-            } else {
-                ScrollView {
+    private var cardSpacing: CGFloat { Self.cardSpacing }
+
+    @ViewBuilder
+    private func popoverContent(adapters: [AdapterStatus], customNames: [String: String], headerTotals: RateTotals) -> some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                TotalRatesHeader(totals: headerTotals, useBits: useBits)
+
+                Divider()
+
+                if adapters.isEmpty {
+                    Text("No active adapters")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                } else {
                     VStack(spacing: cardSpacing) {
                         ForEach(adapters) { adapter in
                             AdapterCard(
@@ -77,63 +90,65 @@ struct MenuBarView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                 }
-                .scrollIndicators(adapters.count > 6 ? .visible : .never)
-                .frame(height: Self.adapterScrollHeight(for: adapters.count))
-            }
 
-            Divider()
-            if connectionStatusMode == "flow" {
-                ConnectionStatusSection(
-                    externalIP: monitor.externalIP,
-                    internalIP: monitor.internalIP,
-                    gatewayIP: monitor.gatewayIP,
-                    adapters: monitor.adapters,
-                    countryCode: monitor.externalIPCountryCode
-                )
-            } else {
-                IPAddressSection(
-                    externalIP: monitor.externalIP,
-                    internalIP: monitor.internalIP,
-                    gatewayIP: monitor.gatewayIP
-                )
-            }
-
-            if fritzBoxEnabled {
                 Divider()
-                FritzBoxSection(useBits: useBits)
-            }
+                if connectionStatusMode == "flow" {
+                    ConnectionStatusSection(
+                        externalIP: monitor.externalIP,
+                        internalIP: monitor.internalIP,
+                        gatewayIP: monitor.gatewayIP,
+                        adapters: monitor.adapters,
+                        countryCode: monitor.externalIPCountryCode
+                    )
+                } else {
+                    IPAddressSection(
+                        externalIP: monitor.externalIP,
+                        internalIP: monitor.internalIP,
+                        gatewayIP: monitor.gatewayIP
+                    )
+                }
 
-            if unifiEnabled {
+                if fritzBoxEnabled {
+                    Divider()
+                    FritzBoxSection(useBits: useBits)
+                }
+
+                if unifiEnabled {
+                    Divider()
+                    UniFiSection(useBits: useBits)
+                }
+
+                if openWRTEnabled {
+                    Divider()
+                    OpenWRTSection(useBits: useBits)
+                }
+
+                if showDNSSwitcher {
+                    Divider()
+                    DNSSwitcherSection()
+                }
+
+                if showTopApps {
+                    Divider()
+                    TopAppsSection(
+                        topApps: monitor.topApps,
+                        useBits: useBits
+                    )
+                }
+
                 Divider()
-                UniFiSection(useBits: useBits)
+                FooterBar()
             }
-
-            if openWRTEnabled {
-                Divider()
-                OpenWRTSection(useBits: useBits)
-            }
-
-            if showDNSSwitcher {
-                Divider()
-                DNSSwitcherSection()
-            }
-
-            if showTopApps {
-                Divider()
-                TopAppsSection(
-                    topApps: monitor.topApps,
-                    useBits: useBits
-                )
-            }
-
-            Divider()
-            FooterBar()
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
+                }
+            )
         }
-        .background(theme.backgroundColor ?? .clear)
-        .environment(\.appTheme, theme)
+        .onPreferenceChange(ContentHeightKey.self) { height in
+            contentHeight = height
+        }
     }
-
-    private var cardSpacing: CGFloat { Self.cardSpacing }
 
     private func filteredAdapters() -> [AdapterStatus] {
         let hidden = Set(UserDefaults.standard.stringArray(forKey: "hiddenAdapters") ?? [])
@@ -751,6 +766,76 @@ struct AppTrafficRow: View {
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
+    }
+}
+
+private struct ContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+// MARK: - Popover Resize Handle
+
+struct PopoverResizeHandle: View {
+    @State private var dragStartHeight: CGFloat = 0
+    @State private var currentViewHeight: CGFloat = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(.quaternary)
+                .frame(width: 36, height: 3)
+                .padding(.vertical, 3)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .background(
+            GeometryReader { geo in
+                Color.clear.onAppear {
+                    // Walk up to find the popover window height
+                    if let window = geo.frame(in: .global).origin.y as CGFloat? {
+                        _ = window // just triggers the geometry read
+                    }
+                }
+                .onChange(of: geo.frame(in: .global)) { _ in
+                    // Track the window for drag start
+                }
+            }
+        )
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    if dragStartHeight == 0 {
+                        let saved = UserDefaults.standard.double(forKey: "popoverHeight")
+                        if saved > 0 {
+                            dragStartHeight = saved
+                        } else {
+                            // Find the popover window's current height
+                            let popoverHeight = NSApp.windows
+                                .filter { $0.isVisible && $0.level.rawValue > NSWindow.Level.normal.rawValue }
+                                .compactMap { $0.contentView?.frame.height }
+                                .max() ?? 500
+                            dragStartHeight = popoverHeight
+                        }
+                    }
+                    // Dragging down = positive translation = taller popover
+                    let newHeight = max(200, dragStartHeight + value.translation.height)
+                    UserDefaults.standard.set(newHeight, forKey: "popoverHeight")
+                }
+                .onEnded { _ in
+                    dragStartHeight = 0
+                }
+        )
+        .onTapGesture(count: 2) {
+            // Double-tap resets to auto (natural content size)
+            UserDefaults.standard.set(0.0, forKey: "popoverHeight")
+        }
+        .onHover { inside in
+            if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+        }
     }
 }
 
