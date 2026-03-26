@@ -42,6 +42,44 @@ struct RateFormatter {
         return String(format: "%.0f Mb/s", value)
     }
 
+    /// Format a rate with a pinned unit scale and fixed decimal places.
+    /// `pinnedUnit`: "auto", "K", "M", "G"  — the scale to pin to.
+    /// `decimals`: number of decimal places (0–3).
+    static func formatRate(_ bytesPerSecond: Double, useBits: Bool, pinnedUnit: String, decimals: Int) -> String {
+        let value = max(0, bytesPerSecond)
+        let base = useBits ? value * 8.0 : value
+        let units = useBits ? ["b/s", "Kb/s", "Mb/s", "Gb/s", "Tb/s"] : ["B/s", "KB/s", "MB/s", "GB/s", "TB/s"]
+
+        if pinnedUnit == "auto" {
+            return format(base, units: units, decimals: decimals)
+        }
+
+        let scaleIndex: Int
+        switch pinnedUnit {
+        case "K": scaleIndex = 1
+        case "M": scaleIndex = 2
+        case "G": scaleIndex = 3
+        default:  scaleIndex = 0
+        }
+
+        let divisor = pow(1000.0, Double(scaleIndex))
+        let adjusted = base / divisor
+        let unit = scaleIndex < units.count ? units[scaleIndex] : units.last!
+        let fmt = "%.\(decimals)f"
+        return String(format: fmt + " %@", adjusted, unit)
+    }
+
+    private static func format(_ value: Double, units: [String], decimals: Int) -> String {
+        var adjusted = value
+        var unitIndex = 0
+        while adjusted >= 1000.0 && unitIndex < units.count - 1 {
+            adjusted /= 1000.0
+            unitIndex += 1
+        }
+        let fmt = "%.\(decimals)f"
+        return String(format: fmt + " %@", adjusted, units[unitIndex])
+    }
+
     private static func format(_ value: Double, units: [String]) -> String {
         var adjusted = value
         var unitIndex = 0

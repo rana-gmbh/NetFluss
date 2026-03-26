@@ -38,6 +38,8 @@ final class AppState {
             "adapterOrder": [],
             "adapterCustomNames": Data(),
             "menuBarMode": "rates",
+            "menuBarPinnedUnit": "auto",
+            "menuBarDecimals": 0,
             "totalsOnlyVisibleAdapters": false,
             "adapterGracePeriodEnabled": false,
             "adapterGracePeriodSeconds": 3.0,

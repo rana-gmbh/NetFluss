@@ -108,6 +108,8 @@ struct PreferencesView: View {
     @AppStorage("menuBarFontSize") private var menuBarFontSize: Double = 10.0
     @AppStorage("menuBarFontDesign") private var menuBarFontDesign: String = "monospaced"
     @AppStorage("menuBarMode") private var menuBarMode: String = "rates"
+    @AppStorage("menuBarPinnedUnit") private var menuBarPinnedUnit: String = "auto"
+    @AppStorage("menuBarDecimals") private var menuBarDecimals: Int = 0
     @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "list"
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
     @AppStorage("adapterGracePeriodEnabled") private var adapterGracePeriodEnabled: Bool = false
@@ -276,6 +278,27 @@ struct PreferencesView: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 200)
+                }
+                LabeledContent("Menu bar unit") {
+                    Picker("", selection: $menuBarPinnedUnit) {
+                        Text("Auto").tag("auto")
+                        Text(useBits ? "Kb/s" : "KB/s").tag("K")
+                        Text(useBits ? "Mb/s" : "MB/s").tag("M")
+                        Text(useBits ? "Gb/s" : "GB/s").tag("G")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 250)
+                }
+                LabeledContent("Decimals") {
+                    Picker("", selection: $menuBarDecimals) {
+                        Text("Auto").tag(0)
+                        Text("0").tag(10)
+                        Text("1").tag(1)
+                        Text("2").tag(2)
+                        Text("3").tag(3)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 220)
                 }
                 LabeledContent("IP display") {
                     Picker("", selection: $connectionStatusMode) {

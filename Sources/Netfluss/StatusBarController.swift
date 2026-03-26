@@ -120,9 +120,30 @@ final class StatusBarController: NSObject {
         statusItem.button?.imagePosition = .noImage
 
         let useBits = UserDefaults.standard.bool(forKey: "useBits")
+        let pinnedUnit = UserDefaults.standard.string(forKey: "menuBarPinnedUnit") ?? "auto"
+        let rawDecimals = UserDefaults.standard.integer(forKey: "menuBarDecimals")
+        // 0 = auto, 10 = 0 decimals, 1/2/3 = that many decimals
+        let effectiveDecimals: Int
+        if rawDecimals == 0 {
+            effectiveDecimals = pinnedUnit == "auto" ? -1 : 2  // auto: use default formatting; pinned: default to 2
+        } else if rawDecimals == 10 {
+            effectiveDecimals = 0
+        } else {
+            effectiveDecimals = rawDecimals
+        }
+
         let totals = effectiveTotals()
-        let upText = "↑ \(RateFormatter.formatRate(totals.txRateBps, useBits: useBits))"
-        let downText = "↓ \(RateFormatter.formatRate(totals.rxRateBps, useBits: useBits))"
+        let upFormatted: String
+        let downFormatted: String
+        if effectiveDecimals >= 0 {
+            upFormatted = RateFormatter.formatRate(totals.txRateBps, useBits: useBits, pinnedUnit: pinnedUnit, decimals: effectiveDecimals)
+            downFormatted = RateFormatter.formatRate(totals.rxRateBps, useBits: useBits, pinnedUnit: pinnedUnit, decimals: effectiveDecimals)
+        } else {
+            upFormatted = RateFormatter.formatRate(totals.txRateBps, useBits: useBits)
+            downFormatted = RateFormatter.formatRate(totals.rxRateBps, useBits: useBits)
+        }
+        let upText = "↑ \(upFormatted)"
+        let downText = "↓ \(downFormatted)"
 
         upLabel.stringValue = upText
         downLabel.stringValue = downText
@@ -140,10 +161,25 @@ final class StatusBarController: NSObject {
             downLabel.textColor = NSColor(theme.downloadColor)
         }
 
-        // Fixed width: measure the widest possible rate string so the menu bar
-        // never shifts when values cross unit boundaries (e.g. 999 KB/s → 1.2 MB/s).
+        stackView.alignment = .leading
+
+        // Fixed width: measure a reference string so the menu bar never shifts
+        // when values cross unit boundaries (e.g. 999 KB/s → 1.2 MB/s).
         let attrs: [NSAttributedString.Key: Any] = [.font: font]
-        let refText = useBits ? "↓ 9.99 Mb/s" : "↓ 9.99 MB/s"
+        let refText: String
+        if pinnedUnit != "auto" {
+            let dec = max(0, effectiveDecimals)
+            let decPart = dec > 0 ? ".\(String(repeating: "9", count: dec))" : ""
+            let unitSuffix: String
+            switch pinnedUnit {
+            case "K": unitSuffix = useBits ? "Kb/s" : "KB/s"
+            case "G": unitSuffix = useBits ? "Gb/s" : "GB/s"
+            default:  unitSuffix = useBits ? "Mb/s" : "MB/s"
+            }
+            refText = "↓ 999\(decPart) \(unitSuffix)"
+        } else {
+            refText = useBits ? "↓ 9.99 Mb/s" : "↓ 9.99 MB/s"
+        }
         let refW = (refText as NSString).size(withAttributes: attrs).width
         statusItem.length = ceil(refW) + 4  // 2 px padding each side
     }
@@ -209,7 +245,7 @@ final class StatusBarController: NSObject {
     private func configureLabels(in button: NSStatusBarButton) {
         stackView.orientation = .vertical
         stackView.spacing = 1
-        stackView.alignment = .trailing
+        stackView.alignment = .leading
         stackView.addArrangedSubview(upLabel)
         stackView.addArrangedSubview(downLabel)
         stackView.translatesAutoresizingMaskIntoConstraints = false
