@@ -111,6 +111,10 @@ Or open `Package.swift` in Xcode, select the `Netfluss` scheme, and run.
 - External IP is fetched from `ipwho.is` (with `api.ipify.org` as fallback) and cached for 60 seconds.
 - Top Apps reads per-connection byte counts from `netstat -n -b -v` and correlates them with process names via `proc_pidpath`. Only processes with active TCP/UDP connections appear in the list.
 
+## Buy me a coffee
+
+If you enjoy using Netfluss please consider supporting the project via this link: https://buymeacoffee.com/robertrudolph
+
 ## License
 
 Netfluss is released under the [GNU General Public License v3.0](LICENSE).
