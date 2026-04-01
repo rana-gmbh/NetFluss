@@ -17,6 +17,77 @@
 
 import Foundation
 
+struct AvailableUpdate: Equatable, Sendable {
+    let version: String
+    let releaseNotes: String
+    let releasePageURL: URL
+    let downloadURL: URL?
+}
+
+enum UpdateLookup {
+    private static let latestReleaseURL = URL(string: "https://api.github.com/repos/rana-gmbh/netfluss/releases/latest")!
+
+    static func currentVersion(bundle: Bundle = .main) -> String {
+        bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+
+    static func fetchLatestUpdate(currentVersion: String = currentVersion()) async throws -> AvailableUpdate? {
+        var request = URLRequest(url: latestReleaseURL)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("Netfluss/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response)
+
+        let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+        let latestVersion = release.tagName.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+        guard isNewer(latestVersion, than: currentVersion) else { return nil }
+
+        let downloadURL = release.assets
+            .first(where: { $0.name.hasSuffix(".zip") })
+            .flatMap { URL(string: $0.browserDownloadURL) }
+
+        return AvailableUpdate(
+            version: latestVersion,
+            releaseNotes: release.body ?? "",
+            releasePageURL: URL(string: release.htmlURL)!,
+            downloadURL: downloadURL
+        )
+    }
+
+    private static func validate(response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse else { return }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw UpdateLookupError.invalidResponse(httpResponse.statusCode)
+        }
+    }
+
+    static func isNewer(_ latest: String, than current: String) -> Bool {
+        let latestParts = latest.split(separator: ".").compactMap { Int($0) }
+        let currentParts = current.split(separator: ".").compactMap { Int($0) }
+        let length = max(latestParts.count, currentParts.count)
+        let paddedLatest = latestParts + Array(repeating: 0, count: length - latestParts.count)
+        let paddedCurrent = currentParts + Array(repeating: 0, count: length - currentParts.count)
+
+        for (latestValue, currentValue) in zip(paddedLatest, paddedCurrent) {
+            if latestValue > currentValue { return true }
+            if latestValue < currentValue { return false }
+        }
+        return false
+    }
+}
+
+enum UpdateLookupError: LocalizedError {
+    case invalidResponse(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse(let statusCode):
+            return "GitHub returned HTTP \(statusCode)."
+        }
+    }
+}
+
 @MainActor
 final class UpdateChecker: ObservableObject {
 
@@ -26,74 +97,31 @@ final class UpdateChecker: ObservableObject {
         case upToDate
         case available(AvailableUpdate)
         case failed(String)
-
-        static func == (lhs: State, rhs: State) -> Bool {
-            switch (lhs, rhs) {
-            case (.idle, .idle), (.checking, .checking), (.upToDate, .upToDate): return true
-            case (.available(let a), .available(let b)): return a == b
-            case (.failed(let a), .failed(let b)): return a == b
-            default: return false
-            }
-        }
-    }
-
-    struct AvailableUpdate: Equatable {
-        let version: String
-        let releaseNotes: String
-        let releasePageURL: URL
-        let downloadURL: URL?
     }
 
     @Published var state: State = .idle
 
-    var currentVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    let currentVersion: String
+
+    init(currentVersion: String = UpdateLookup.currentVersion()) {
+        self.currentVersion = currentVersion
     }
 
     func check() {
         Task { await performCheck() }
     }
 
-    private func performCheck() async {
+    func performCheck() async {
         state = .checking
         do {
-            let url = URL(string: "https://api.github.com/repos/rana-gmbh/netfluss/releases/latest")!
-            var req = URLRequest(url: url)
-            req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            req.setValue("Netfluss/\(currentVersion)", forHTTPHeaderField: "User-Agent")
-            let (data, _) = try await URLSession.shared.data(for: req)
-            let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
-
-            let latest = release.tagName.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
-            if isNewer(latest, than: currentVersion) {
-                let downloadURL = release.assets
-                    .first(where: { $0.name.hasSuffix(".zip") })
-                    .flatMap { URL(string: $0.browserDownloadURL) }
-                state = .available(AvailableUpdate(
-                    version: latest,
-                    releaseNotes: release.body ?? "",
-                    releasePageURL: URL(string: release.htmlURL)!,
-                    downloadURL: downloadURL
-                ))
+            if let update = try await UpdateLookup.fetchLatestUpdate(currentVersion: currentVersion) {
+                state = .available(update)
             } else {
                 state = .upToDate
             }
         } catch {
             state = .failed(error.localizedDescription)
         }
-    }
-
-    private func isNewer(_ latest: String, than current: String) -> Bool {
-        let lp = latest.split(separator: ".").compactMap { Int($0) }
-        let cp = current.split(separator: ".").compactMap { Int($0) }
-        let len = max(lp.count, cp.count)
-        let l = lp + Array(repeating: 0, count: len - lp.count)
-        let c = cp + Array(repeating: 0, count: len - cp.count)
-        for (a, b) in zip(l, c) {
-            if a > b { return true }
-            if a < b { return false }
-        }
-        return false
     }
 }
 

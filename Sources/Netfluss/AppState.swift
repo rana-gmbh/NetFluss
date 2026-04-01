@@ -21,6 +21,8 @@ import Foundation
 final class AppState {
     let monitor: NetworkMonitor
     let statusBar: StatusBarController
+    let updateNotifier: UpdateNotifier
+    private var defaultsObserver: NSObjectProtocol?
 
     init() {
         UserDefaults.standard.register(defaults: [
@@ -65,10 +67,40 @@ final class AppState {
             "unifiEnabled": false,
             "unifiHost": "",
             "openWRTEnabled": false,
-            "openWRTHost": ""
+            "openWRTHost": "",
+            "automaticUpdateChecksEnabled": true,
+            "backgroundUpdateLastNotifiedVersion": ""
         ])
         let monitor = NetworkMonitor()
         self.monitor = monitor
         self.statusBar = StatusBarController(monitor: monitor)
+        let updateNotifier = UpdateNotifier()
+        self.updateNotifier = updateNotifier
+        Task {
+            await updateNotifier.start()
+        }
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.syncAutomaticUpdateChecks()
+            }
+        }
+    }
+
+    deinit {
+        if let defaultsObserver {
+            NotificationCenter.default.removeObserver(defaultsObserver)
+        }
+    }
+
+    private func syncAutomaticUpdateChecks() {
+        let enabled = UserDefaults.standard.bool(forKey: "automaticUpdateChecksEnabled")
+        let updateNotifier = self.updateNotifier
+        Task {
+            await updateNotifier.setAutomaticChecksEnabled(enabled)
+        }
     }
 }
