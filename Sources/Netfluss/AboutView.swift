@@ -22,11 +22,11 @@ struct AboutView: View {
     @StateObject private var checker = UpdateChecker()
 
     private var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.11"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.12"
     }
 
     private var releaseNotesURL: URL {
-        URL(string: "https://github.com/rana-gmbh/netfluss/releases/tag/v\(version)")!
+        URL(string: "https://github.com/rana-gmbh/NetFluss/releases/tag/v\(version)")!
     }
 
     var body: some View {
@@ -39,7 +39,7 @@ struct AboutView: View {
                         .resizable()
                         .frame(width: 64, height: 64)
                 }
-                Text("Netfluss")
+                Text("NetFluss")
                     .font(.title2.bold())
                 HStack(spacing: 6) {
                     Text("Version \(version)")
@@ -151,7 +151,7 @@ struct AboutView: View {
 
         case .available(let update):
             VStack(alignment: .leading, spacing: 10) {
-                Label("Netfluss \(update.version) is available!", systemImage: "arrow.down.circle.fill")
+                Label("NetFluss \(update.version) is available!", systemImage: "arrow.down.circle.fill")
                     .foregroundStyle(Color.accentColor)
                     .font(.callout.bold())
                     .frame(maxWidth: .infinity, alignment: .center)

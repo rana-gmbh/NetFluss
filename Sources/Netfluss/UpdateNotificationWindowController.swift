@@ -90,7 +90,7 @@ private struct UpdateNotificationView: View {
                     .font(.system(size: 28))
                     .foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Netfluss \(update.version) is available")
+                    Text("NetFluss \(update.version) is available")
                         .font(.headline)
                     Text("A newer version is available on GitHub. Open the latest release page to download it.")
                         .font(.callout)

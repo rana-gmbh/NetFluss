@@ -1,25 +1,28 @@
-# Netfluss
+# NetFluss
 
-[![GitHub release](https://img.shields.io/github/v/release/rana-gmbh/netfluss)](https://github.com/rana-gmbh/netfluss/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/rana-gmbh/netfluss/total)](https://github.com/rana-gmbh/netfluss/releases)
+[![GitHub release](https://img.shields.io/github/v/release/rana-gmbh/NetFluss)](https://github.com/rana-gmbh/NetFluss/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/rana-gmbh/NetFluss/total)](https://github.com/rana-gmbh/NetFluss/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 A minimal macOS menubar app showing real-time upload and download rates across all active network adapters. Now with Fritz!Box, UniFi, and OpenWRT router bandwidth monitoring.
 
+Latest release: **NetFluss 1.12**
+
 <p align="center">
-  <img src="screenshot.png" width="420" alt="Netfluss screenshot">
+  <img src="screenshot.png" width="420" alt="NetFluss screenshot">
 </p>
 
 ## Features
 
 ### Menubar
 - Live upload ↑ and download ↓ rates displayed in the menu bar
+- Four menu bar icon styles: Standard, Unified pill, Dashboard, and Icon
+- Separate color choices for upload arrow, download arrow, upload number, and download number
 - Monospaced digits for stable layout
-- Configurable colours for upload and download labels including black (Preferences → Appearance)
 - Configurable font size (8–16 pt) and font style (Monospaced / System / Rounded)
 - **Pinned unit** — lock the display to KB/s, MB/s, or GB/s (bits or bytes) instead of auto-scaling
 - **Decimal places** — choose 0, 1, 2, or 3 fixed decimals, or auto
-- **Icon mode** — switch to a single network globe SF Symbol instead of rate text (Preferences → Appearance → Menu bar)
+- **Icon mode** — switch to a single symbol in the menu bar and choose between multiple icon options
 - **Launch at login** — toggle in Preferences → Launch
 
 ### Popover
@@ -49,6 +52,7 @@ A minimal macOS menubar app showing real-time upload and download rates across a
 
 ### Preferences
 - Refresh interval (0.5 – 5 seconds)
+- Optional automatic GitHub update checks once per day, with the manual About check still available
 - Show/hide inactive adapters
 - Show/hide other adapters (VPN, virtual interfaces)
 - **Adapter grace period** — keep adapters visible for 3 s, 5 s, or 10 s after they go idle, so brief inactivity doesn't make cards flicker
@@ -56,9 +60,8 @@ A minimal macOS menubar app showing real-time upload and download rates across a
 - Adapter list scrolls when more than 6 interfaces are shown
 - Option to exclude hidden adapters from the total bandwidth shown in the header and menu bar
 - Display rates in bits or bytes
-- **Themes** — System (default), Dracula, Nord, Solarized; changes popover colours and menu bar label accent colours
-- Upload / Download label colours (9 swatches including black, System theme only)
-- **Menu bar display** — Rates (live ↑/↓ numbers, default) or Icon (network globe symbol)
+- Upload / Download arrow colours plus separate upload / download number colours
+- **Menu bar icon style** — Standard, Unified pill, Dashboard, or Icon
 - Menu bar font size (8–16 pt stepper) and font style (Monospaced / System / Rounded)
 - **Pinned unit** — lock menu bar rates to KB/s, MB/s, or GB/s instead of auto-scaling
 - **Decimal places** — choose 0, 1, 2, or 3 fixed decimals for menu bar rates
@@ -79,6 +82,7 @@ A minimal macOS menubar app showing real-time upload and download rates across a
 - Made by Rana GmbH — www.ranagmbh.de
 - If you want to support this project directly, please use https://buymeacoffee.com/robertrudolph
 - Check for Updates — queries GitHub Releases, shows release notes and a Download button when a newer version is found
+- Optional daily background update checks with a direct link to the newest release page
 
 ## Requirements
 
@@ -87,11 +91,11 @@ A minimal macOS menubar app showing real-time upload and download rates across a
 
 ## Install
 
-Download `Netfluss-1.11.zip` from the [latest release](https://github.com/rana-gmbh/netfluss/releases/latest), unzip, and move `Netfluss.app` to `/Applications`.
+Download `NetFluss-1.12.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip, and move `NetFluss.app` to `/Applications`.
 
-Netfluss is notarized and signed with a Developer ID — Gatekeeper will clear it automatically on first launch.
+NetFluss is notarized and signed with a Developer ID — Gatekeeper will clear it automatically on first launch.
 
-You can also use Homebrew to install Netfluss: 
+You can also use Homebrew to install NetFluss: 
 ```bash
 brew install --cask rana-gmbh/netfluss/netfluss  
 ```
@@ -102,7 +106,7 @@ brew install --cask rana-gmbh/netfluss/netfluss
 swift build -c release
 ```
 
-Or open `Package.swift` in Xcode, select the `Netfluss` scheme, and run.
+Or open `Package.swift` in Xcode and run the executable scheme.
 
 ## Notes
 
@@ -113,9 +117,9 @@ Or open `Package.swift` in Xcode, select the `Netfluss` scheme, and run.
 
 ## Buy me a coffee
 
-If you enjoy using Netfluss please consider supporting the project via this link: https://buymeacoffee.com/robertrudolph
+If you enjoy using NetFluss please consider supporting the project via this link: https://buymeacoffee.com/robertrudolph
 
 ## License
 
-Netfluss is released under the [GNU General Public License v3.0](LICENSE).
+NetFluss is released under the [GNU General Public License v3.0](LICENSE).
 Copyright © 2026 Rana GmbH

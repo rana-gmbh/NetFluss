@@ -38,7 +38,7 @@ final class AboutWindowController: NSObject, NSWindowDelegate {
 
         let hosting = NSHostingController(rootView: AboutView())
         let win = NSWindow(contentViewController: hosting)
-        win.title = "About Netfluss"
+        win.title = "About NetFluss"
         win.styleMask = [.titled, .closable]
         win.isReleasedWhenClosed = false
         win.animationBehavior = .none

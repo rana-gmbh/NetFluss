@@ -255,7 +255,7 @@ struct PreferencesView: View {
                     }
                 }
                 Toggle("Check GitHub for updates automatically", isOn: $automaticUpdateChecksEnabled)
-                Text("When enabled, Netfluss checks once per day in the background. The manual Check for Updates button in About stays available.")
+                Text("When enabled, NetFluss checks once per day in the background. The manual Check for Updates button in About stays available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Toggle("Show inactive adapters", isOn: $showInactive)

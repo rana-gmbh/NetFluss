@@ -25,7 +25,7 @@ struct AvailableUpdate: Equatable, Sendable {
 }
 
 enum UpdateLookup {
-    private static let latestReleaseURL = URL(string: "https://api.github.com/repos/rana-gmbh/netfluss/releases/latest")!
+    private static let latestReleaseURL = URL(string: "https://api.github.com/repos/rana-gmbh/NetFluss/releases/latest")!
 
     static func currentVersion(bundle: Bundle = .main) -> String {
         bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
@@ -34,7 +34,7 @@ enum UpdateLookup {
     static func fetchLatestUpdate(currentVersion: String = currentVersion()) async throws -> AvailableUpdate? {
         var request = URLRequest(url: latestReleaseURL)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("Netfluss/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue("NetFluss/\(currentVersion)", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response: response)

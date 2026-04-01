@@ -4,7 +4,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Netfluss",
+    name: "NetFluss",
     platforms: [
         .macOS(.v13)
     ],
