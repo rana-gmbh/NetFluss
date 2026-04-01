@@ -17,7 +17,7 @@
 
 import Foundation
 
-struct FritzBoxBandwidth {
+struct FritzBoxBandwidth: Equatable, Sendable {
     let rxRateBps: Double
     let txRateBps: Double
     let totalBytesReceived: UInt64

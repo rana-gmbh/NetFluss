@@ -18,13 +18,13 @@
 import Foundation
 import Security
 
-struct OpenWRTBandwidth {
+struct OpenWRTBandwidth: Equatable, Sendable {
     let rxRateBps: Double
     let txRateBps: Double
     let linkSpeedMbps: UInt64
 }
 
-struct OpenWRTSample {
+struct OpenWRTSample: Equatable, Sendable {
     let rxBytes: UInt64
     let txBytes: UInt64
     let linkSpeedMbps: UInt64
