@@ -18,7 +18,7 @@
 import SwiftUI
 
 @main
-struct NetflussApp: App {
+struct NetFlussApp: App {
     // AppDelegate owns AppState so that StatusBarController (which calls
     // NSStatusBar) is created inside applicationDidFinishLaunching — after
     // the window-server connection is established.  Initialising it earlier

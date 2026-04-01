@@ -77,7 +77,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     // Cached interface info (type/displayName) — rarely changes
     private var cachedInterfaceInfo: [String: InterfaceSampler.InterfaceInfo] = [:]
     // Reusable SCDynamicStore
-    private lazy var dynamicStore: SCDynamicStore? = SCDynamicStoreCreate(nil, "Netfluss" as CFString, nil, nil)
+    private lazy var dynamicStore: SCDynamicStore? = SCDynamicStoreCreate(nil, "NetFluss" as CFString, nil, nil)
     // Cached Wi-Fi info
     private var _cachedWifiInfo: [String: InterfaceSampler.WifiInfo] = [:]
     private let wifiClient = CWWiFiClient.shared()
@@ -498,7 +498,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let needsCountry = UserDefaults.standard.string(forKey: "connectionStatusMode") == "flow"
         if needsCountry, let url = URL(string: "https://ipwho.is/\(ip)") {
             var request = URLRequest(url: url, timeoutInterval: 8)
-            request.setValue("Netfluss/1.0", forHTTPHeaderField: "User-Agent")
+            request.setValue("NetFluss/1.0", forHTTPHeaderField: "User-Agent")
             if let (data, _) = try? await URLSession.shared.data(for: request),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let country = json["country_code"] as? String {
@@ -606,7 +606,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     }
 
     private nonisolated static func primaryNetworkService(store: SCDynamicStore? = nil) -> String {
-        let s = store ?? SCDynamicStoreCreate(nil, "Netfluss.DNS" as CFString, nil, nil)
+        let s = store ?? SCDynamicStoreCreate(nil, "NetFluss.DNS" as CFString, nil, nil)
         let key = SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, kSCEntNetIPv4)
         guard let dict = SCDynamicStoreCopyValue(s, key) as? [String: Any],
               let primaryInterface = dict["PrimaryInterface"] as? String else { return "" }
@@ -663,14 +663,14 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         if useTouchID {
             let context = LAContext()
-            context.localizedReason = "Netfluss needs to modify network settings"
+            context.localizedReason = "NetFluss needs to modify network settings"
 
             var error: NSError?
             if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) {
                 do {
                     let success = try await context.evaluatePolicy(
                         .deviceOwnerAuthentication,
-                        localizedReason: "Netfluss needs to modify network settings"
+                        localizedReason: "NetFluss needs to modify network settings"
                     )
                     if success {
                         runSync("/bin/bash", ["-c", command])
@@ -1161,7 +1161,7 @@ enum InterfaceSampler {
     }
 
     static func defaultGatewayIP(store: SCDynamicStore? = nil) -> String {
-        let s = store ?? SCDynamicStoreCreate(nil, "Netfluss" as CFString, nil, nil)
+        let s = store ?? SCDynamicStoreCreate(nil, "NetFluss" as CFString, nil, nil)
         let key = SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, kSCEntNetIPv4)
         guard let dict = SCDynamicStoreCopyValue(s, key) as? [String: Any],
               let router = dict[kSCPropNetIPv4Router as String] as? String,

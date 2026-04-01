@@ -19,15 +19,15 @@ jobs:
 
       - name: Assemble app bundle
         run: |
-          mkdir -p Netfluss.app/Contents/MacOS
-          mkdir -p Netfluss.app/Contents/Resources
-          cp .build/apple/Products/Release/Netfluss Netfluss.app/Contents/MacOS/Netfluss
-          cp Packaging/Info.plist Netfluss.app/Contents/Info.plist
-          cp Packaging/Resources/AppIcon.icns Netfluss.app/Contents/Resources/AppIcon.icns
+          mkdir -p NetFluss.app/Contents/MacOS
+          mkdir -p NetFluss.app/Contents/Resources
+          cp .build/apple/Products/Release/Netfluss NetFluss.app/Contents/MacOS/NetFluss
+          cp Packaging/Info.plist NetFluss.app/Contents/Info.plist
+          cp Packaging/Resources/AppIcon.icns NetFluss.app/Contents/Resources/AppIcon.icns
           VERSION="${GITHUB_REF_NAME#v}"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Netfluss.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" NetFluss.app/Contents/Info.plist
           BUILD=$(git rev-list --count HEAD)
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" Netfluss.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" NetFluss.app/Contents/Info.plist
 
       - name: Import Developer ID certificate
         env:
@@ -50,13 +50,13 @@ jobs:
             --options=runtime \
             --timestamp \
             --entitlements Netfluss.entitlements \
-            Netfluss.app
-          codesign --verify --deep --strict Netfluss.app
+            NetFluss.app
+          codesign --verify --deep --strict NetFluss.app
 
       - name: Package
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          ditto -c -k --sequesterRsrc --keepParent Netfluss.app "Netfluss-${VERSION}.zip"
+          ditto -c -k --sequesterRsrc --keepParent NetFluss.app "NetFluss-${VERSION}.zip"
 
       - name: Notarize
         env:
@@ -64,7 +64,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.NOTARIZATION_PASSWORD }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          xcrun notarytool submit "Netfluss-${VERSION}.zip" \
+          xcrun notarytool submit "NetFluss-${VERSION}.zip" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_PASSWORD" \
             --team-id "D6P24X5377" \
@@ -73,13 +73,13 @@ jobs:
       - name: Staple
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          xcrun stapler staple Netfluss.app
-          rm "Netfluss-${VERSION}.zip"
-          ditto -c -k --sequesterRsrc --keepParent Netfluss.app "Netfluss-${VERSION}.zip"
+          xcrun stapler staple NetFluss.app
+          rm "NetFluss-${VERSION}.zip"
+          ditto -c -k --sequesterRsrc --keepParent NetFluss.app "NetFluss-${VERSION}.zip"
 
       - name: Upload to GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          gh release upload "v${VERSION}" "Netfluss-${VERSION}.zip" --clobber
+          gh release upload "v${VERSION}" "NetFluss-${VERSION}.zip" --clobber
