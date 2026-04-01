@@ -23,22 +23,96 @@ extension Notification.Name {
     static let closePopover = Notification.Name("com.local.netfluss.closePopover")
 }
 
+private final class MenuBarRatesView: NSView {
+    static let horizontalPadding: CGFloat = 2
+    private static let verticalSpacing: CGFloat = 1
+
+    private var upText = NSAttributedString(string: "")
+    private var downText = NSAttributedString(string: "")
+    private var contentWidth: CGFloat = 0
+    private var lineHeight: CGFloat = 0
+
+    override var isFlipped: Bool { true }
+    override var allowsVibrancy: Bool { false }
+    override var isOpaque: Bool { false }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    func update(
+        upText: NSAttributedString,
+        downText: NSAttributedString,
+        contentWidth: CGFloat,
+        lineHeight: CGFloat
+    ) {
+        self.upText = upText
+        self.downText = downText
+        self.contentWidth = contentWidth
+        self.lineHeight = lineHeight
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard contentWidth > 0, lineHeight > 0 else { return }
+
+        let totalHeight = (lineHeight * 2) + Self.verticalSpacing
+        let originY = floor((bounds.height - totalHeight) / 2)
+        let drawWidth = contentWidth
+
+        upText.draw(in: NSRect(
+            x: Self.horizontalPadding,
+            y: originY,
+            width: drawWidth,
+            height: lineHeight
+        ))
+        downText.draw(in: NSRect(
+            x: Self.horizontalPadding,
+            y: originY + lineHeight + Self.verticalSpacing,
+            width: drawWidth,
+            height: lineHeight
+        ))
+    }
+}
+
 @MainActor
-final class StatusBarController: NSObject {
+final class StatusBarController: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private let monitor: NetworkMonitor
     private var cancellables: Set<AnyCancellable> = []
-    private let upLabel = NSTextField(labelWithString: "")
-    private let downLabel = NSTextField(labelWithString: "")
-    private let stackView = NSStackView()
-    // Fixed-width constraints so arrows don't shift with proportional fonts
-    private var upLabelWidthConstraint: NSLayoutConstraint?
-    private var downLabelWidthConstraint: NSLayoutConstraint?
+    private let ratesView = MenuBarRatesView()
     // Cached font to avoid recreating on every tick
     private var cachedFont: NSFont?
     private var cachedFontSize: Double = 0
     private var cachedFontDesign: String = ""
+    private var lastRenderState: MenuBarRenderState?
+    private var lastStatusItemLength: CGFloat?
+    private var currentMenuBarMode: String?
+    private var cachedReferenceWidthState: ReferenceWidthState?
+    private var cachedReferenceWidth: CGFloat = 0
+    private var cachedLineHeightState: FontState?
+    private var cachedLineHeight: CGFloat = 0
+
+    private struct MenuBarRenderState: Equatable {
+        let mode: String
+        let upText: String
+        let downText: String
+        let refText: String
+        let fontSize: Double
+        let fontDesign: String
+        let colorKey: String
+    }
+
+    private struct FontState: Equatable {
+        let fontSize: Double
+        let fontDesign: String
+    }
+
+    private struct ReferenceWidthState: Equatable {
+        let refText: String
+        let font: FontState
+    }
 
     init(monitor: NetworkMonitor) {
         self.monitor = monitor
@@ -50,14 +124,11 @@ final class StatusBarController: NSObject {
             button.target = self
             button.action = #selector(togglePopover)
             button.setButtonType(.momentaryChange)
-            configureLabels(in: button)
+            configureRatesView(in: button)
         }
 
-        let contentView = MenuBarView()
-            .environmentObject(monitor)
-            .frame(width: 340)
-        popover.contentViewController = NSHostingController(rootView: contentView)
         popover.behavior = .transient
+        popover.delegate = self
 
         monitor.$totals
             .receive(on: DispatchQueue.main)
@@ -91,9 +162,21 @@ final class StatusBarController: NSObject {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            if popover.contentViewController == nil {
+                let contentView = MenuBarView()
+                    .environmentObject(monitor)
+                    .frame(width: 340)
+                popover.contentViewController = NSHostingController(rootView: contentView)
+            }
+            monitor.setDetailMonitoringEnabled(true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        monitor.setDetailMonitoringEnabled(false)
+        popover.contentViewController = nil
     }
 
     private func applyPreferences() {
@@ -111,24 +194,48 @@ final class StatusBarController: NSObject {
         let mode = UserDefaults.standard.string(forKey: "menuBarMode") ?? "rates"
 
         if mode == "icon" {
-            stackView.isHidden = true
-            let cfg = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
-            statusItem.button?.image = NSImage(
-                systemSymbolName: "network",
-                accessibilityDescription: "Network")?.withSymbolConfiguration(cfg)
-            statusItem.button?.imagePosition = .imageOnly
-            statusItem.length = NSStatusItem.squareLength
+            let iconState = MenuBarRenderState(
+                mode: mode,
+                upText: "",
+                downText: "",
+                refText: "",
+                fontSize: 0,
+                fontDesign: "",
+                colorKey: ""
+            )
+            if lastRenderState == iconState { return }
+            lastRenderState = iconState
+            if currentMenuBarMode != mode {
+                ratesView.isHidden = true
+                let cfg = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+                statusItem.button?.image = NSImage(
+                    systemSymbolName: "network",
+                    accessibilityDescription: "Network")?.withSymbolConfiguration(cfg)
+                statusItem.button?.imagePosition = .imageOnly
+                currentMenuBarMode = mode
+            }
+            if lastStatusItemLength != NSStatusItem.squareLength {
+                statusItem.length = NSStatusItem.squareLength
+                lastStatusItemLength = NSStatusItem.squareLength
+            }
             return
         }
 
         // mode == "rates" — restore and continue as before
-        stackView.isHidden = false
-        statusItem.button?.image = nil
-        statusItem.button?.imagePosition = .noImage
+        guard let button = statusItem.button else { return }
+        if currentMenuBarMode != mode {
+            ratesView.isHidden = false
+            button.image = nil
+            button.imagePosition = .noImage
+            currentMenuBarMode = mode
+        }
 
         let useBits = UserDefaults.standard.bool(forKey: "useBits")
         let pinnedUnit = UserDefaults.standard.string(forKey: "menuBarPinnedUnit") ?? "auto"
         let rawDecimals = UserDefaults.standard.integer(forKey: "menuBarDecimals")
+        let rawFontSize = UserDefaults.standard.double(forKey: "menuBarFontSize")
+        let fontSize = max(8, min(16, rawFontSize > 0 ? rawFontSize : 10))
+        let fontDesign = UserDefaults.standard.string(forKey: "menuBarFontDesign") ?? "monospaced"
         // 0 = auto, 10 = 0 decimals, 1/2/3 = that many decimals
         let effectiveDecimals: Int
         if rawDecimals == 0 {
@@ -150,24 +257,24 @@ final class StatusBarController: NSObject {
             downFormatted = RateFormatter.formatRate(totals.rxRateBps, useBits: useBits)
         }
 
-        let font = menuBarFont()
-
         let theme = AppTheme.named(UserDefaults.standard.string(forKey: "theme") ?? "system")
         let upColor: NSColor
         let downColor: NSColor
+        let colorKey: String
         if theme.id == "system" {
-            upColor  = nsColor(for: UserDefaults.standard.string(forKey: "uploadColor")   ?? "green", default: .systemGreen)
-            downColor = nsColor(for: UserDefaults.standard.string(forKey: "downloadColor") ?? "blue",  default: .systemBlue)
+            let uploadColor = UserDefaults.standard.string(forKey: "uploadColor") ?? "green"
+            let downloadColor = UserDefaults.standard.string(forKey: "downloadColor") ?? "blue"
+            upColor  = nsColor(for: uploadColor, default: .systemGreen)
+            downColor = nsColor(for: downloadColor, default: .systemBlue)
+            colorKey = "system:\(uploadColor):\(downloadColor)"
         } else {
             upColor   = NSColor(theme.uploadColor)
             downColor = NSColor(theme.downloadColor)
+            colorKey = theme.id
         }
-
-        stackView.alignment = .leading
 
         // Fixed width: measure a reference string so the menu bar never shifts
         // when values cross unit boundaries (e.g. 999 KB/s → 1.2 MB/s).
-        let plainAttrs: [NSAttributedString.Key: Any] = [.font: font]
         let refText: String
         if pinnedUnit != "auto" {
             let dec = max(0, effectiveDecimals)
@@ -182,25 +289,47 @@ final class StatusBarController: NSObject {
         } else {
             refText = useBits ? "↓ 9.99 Mb/s" : "↓ 9.99 MB/s"
         }
-        let refW = ceil((refText as NSString).size(withAttributes: plainAttrs).width)
-        upLabelWidthConstraint?.constant = refW
-        downLabelWidthConstraint?.constant = refW
-        statusItem.length = refW + 4  // 2 px padding each side
 
         let upText = "↑ \(upFormatted)"
         let downText = "↓ \(downFormatted)"
+        let renderState = MenuBarRenderState(
+            mode: mode,
+            upText: upText,
+            downText: downText,
+            refText: refText,
+            fontSize: fontSize,
+            fontDesign: fontDesign,
+            colorKey: colorKey
+        )
+        if lastRenderState == renderState { return }
+        lastRenderState = renderState
 
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: upColor]
-        upLabel.attributedStringValue = NSAttributedString(string: upText, attributes: attrs)
-        downLabel.attributedStringValue = NSAttributedString(string: downText, attributes: [
+        let font = menuBarFont(size: fontSize, design: fontDesign)
+        let fontState = FontState(fontSize: fontSize, fontDesign: fontDesign)
+        let refW = referenceWidth(for: refText, font: font, state: fontState)
+        let targetLength = refW + (MenuBarRatesView.horizontalPadding * 2)
+        if lastStatusItemLength != targetLength {
+            statusItem.length = targetLength
+            lastStatusItemLength = targetLength
+        }
+
+        let upAttributedText = NSAttributedString(string: upText, attributes: [
+            .font: font,
+            .foregroundColor: upColor
+        ])
+        let downAttributedText = NSAttributedString(string: downText, attributes: [
             .font: font, .foregroundColor: downColor
         ])
+        ratesView.update(
+            upText: upAttributedText,
+            downText: downAttributedText,
+            contentWidth: refW,
+            lineHeight: lineHeight(for: font, state: fontState)
+        )
+        layoutRatesView(in: button)
     }
 
-    private func menuBarFont() -> NSFont {
-        let raw = UserDefaults.standard.double(forKey: "menuBarFontSize")
-        let size = max(8, min(16, raw > 0 ? raw : 10))
-        let design = UserDefaults.standard.string(forKey: "menuBarFontDesign") ?? "monospaced"
+    private func menuBarFont(size: Double, design: String) -> NSFont {
         // Return cached font if settings haven't changed
         if let cached = cachedFont, cachedFontSize == size, cachedFontDesign == design {
             return cached
@@ -237,6 +366,29 @@ final class StatusBarController: NSObject {
         }
     }
 
+    private func referenceWidth(for text: String, font: NSFont, state: FontState) -> CGFloat {
+        let referenceState = ReferenceWidthState(refText: text, font: state)
+        if cachedReferenceWidthState == referenceState {
+            return cachedReferenceWidth
+        }
+
+        let width = ceil((text as NSString).size(withAttributes: [.font: font]).width)
+        cachedReferenceWidthState = referenceState
+        cachedReferenceWidth = width
+        return width
+    }
+
+    private func lineHeight(for font: NSFont, state: FontState) -> CGFloat {
+        if cachedLineHeightState == state {
+            return cachedLineHeight
+        }
+
+        let height = ceil(font.boundingRectForFont.height)
+        cachedLineHeightState = state
+        cachedLineHeight = height
+        return height
+    }
+
     private func effectiveTotals() -> RateTotals {
         let onlyVisible = UserDefaults.standard.bool(forKey: "totalsOnlyVisibleAdapters")
         guard onlyVisible else { return monitor.totals }
@@ -265,29 +417,20 @@ final class StatusBarController: NSObject {
         return RateTotals(rxRateBps: rx, txRateBps: tx)
     }
 
-    private func configureLabels(in button: NSStatusBarButton) {
-        stackView.orientation = .vertical
-        stackView.spacing = 1
-        stackView.alignment = .leading
-        stackView.addArrangedSubview(upLabel)
-        stackView.addArrangedSubview(downLabel)
-        stackView.translatesAutoresizingMaskIntoConstraints = false
-
-        upLabel.translatesAutoresizingMaskIntoConstraints = false
-        downLabel.translatesAutoresizingMaskIntoConstraints = false
-        let upW = upLabel.widthAnchor.constraint(equalToConstant: 0)
-        let downW = downLabel.widthAnchor.constraint(equalToConstant: 0)
-        upLabelWidthConstraint = upW
-        downLabelWidthConstraint = downW
-
+    private func configureRatesView(in button: NSStatusBarButton) {
         button.title = ""
         button.image = nil
-        button.addSubview(stackView)
+        ratesView.frame = button.bounds
+        ratesView.autoresizingMask = [.width, .height]
+        button.addSubview(ratesView)
+    }
 
-        NSLayoutConstraint.activate([
-            stackView.centerYAnchor.constraint(equalTo: button.centerYAnchor),
-            stackView.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -2),
-            upW, downW
-        ])
+    private func layoutRatesView(in button: NSStatusBarButton) {
+        if ratesView.superview !== button {
+            button.addSubview(ratesView)
+        }
+        if ratesView.frame != button.bounds {
+            ratesView.frame = button.bounds
+        }
     }
 }

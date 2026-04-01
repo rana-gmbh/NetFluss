@@ -17,13 +17,13 @@
 
 import Foundation
 
-enum AdapterType: String {
+enum AdapterType: String, Equatable, Sendable {
     case wifi
     case ethernet
     case other
 }
 
-struct AdapterStatus: Identifiable {
+struct AdapterStatus: Identifiable, Equatable, Sendable {
     let id: String          // BSD name (e.g. "en0")
     let displayName: String
     let type: AdapterType
@@ -39,19 +39,19 @@ struct AdapterStatus: Identifiable {
     let txRateBps: Double
 }
 
-struct RateTotals {
+struct RateTotals: Equatable, Sendable {
     let rxRateBps: Double
     let txRateBps: Double
 }
 
-struct AppTraffic: Identifiable {
+struct AppTraffic: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
     let rxRateBps: Double
     let txRateBps: Double
 }
 
-struct WifiDetail {
+struct WifiDetail: Equatable, Sendable {
     let phyMode: String?
     let security: String?
     let channelNumber: Int?
@@ -61,7 +61,7 @@ struct WifiDetail {
     let bssid: String?
 }
 
-struct InterfaceSample {
+struct InterfaceSample: Equatable, Sendable {
     let name: String
     let flags: UInt32
     let rxBytes: UInt64
@@ -69,7 +69,7 @@ struct InterfaceSample {
     let baudrate: UInt64
 }
 
-struct DNSPreset: Identifiable, Codable, Equatable {
+struct DNSPreset: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let name: String
     let servers: [String]  // empty = system default (DHCP)

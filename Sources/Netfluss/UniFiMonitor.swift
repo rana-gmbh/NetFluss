@@ -18,7 +18,7 @@
 import Foundation
 import Security
 
-struct UniFiBandwidth {
+struct UniFiBandwidth: Equatable, Sendable {
     let rxRateBps: Double
     let txRateBps: Double
     let maxDownstreamMbps: UInt64

@@ -21,7 +21,7 @@ import LocalAuthentication
 import SystemConfiguration
 
 @MainActor
-final class NetworkMonitor: ObservableObject {
+final class NetworkMonitor: NSObject, ObservableObject {
     @Published var adapters: [AdapterStatus] = []
     @Published var totals = RateTotals(rxRateBps: 0, txRateBps: 0)
     @Published var topApps: [AppTraffic] = []
@@ -45,6 +45,7 @@ final class NetworkMonitor: ObservableObject {
     @Published var openWRTError: String?
 
     private var timer: DispatchSourceTimer?
+    private let refreshQueue = DispatchQueue(label: "com.local.netfluss.refresh", qos: .utility)
     private var fritzBoxInFlight = false
     private var fritzBoxLinkFetched = false
     private var unifiInFlight = false
@@ -62,18 +63,49 @@ final class NetworkMonitor: ObservableObject {
     private var adapterLastActiveTime: [String: Date] = [:]
     private var topAppLastActiveTime: [String: (lastSeen: Date, rxRate: Double, txRate: Double)] = [:]
     private var allAppLastSeen: [String: Date] = [:]
+    private var refreshInFlight = false
+    private var detailMonitoringEnabled = false
+    private var forceDetailRefresh = false
+    private var lastInterfaceInfoRefresh: Date?
+    private var lastWiFiDetailsRefresh: Date?
+    private var lastTopAppsRefresh: Date?
+    private var lastAddressDetailsRefresh: Date?
+    private var lastDNSRefresh: Date?
+    private var lastRouterRefresh: Date?
 
-    // Tick counter for throttling expensive operations
-    private var tickCount: UInt64 = 0
     // Cached interface info (type/displayName) — rarely changes
     private var cachedInterfaceInfo: [String: InterfaceSampler.InterfaceInfo] = [:]
     // Reusable SCDynamicStore
     private lazy var dynamicStore: SCDynamicStore? = SCDynamicStoreCreate(nil, "Netfluss" as CFString, nil, nil)
     // Cached Wi-Fi info
     private var _cachedWifiInfo: [String: InterfaceSampler.WifiInfo] = [:]
-    // Cached gateway/internal IP
-    private var _cachedGatewayIP: String = "—"
-    private var _cachedInternalIP: String = "—"
+    private let wifiClient = CWWiFiClient.shared()
+
+    private static let interfaceInfoRefreshInterval: TimeInterval = 30
+    private static let wifiDetailsRefreshInterval: TimeInterval = 15
+    private static let topAppsRefreshInterval: TimeInterval = 3
+    private static let addressDetailsRefreshInterval: TimeInterval = 15
+    private static let dnsRefreshInterval: TimeInterval = 30
+    private static let routerRefreshInterval: TimeInterval = 5
+    private static let externalIPRefreshInterval: TimeInterval = 300
+
+    private struct RefreshResult {
+        let adapters: [AdapterStatus]
+        let totals: RateTotals
+        let samplesByName: [String: InterfaceSample]
+        let interfaceInfo: [String: InterfaceSampler.InterfaceInfo]?
+        let wifiInfo: [String: InterfaceSampler.WifiInfo]?
+    }
+
+    override init() {
+        super.init()
+        wifiClient.delegate = self
+        startListeningForWiFiEvents()
+    }
+
+    deinit {
+        timer?.cancel()
+    }
 
     func start(interval: Double) {
         let clamped = max(0.2, min(interval, 10.0))
@@ -82,7 +114,8 @@ final class NetworkMonitor: ObservableObject {
 
         timer?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
-        timer.schedule(deadline: .now(), repeating: clamped)
+        let leeway = DispatchTimeInterval.milliseconds(max(50, Int(clamped * 100)))
+        timer.schedule(deadline: .now(), repeating: clamped, leeway: leeway)
         timer.setEventHandler { [weak self] in
             self?.refresh()
         }
@@ -90,37 +123,85 @@ final class NetworkMonitor: ObservableObject {
         self.timer = timer
     }
 
+    func setDetailMonitoringEnabled(_ enabled: Bool) {
+        guard detailMonitoringEnabled != enabled else { return }
+        detailMonitoringEnabled = enabled
+
+        if enabled {
+            forceDetailRefresh = true
+            refresh()
+        }
+    }
+
     private func refresh() {
+        guard !refreshInFlight else { return }
+        refreshInFlight = true
+
         let now = Date()
-        let tick = tickCount
-        tickCount &+= 1
+        let forcedDetailRefresh = forceDetailRefresh
+        let refreshInterfaceInfo = cachedInterfaceInfo.isEmpty || shouldRefresh(lastInterfaceInfoRefresh, at: now, interval: Self.interfaceInfoRefreshInterval)
+        let refreshWifiInfo = detailMonitoringEnabled && (
+            forcedDetailRefresh ||
+            _cachedWifiInfo.isEmpty ||
+            shouldRefresh(lastWiFiDetailsRefresh, at: now, interval: Self.wifiDetailsRefreshInterval)
+        )
+        let shouldRefreshTopApps = detailMonitoringEnabled &&
+            UserDefaults.standard.bool(forKey: "showTopApps") &&
+            (forcedDetailRefresh || shouldRefresh(lastTopAppsRefresh, at: now, interval: Self.topAppsRefreshInterval))
+        let shouldRefreshAddressDetails = detailMonitoringEnabled &&
+            (forcedDetailRefresh || shouldRefresh(lastAddressDetailsRefresh, at: now, interval: Self.addressDetailsRefreshInterval))
+        let shouldRefreshRouters = detailMonitoringEnabled &&
+            (forcedDetailRefresh || shouldRefresh(lastRouterRefresh, at: now, interval: Self.routerRefreshInterval))
+        let previousSamples = lastSample
+        let previousUpdate = lastUpdate
+        let cachedInterfaceInfo = self.cachedInterfaceInfo
+        let cachedWifiInfo = self._cachedWifiInfo
+        forceDetailRefresh = false
 
+        refreshQueue.async { [weak self] in
+            let result = Self.computeRefreshResult(
+                now: now,
+                previousSamples: previousSamples,
+                previousUpdate: previousUpdate,
+                cachedInterfaceInfo: cachedInterfaceInfo,
+                cachedWifiInfo: cachedWifiInfo,
+                refreshInterfaceInfo: refreshInterfaceInfo,
+                refreshWifiInfo: refreshWifiInfo
+            )
+
+            DispatchQueue.main.async { [weak self] in
+                self?.applyRefresh(
+                    result: result,
+                    now: now,
+                    shouldRefreshTopApps: shouldRefreshTopApps,
+                    forcedDetailRefresh: forcedDetailRefresh,
+                    shouldRefreshAddressDetails: shouldRefreshAddressDetails,
+                    shouldRefreshRouters: shouldRefreshRouters
+                )
+            }
+        }
+    }
+
+    private nonisolated static func computeRefreshResult(
+        now: Date,
+        previousSamples: [String: InterfaceSample],
+        previousUpdate: Date?,
+        cachedInterfaceInfo: [String: InterfaceSampler.InterfaceInfo],
+        cachedWifiInfo: [String: InterfaceSampler.WifiInfo],
+        refreshInterfaceInfo: Bool,
+        refreshWifiInfo: Bool
+    ) -> RefreshResult {
         let samples = InterfaceSampler.fetchSamples()
-
-        // Interface type/name info rarely changes — refresh every ~30 ticks
-        if tick % 30 == 0 || cachedInterfaceInfo.isEmpty {
-            cachedInterfaceInfo = InterfaceSampler.interfaceInfo()
-        }
-        let infoMap = cachedInterfaceInfo
-
-        // Wi-Fi details (CoreWLAN) — refresh every ~5 ticks
-        let wifiInfoMap: [String: InterfaceSampler.WifiInfo]
-        if tick % 5 == 0 {
-            let freshWifi = InterfaceSampler.wifiInfo()
-            _cachedWifiInfo = freshWifi
-            wifiInfoMap = freshWifi
-        } else {
-            wifiInfoMap = _cachedWifiInfo
-        }
+        let infoMap = refreshInterfaceInfo ? InterfaceSampler.interfaceInfo() : cachedInterfaceInfo
+        let wifiInfoMap = refreshWifiInfo ? InterfaceSampler.wifiInfo() : cachedWifiInfo
 
         var updatedAdapters: [AdapterStatus] = []
         var totalRxRate: Double = 0
         var totalTxRate: Double = 0
+        let deltaTime = now.timeIntervalSince(previousUpdate ?? now)
 
         for sample in samples {
-            let previous = lastSample[sample.name]
-            let deltaTime = now.timeIntervalSince(lastUpdate ?? now)
-
+            let previous = previousSamples[sample.name]
             let rxRate = InterfaceSampler.rate(current: sample.rxBytes, previous: previous?.rxBytes, deltaTime: deltaTime)
             let txRate = InterfaceSampler.rate(current: sample.txBytes, previous: previous?.txBytes, deltaTime: deltaTime)
 
@@ -151,10 +232,40 @@ final class NetworkMonitor: ObservableObject {
             totalTxRate += txRate
         }
 
-        adapters = updatedAdapters.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
-        totals = RateTotals(rxRateBps: totalRxRate, txRateBps: totalTxRate)
-        lastSample = Dictionary(uniqueKeysWithValues: samples.map { ($0.name, $0) })
+        updatedAdapters.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+
+        return RefreshResult(
+            adapters: updatedAdapters,
+            totals: RateTotals(rxRateBps: totalRxRate, txRateBps: totalTxRate),
+            samplesByName: Dictionary(uniqueKeysWithValues: samples.map { ($0.name, $0) }),
+            interfaceInfo: refreshInterfaceInfo ? infoMap : nil,
+            wifiInfo: refreshWifiInfo ? wifiInfoMap : nil
+        )
+    }
+
+    private func applyRefresh(
+        result: RefreshResult,
+        now: Date,
+        shouldRefreshTopApps: Bool,
+        forcedDetailRefresh: Bool,
+        shouldRefreshAddressDetails: Bool,
+        shouldRefreshRouters: Bool
+    ) {
+        if let infoMap = result.interfaceInfo {
+            cachedInterfaceInfo = infoMap
+            lastInterfaceInfoRefresh = now
+        }
+        if let wifiInfoMap = result.wifiInfo {
+            _cachedWifiInfo = wifiInfoMap
+            lastWiFiDetailsRefresh = now
+        }
+
+        setIfChanged(\.adapters, to: result.adapters)
+        setIfChanged(\.totals, to: result.totals)
+        lastSample = result.samplesByName
         lastUpdate = now
+
+        let updatedAdapters = result.adapters
 
         // Adapter grace period tracking
         let graceEnabled = UserDefaults.standard.bool(forKey: "adapterGracePeriodEnabled")
@@ -183,7 +294,7 @@ final class NetworkMonitor: ObservableObject {
                     }
                 }
             }
-            adapterGraceDeadlines = deadlines
+            setIfChanged(\.adapterGraceDeadlines, to: deadlines)
         } else {
             if !adapterGraceDeadlines.isEmpty { adapterGraceDeadlines = [:] }
         }
@@ -191,22 +302,43 @@ final class NetworkMonitor: ObservableObject {
         // Clean up tracking for adapters no longer returned by getifaddrs
         adapterLastActiveTime = adapterLastActiveTime.filter { currentAdapterIDs.contains($0.key) }
 
-        // Top Apps: every 3 ticks (~3s at 1Hz) — netstat is expensive
-        if tick % 3 == 0 {
+        // Top Apps: every 3 ticks (~3s at 1Hz) while the popover is open.
+        if shouldRefreshTopApps {
+            lastTopAppsRefresh = now
             updateTopApps()
         }
 
-        // IPs and DNS: every 5 ticks — gateway/internal IP rarely change
-        if tick % 5 == 0 {
-            updateIPsIfNeeded(tick: tick)
+        // Detail sections do not need background refresh while the popover is closed.
+        if shouldRefreshAddressDetails {
+            lastAddressDetailsRefresh = now
+            updateIPsIfNeeded(force: forcedDetailRefresh)
         }
-
-        // Router monitors: every 5 ticks — HTTP requests don't need 1Hz
-        if tick % 5 == 0 {
+        if shouldRefreshRouters {
+            lastRouterRefresh = now
             updateFritzBox()
             updateUniFi()
             updateOpenWRT()
         }
+
+        let needsImmediateFollowUp = detailMonitoringEnabled && forceDetailRefresh
+        refreshInFlight = false
+        if needsImmediateFollowUp {
+            refresh()
+        }
+    }
+
+    private func setIfChanged<Value: Equatable>(
+        _ keyPath: ReferenceWritableKeyPath<NetworkMonitor, Value>,
+        to newValue: Value
+    ) {
+        if self[keyPath: keyPath] != newValue {
+            self[keyPath: keyPath] = newValue
+        }
+    }
+
+    private func shouldRefresh(_ lastRefresh: Date?, at now: Date, interval: TimeInterval) -> Bool {
+        guard let lastRefresh else { return true }
+        return now.timeIntervalSince(lastRefresh) >= interval
     }
 
     // MARK: - Top Apps
@@ -249,7 +381,7 @@ final class NetworkMonitor: ObservableObject {
                     }
                     // Expire entries older than 60 seconds and publish sorted list
                     self.allAppLastSeen = self.allAppLastSeen.filter { now.timeIntervalSince($0.value) < 60 }
-                    self.recentAppNames = self.allAppLastSeen.keys.sorted()
+                    self.setIfChanged(\.recentAppNames, to: self.allAppLastSeen.keys.sorted())
 
                     // Top 5 visible apps (filter out hidden)
                     var apps = Array(allActive.filter { !hiddenApps.contains($0.name) }.prefix(5))
@@ -289,7 +421,7 @@ final class NetworkMonitor: ObservableObject {
                         self.topAppLastActiveTime.removeAll()
                     }
 
-                    self.topApps = apps
+                    self.setIfChanged(\.topApps, to: apps)
                 }
             }
 
@@ -300,18 +432,25 @@ final class NetworkMonitor: ObservableObject {
 
     // MARK: - IP Addresses
 
-    private func updateIPsIfNeeded(tick: UInt64) {
-        internalIP = InterfaceSampler.primaryInternalIP()
-        gatewayIP = InterfaceSampler.defaultGatewayIP(store: dynamicStore)
-        // DNS check spawns a process — only every ~10 ticks
-        if tick % 10 == 0, UserDefaults.standard.bool(forKey: "showDNSSwitcher") {
-            updateCurrentDNS()
-        }
-
+    private func updateIPsIfNeeded(force: Bool) {
+        setIfChanged(\.internalIP, to: InterfaceSampler.primaryInternalIP())
+        setIfChanged(\.gatewayIP, to: InterfaceSampler.defaultGatewayIP(store: dynamicStore))
         let now = Date()
+
+        // DNS check spawns a process; keep it on its own slower cadence.
+        if UserDefaults.standard.bool(forKey: "showDNSSwitcher"),
+           (force || shouldRefresh(lastDNSRefresh, at: now, interval: Self.dnsRefreshInterval)) {
+            updateCurrentDNS()
+            lastDNSRefresh = now
+        }
         let currentIPv6 = UserDefaults.standard.bool(forKey: "externalIPv6")
         let settingChanged = lastExternalIPv6Setting != nil && lastExternalIPv6Setting != currentIPv6
-        if !settingChanged, let lastExternalIPUpdate, now.timeIntervalSince(lastExternalIPUpdate) < 60.0 { return }
+        if !force,
+           !settingChanged,
+           let lastExternalIPUpdate,
+           now.timeIntervalSince(lastExternalIPUpdate) < Self.externalIPRefreshInterval {
+            return
+        }
         guard !externalIPInFlight else { return }
         lastExternalIPv6Setting = currentIPv6
 
@@ -319,8 +458,8 @@ final class NetworkMonitor: ObservableObject {
         Task { [weak self] in
             let result = await Self.fetchExternalIP()
             guard let self else { return }
-            self.externalIP = result?.ip ?? "—"
-            self.externalIPCountryCode = result?.countryCode ?? ""
+            self.setIfChanged(\.externalIP, to: result?.ip ?? "—")
+            self.setIfChanged(\.externalIPCountryCode, to: result?.countryCode ?? "")
             self.lastExternalIPUpdate = Date()
             self.externalIPInFlight = false
         }
@@ -364,14 +503,32 @@ final class NetworkMonitor: ObservableObject {
         guard !service.isEmpty else { return }
         let output = Self.runSyncOutput("/usr/sbin/networksetup", ["-getdnsservers", service])
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let servers: [String]
         if trimmed.contains("aren't any DNS") || trimmed.isEmpty {
-            currentDNSServers = []
+            servers = []
         } else {
-            currentDNSServers = trimmed.split(whereSeparator: \.isNewline)
+            servers = trimmed.split(whereSeparator: \.isNewline)
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
         }
-        activeDNSPresetID = matchPreset(servers: currentDNSServers)
+        setIfChanged(\.currentDNSServers, to: servers)
+        setIfChanged(\.activeDNSPresetID, to: matchPreset(servers: servers))
+    }
+
+    private func startListeningForWiFiEvents() {
+        do {
+            try wifiClient.startMonitoringEvent(with: .ssidDidChange)
+        } catch {
+            // Best-effort optimization only; periodic refresh remains as fallback.
+        }
+    }
+
+    private func stopListeningForWiFiEvents() {
+        do {
+            try wifiClient.stopMonitoringEvent(with: .ssidDidChange)
+        } catch {
+            // Ignore teardown failures on exit.
+        }
     }
 
     private func matchPreset(servers: [String]) -> String? {
@@ -554,12 +711,12 @@ final class NetworkMonitor: ObservableObject {
                     self.fritzBoxLinkFetched = true
                 }
                 let bandwidth = try await FritzBoxMonitor.fetchBandwidth(host: host)
-                self.fritzBox = bandwidth
-                if self.fritzBoxError != nil { self.fritzBoxError = nil }
+                self.setIfChanged(\.fritzBox, to: bandwidth)
+                self.setIfChanged(\.fritzBoxError, to: nil)
             } catch {
-                if self.fritzBox != nil { self.fritzBox = nil }
+                self.setIfChanged(\.fritzBox, to: nil)
                 let msg = "Cannot reach Fritz!Box"
-                if self.fritzBoxError != msg { self.fritzBoxError = msg }
+                self.setIfChanged(\.fritzBoxError, to: msg)
             }
             self.fritzBoxInFlight = false
         }
@@ -584,20 +741,20 @@ final class NetworkMonitor: ObservableObject {
             do {
                 guard let creds = UniFiMonitor.loadCredentials(host: host) else {
                     let msg = "No credentials configured"
-                    if self.unifiError != msg { self.unifiError = msg }
-                    if self.unifi != nil { self.unifi = nil }
+                    self.setIfChanged(\.unifiError, to: msg)
+                    self.setIfChanged(\.unifi, to: nil)
                     self.unifiInFlight = false
                     return
                 }
                 let bandwidth = try await UniFiMonitor.fetchBandwidth(
                     host: host, username: creds.username, password: creds.password
                 )
-                self.unifi = bandwidth
-                if self.unifiError != nil { self.unifiError = nil }
+                self.setIfChanged(\.unifi, to: bandwidth)
+                self.setIfChanged(\.unifiError, to: nil)
             } catch {
-                if self.unifi != nil { self.unifi = nil }
+                self.setIfChanged(\.unifi, to: nil)
                 let msg = "Cannot reach UniFi gateway"
-                if self.unifiError != msg { self.unifiError = msg }
+                self.setIfChanged(\.unifiError, to: msg)
             }
             self.unifiInFlight = false
         }
@@ -623,8 +780,8 @@ final class NetworkMonitor: ObservableObject {
             do {
                 guard let creds = OpenWRTMonitor.loadCredentials(host: host) else {
                     let msg = "No credentials configured"
-                    if self.openWRTError != msg { self.openWRTError = msg }
-                    if self.openWRT != nil { self.openWRT = nil }
+                    self.setIfChanged(\.openWRTError, to: msg)
+                    self.setIfChanged(\.openWRT, to: nil)
                     self.openWRTInFlight = false
                     return
                 }
@@ -637,19 +794,19 @@ final class NetworkMonitor: ObservableObject {
                     if dt > 0 {
                         let rxRate = Double(sample.rxBytes &- prev.rxBytes) / dt
                         let txRate = Double(sample.txBytes &- prev.txBytes) / dt
-                        self.openWRT = OpenWRTBandwidth(
+                        self.setIfChanged(\.openWRT, to: OpenWRTBandwidth(
                             rxRateBps: rxRate,
                             txRateBps: txRate,
                             linkSpeedMbps: sample.linkSpeedMbps
-                        )
+                        ))
                     }
                 }
                 self.openWRTLastSample = sample
-                if self.openWRTError != nil { self.openWRTError = nil }
+                self.setIfChanged(\.openWRTError, to: nil)
             } catch {
-                if self.openWRT != nil { self.openWRT = nil }
+                self.setIfChanged(\.openWRT, to: nil)
                 let msg = "Cannot reach OpenWRT router"
-                if self.openWRTError != msg { self.openWRTError = msg }
+                self.setIfChanged(\.openWRTError, to: msg)
             }
             self.openWRTInFlight = false
         }
@@ -667,6 +824,18 @@ final class NetworkMonitor: ObservableObject {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         return String(data: data, encoding: .utf8) ?? ""
+    }
+}
+
+@MainActor
+extension NetworkMonitor: @preconcurrency CWEventDelegate {
+    func ssidDidChangeForWiFiInterface(withName interfaceName: String) {
+        lastWiFiDetailsRefresh = nil
+        _cachedWifiInfo = [:]
+        forceDetailRefresh = true
+        if detailMonitoringEnabled && !refreshInFlight {
+            refresh()
+        }
     }
 }
 
@@ -856,7 +1025,7 @@ enum InterfaceSampler {
         return samples
     }
 
-    struct InterfaceInfo {
+    struct InterfaceInfo: Equatable, Sendable {
         let type: AdapterType
         let displayName: String
     }
@@ -884,7 +1053,7 @@ enum InterfaceSampler {
         return map
     }
 
-    struct WifiInfo {
+    struct WifiInfo: Equatable, Sendable {
         let mode: String
         let txRate: Double
         let ssid: String?
@@ -934,6 +1103,7 @@ enum InterfaceSampler {
         case .mode11n: return "Wi-Fi 4 (802.11n)"
         case .mode11ac: return "Wi-Fi 5 (802.11ac)"
         case .mode11ax: return "Wi-Fi 6 (802.11ax)"
+        case .mode11be: return "Wi-Fi 7 (802.11be)"
         @unknown default: return "Unknown"
         }
     }
