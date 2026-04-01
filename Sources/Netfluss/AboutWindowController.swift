@@ -22,6 +22,7 @@ import SwiftUI
 final class AboutWindowController: NSObject, NSWindowDelegate {
     static let shared = AboutWindowController()
     private var window: NSWindow?
+    private var closingWindows: [NSWindow] = []
 
     func show() {
         // If the window is already visible, just raise it.
@@ -39,18 +40,27 @@ final class AboutWindowController: NSObject, NSWindowDelegate {
         let win = NSWindow(contentViewController: hosting)
         win.title = "About Netfluss"
         win.styleMask = [.titled, .closable]
-        win.isReleasedWhenClosed = true
+        win.isReleasedWhenClosed = false
+        win.animationBehavior = .none
         win.delegate = self
         win.setContentSize(NSSize(width: 300, height: 460))
         win.center()
         win.makeKeyAndOrderFront(nil)
         win.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
         self.window = win
     }
 
     func windowWillClose(_ notification: Notification) {
         guard let closingWindow = notification.object as? NSWindow, closingWindow == window else { return }
-        closingWindow.contentViewController = nil
         window = nil
+        closingWindows.append(closingWindow)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self, weak closingWindow] in
+            guard let self, let closingWindow else { return }
+            closingWindow.delegate = nil
+            closingWindow.contentViewController = nil
+            self.closingWindows.removeAll { $0 === closingWindow }
+        }
     }
 }
