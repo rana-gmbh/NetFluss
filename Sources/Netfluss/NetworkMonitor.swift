@@ -1107,16 +1107,16 @@ enum InterfaceSampler {
     }
 
     private static func phyModeString(_ mode: CWPHYMode) -> String {
-        switch mode {
-        case .modeNone: return "None"
-        case .mode11a: return "802.11a"
-        case .mode11b: return "802.11b"
-        case .mode11g: return "802.11g"
-        case .mode11n: return "Wi-Fi 4 (802.11n)"
-        case .mode11ac: return "Wi-Fi 5 (802.11ac)"
-        case .mode11ax: return "Wi-Fi 6 (802.11ax)"
-        case .mode11be: return "Wi-Fi 7 (802.11be)"
-        @unknown default: return "Unknown"
+        switch mode.rawValue {
+        case CWPHYMode.modeNone.rawValue: return "None"
+        case CWPHYMode.mode11a.rawValue: return "802.11a"
+        case CWPHYMode.mode11b.rawValue: return "802.11b"
+        case CWPHYMode.mode11g.rawValue: return "802.11g"
+        case CWPHYMode.mode11n.rawValue: return "Wi-Fi 4 (802.11n)"
+        case CWPHYMode.mode11ac.rawValue: return "Wi-Fi 5 (802.11ac)"
+        case CWPHYMode.mode11ax.rawValue: return "Wi-Fi 6 (802.11ax)"
+        case 7: return "Wi-Fi 7 (802.11be)"
+        default: return "Unknown"
         }
     }
 
