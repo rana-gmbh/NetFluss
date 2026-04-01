@@ -19,7 +19,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class PreferencesWindowController {
+final class PreferencesWindowController: NSObject, NSWindowDelegate {
     static let shared = PreferencesWindowController()
     private var window: NSWindow?
 
@@ -27,7 +27,7 @@ final class PreferencesWindowController {
         // Close the popover synchronously before showing the preferences window.
         NotificationCenter.default.post(name: .closePopover, object: nil)
 
-        if let window {
+        if let window, window.isVisible {
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
             NSApp.activate(ignoringOtherApps: true)
@@ -45,13 +45,20 @@ final class PreferencesWindowController {
         window.setContentSize(NSSize(width: 420, height: 820))
         window.minSize = NSSize(width: 420, height: 400)
         window.maxSize = NSSize(width: 600, height: 10000)
-        window.isReleasedWhenClosed = false
+        window.isReleasedWhenClosed = true
+        window.delegate = self
         window.center()
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
 
         self.window = window
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let closingWindow = notification.object as? NSWindow, closingWindow == window else { return }
+        closingWindow.contentViewController = nil
+        window = nil
     }
 }
 

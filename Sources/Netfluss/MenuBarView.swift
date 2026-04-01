@@ -25,7 +25,10 @@ struct MenuBarView: View {
     @AppStorage("showOtherAdapters") private var showOtherAdapters: Bool = false
     @AppStorage("useBits") private var useBits: Bool = false
     @AppStorage("showTopApps") private var showTopApps: Bool = false
-    @AppStorage("theme") private var themeName: String = "system"
+    @AppStorage("uploadColor") private var uploadColorName: String = "green"
+    @AppStorage("uploadColorHex") private var uploadColorHex: String = ""
+    @AppStorage("downloadColor") private var downloadColorName: String = "blue"
+    @AppStorage("downloadColorHex") private var downloadColorHex: String = ""
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
     @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "list"
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
@@ -42,7 +45,7 @@ struct MenuBarView: View {
     }()
 
     var body: some View {
-        let theme = AppTheme.named(themeName)
+        let theme = AppTheme.system
         let adapters = filteredAdapters()
         let headerTotals = totalsOnlyVisibleAdapters ? totals(for: adapters) : monitor.totals
         let customNames = cachedCustomNames
@@ -65,6 +68,14 @@ struct MenuBarView: View {
             cachedCustomNames = (try? JSONDecoder().decode([String: String].self,
                 from: UserDefaults.standard.data(forKey: "adapterCustomNames") ?? Data())) ?? [:]
         }
+    }
+
+    private var downloadAccent: Color {
+        resolvedAccentColor(selection: downloadColorName, customHex: downloadColorHex, fallback: AppTheme.system.downloadColor)
+    }
+
+    private var uploadAccent: Color {
+        resolvedAccentColor(selection: uploadColorName, customHex: uploadColorHex, fallback: AppTheme.system.uploadColor)
     }
 
     private var cardSpacing: CGFloat { Self.cardSpacing }
@@ -209,14 +220,14 @@ struct TotalRatesHeader: View {
             NetRateCell(
                 icon: "arrow.down",
                 label: "Download",
-                color: theme.downloadColor,
+                color: downloadAccentColor(for: theme),
                 rate: RateFormatter.formatRate(totals.rxRateBps, useBits: useBits)
             )
             Divider()
             NetRateCell(
                 icon: "arrow.up",
                 label: "Upload",
-                color: theme.uploadColor,
+                color: uploadAccentColor(for: theme),
                 rate: RateFormatter.formatRate(totals.txRateBps, useBits: useBits)
             )
         }
@@ -318,7 +329,7 @@ struct AdapterCard: View {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.down")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(theme.downloadColor)
+                        .foregroundStyle(downloadAccentColor(for: theme))
                     Text(RateFormatter.formatRate(adapter.rxRateBps, useBits: useBits))
                         .font(.system(size: 11))
                         .monospacedDigit()
@@ -326,7 +337,7 @@ struct AdapterCard: View {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(theme.uploadColor)
+                        .foregroundStyle(uploadAccentColor(for: theme))
                     Text(RateFormatter.formatRate(adapter.txRateBps, useBits: useBits))
                         .font(.system(size: 11))
                         .monospacedDigit()
@@ -745,7 +756,7 @@ struct AppTrafficRow: View {
                     HStack(spacing: 3) {
                         Image(systemName: "arrow.down")
                             .font(.system(size: 8))
-                            .foregroundStyle(theme.downloadColor)
+                            .foregroundStyle(downloadAccentColor(for: theme))
                         Text(RateFormatter.formatRate(app.rxRateBps, useBits: useBits))
                             .font(.system(size: 10))
                             .monospacedDigit()
@@ -753,7 +764,7 @@ struct AppTrafficRow: View {
                     HStack(spacing: 3) {
                         Image(systemName: "arrow.up")
                             .font(.system(size: 8))
-                            .foregroundStyle(theme.uploadColor)
+                            .foregroundStyle(uploadAccentColor(for: theme))
                         Text(RateFormatter.formatRate(app.txRateBps, useBits: useBits))
                             .font(.system(size: 10))
                             .monospacedDigit()
@@ -767,7 +778,7 @@ struct AppTrafficRow: View {
                         .fill(.quaternary)
                         .frame(height: 3)
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(theme.downloadColor.opacity(0.6))
+                        .fill(downloadAccentColor(for: theme).opacity(0.6))
                         .frame(width: geo.size.width * fraction, height: 3)
                 }
             }
@@ -882,7 +893,7 @@ struct FritzBoxSection: View {
                         label: "Download",
                         rate: fb.rxRateBps,
                         maxRate: monitor.fritzBoxMaxDown,
-                        color: theme.downloadColor,
+                        color: downloadAccentColor(for: theme),
                         useBits: useBits
                     )
                     FritzBoxRateRow(
@@ -890,7 +901,7 @@ struct FritzBoxSection: View {
                         label: "Upload",
                         rate: fb.txRateBps,
                         maxRate: monitor.fritzBoxMaxUp,
-                        color: theme.uploadColor,
+                        color: uploadAccentColor(for: theme),
                         useBits: useBits
                     )
                 }
@@ -1015,7 +1026,7 @@ struct UniFiSection: View {
                         label: "Download",
                         rate: data.rxRateBps,
                         maxRateMbps: data.maxDownstreamMbps,
-                        color: theme.downloadColor,
+                        color: downloadAccentColor(for: theme),
                         useBits: useBits
                     )
                     RouterRateRow(
@@ -1023,7 +1034,7 @@ struct UniFiSection: View {
                         label: "Upload",
                         rate: data.txRateBps,
                         maxRateMbps: data.maxUpstreamMbps,
-                        color: theme.uploadColor,
+                        color: uploadAccentColor(for: theme),
                         useBits: useBits
                     )
                 }
@@ -1082,7 +1093,7 @@ struct OpenWRTSection: View {
                         label: "Download",
                         rate: data.rxRateBps,
                         maxRateMbps: data.linkSpeedMbps,
-                        color: theme.downloadColor,
+                        color: downloadAccentColor(for: theme),
                         useBits: useBits
                     )
                     RouterRateRow(
@@ -1090,7 +1101,7 @@ struct OpenWRTSection: View {
                         label: "Upload",
                         rate: data.txRateBps,
                         maxRateMbps: data.linkSpeedMbps,
-                        color: theme.uploadColor,
+                        color: uploadAccentColor(for: theme),
                         useBits: useBits
                     )
                 }

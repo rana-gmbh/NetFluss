@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Netfluss. If not, see <https://www.gnu.org/licenses/>.
 
+import AppKit
 import SwiftUI
 
 // MARK: - Color(hex:) extension
@@ -28,6 +29,79 @@ extension Color {
         let g = Double((int >> 8) & 0xFF) / 255
         let b = Double(int & 0xFF) / 255
         self.init(red: r, green: g, blue: b)
+    }
+}
+
+extension NSColor {
+    convenience init?(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        guard hex.count == 6 else { return nil }
+
+        var int: UInt64 = 0
+        guard Scanner(string: hex).scanHexInt64(&int) else { return nil }
+
+        self.init(
+            red: CGFloat((int >> 16) & 0xFF) / 255,
+            green: CGFloat((int >> 8) & 0xFF) / 255,
+            blue: CGFloat(int & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+
+    var rgbHexString: String? {
+        guard let rgb = usingColorSpace(.deviceRGB) else { return nil }
+        let red = Int(round(rgb.redComponent * 255))
+        let green = Int(round(rgb.greenComponent * 255))
+        let blue = Int(round(rgb.blueComponent * 255))
+        return String(format: "%02X%02X%02X", red, green, blue)
+    }
+}
+
+func resolvedAccentColor(selection: String, customHex: String, fallback: Color) -> Color {
+    if selection == "custom", let custom = NSColor(hex: customHex) {
+        return Color(nsColor: custom)
+    }
+    if let named = accentNSColor(named: selection) {
+        return Color(nsColor: named)
+    }
+    return fallback
+}
+
+func resolvedAccentNSColor(selection: String, customHex: String, fallback: NSColor) -> NSColor {
+    if selection == "custom", let custom = NSColor(hex: customHex) {
+        return custom
+    }
+    return accentNSColor(named: selection) ?? fallback
+}
+
+func downloadAccentColor(for theme: AppTheme) -> Color {
+    resolvedAccentColor(
+        selection: UserDefaults.standard.string(forKey: "downloadColor") ?? "blue",
+        customHex: UserDefaults.standard.string(forKey: "downloadColorHex") ?? "",
+        fallback: theme.downloadColor
+    )
+}
+
+func uploadAccentColor(for theme: AppTheme) -> Color {
+    resolvedAccentColor(
+        selection: UserDefaults.standard.string(forKey: "uploadColor") ?? "green",
+        customHex: UserDefaults.standard.string(forKey: "uploadColorHex") ?? "",
+        fallback: theme.uploadColor
+    )
+}
+
+private func accentNSColor(named name: String) -> NSColor? {
+    switch name {
+    case "green":  return .systemGreen
+    case "blue":   return .systemBlue
+    case "orange": return .systemOrange
+    case "yellow": return .systemYellow
+    case "teal":   return .systemTeal
+    case "purple": return .systemPurple
+    case "pink":   return .systemPink
+    case "white":  return .white
+    case "black":  return .black
+    default:       return nil
     }
 }
 

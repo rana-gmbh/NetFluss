@@ -19,7 +19,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class AboutWindowController {
+final class AboutWindowController: NSObject, NSWindowDelegate {
     static let shared = AboutWindowController()
     private var window: NSWindow?
 
@@ -39,11 +39,18 @@ final class AboutWindowController {
         let win = NSWindow(contentViewController: hosting)
         win.title = "About Netfluss"
         win.styleMask = [.titled, .closable]
-        win.isReleasedWhenClosed = false
+        win.isReleasedWhenClosed = true
+        win.delegate = self
         win.setContentSize(NSSize(width: 300, height: 460))
         win.center()
         win.makeKeyAndOrderFront(nil)
         win.orderFrontRegardless()
         self.window = win
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let closingWindow = notification.object as? NSWindow, closingWindow == window else { return }
+        closingWindow.contentViewController = nil
+        window = nil
     }
 }

@@ -66,6 +66,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var refreshInFlight = false
     private var detailMonitoringEnabled = false
     private var forceDetailRefresh = false
+    private var detailMonitoringGeneration: UInt64 = 0
     private var lastInterfaceInfoRefresh: Date?
     private var lastWiFiDetailsRefresh: Date?
     private var lastTopAppsRefresh: Date?
@@ -126,10 +127,19 @@ final class NetworkMonitor: NSObject, ObservableObject {
     func setDetailMonitoringEnabled(_ enabled: Bool) {
         guard detailMonitoringEnabled != enabled else { return }
         detailMonitoringEnabled = enabled
+        detailMonitoringGeneration &+= 1
 
         if enabled {
             forceDetailRefresh = true
             refresh()
+        } else {
+            forceDetailRefresh = false
+            processSnapshot = [:]
+            processSnapshotTime = nil
+            topAppLastActiveTime.removeAll()
+            if !topApps.isEmpty {
+                topApps = []
+            }
         }
     }
 
@@ -353,6 +363,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         let previousSnapshot = processSnapshot
         let previousTime = processSnapshotTime
+        let generation = detailMonitoringGeneration
 
         Task { [weak self] in
             let sampleTime = Date()
@@ -362,6 +373,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
             guard let self else { return }
             self.topAppsTaskInFlight = false
+            guard self.detailMonitoringEnabled, self.detailMonitoringGeneration == generation else { return }
 
             if let prevTime = previousTime, !previousSnapshot.isEmpty {
                 let elapsed = sampleTime.timeIntervalSince(prevTime)

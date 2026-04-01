@@ -15,13 +15,23 @@
 // You should have received a copy of the GNU General Public License
 // along with Netfluss. If not, see <https://www.gnu.org/licenses/>.
 
-import SwiftUI
+import AppKit
 import ServiceManagement
+import SwiftUI
 
 private let colorOptions: [(id: String, label: String)] = [
-    ("green", "Green"), ("blue", "Blue"), ("orange", "Orange"), ("yellow", "Yellow"),
+    ("green", "Green"), ("blue", "Blue"), ("orange", "Orange"),
     ("teal", "Teal"), ("purple", "Purple"), ("pink", "Pink"), ("white", "White"), ("black", "Black")
 ]
+
+private let menuBarIconOptions: [(symbol: String, label: String)] = [
+    ("network", "Network"),
+    ("arrow.up.arrow.down", "Arrows"),
+    ("wifi", "Wi-Fi"),
+    ("antenna.radiowaves.left.and.right", "Antenna")
+]
+
+private let appearanceControlWidth: CGFloat = 260
 
 private func swatchColor(_ name: String) -> Color {
     switch name {
@@ -40,6 +50,24 @@ private func swatchColor(_ name: String) -> Color {
 
 struct ColorSwatchPicker: View {
     @Binding var selection: String
+    @Binding var customHex: String
+    @State private var isShowingCustomPicker = false
+
+    private var customColorBinding: Binding<Color> {
+        Binding(
+            get: {
+                if let color = NSColor(hex: customHex) {
+                    return Color(nsColor: color)
+                }
+                return swatchColor(selection)
+            },
+            set: { newColor in
+                guard let hex = NSColor(newColor).usingColorSpace(.deviceRGB)?.rgbHexString else { return }
+                customHex = hex
+                selection = "custom"
+            }
+        )
+    }
 
     var body: some View {
         HStack(spacing: 5) {
@@ -64,6 +92,71 @@ struct ColorSwatchPicker: View {
                 .buttonStyle(.borderless)
                 .help(option.label)
             }
+
+            Button {
+                isShowingCustomPicker = true
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(
+                            AngularGradient(
+                                colors: [.red, .orange, .yellow, .green, .blue, .purple, .pink, .red],
+                                center: .center
+                            )
+                        )
+                        .frame(width: 18, height: 18)
+                    Circle()
+                        .strokeBorder(selection == "custom" ? .white.opacity(0.9) : .primary.opacity(0.18), lineWidth: selection == "custom" ? 2 : 1)
+                        .frame(width: 18, height: 18)
+                    if selection == "custom" {
+                        Circle()
+                            .strokeBorder(.primary.opacity(0.3), lineWidth: 0.5)
+                            .frame(width: 18, height: 18)
+                    }
+                }
+            }
+            .buttonStyle(.borderless)
+            .help("Custom color")
+            .popover(isPresented: $isShowingCustomPicker, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Custom Color")
+                        .font(.headline)
+                    ColorPicker("Choose color", selection: customColorBinding, supportsOpacity: false)
+                    HStack {
+                        Spacer()
+                        Button("Done") {
+                            isShowingCustomPicker = false
+                        }
+                    }
+                }
+                .padding(12)
+                .frame(width: 190)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+}
+
+private struct ExperimentalBadge: View {
+    var body: some View {
+        Text("Experimental")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(.orange, in: Capsule())
+    }
+}
+
+private struct TrailingPreferenceControl<Content: View>: View {
+    let width: CGFloat
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 12)
+            content()
+                .frame(width: width, alignment: .trailing)
         }
     }
 }
@@ -103,11 +196,17 @@ struct PreferencesView: View {
     @AppStorage("useBits") private var useBits: Bool = false
     @AppStorage("showTopApps") private var showTopApps: Bool = false
     @AppStorage("uploadColor") private var uploadColor: String = "green"
+    @AppStorage("uploadColorHex") private var uploadColorHex: String = ""
     @AppStorage("downloadColor") private var downloadColor: String = "blue"
-    @AppStorage("theme") private var themeName: String = "system"
+    @AppStorage("downloadColorHex") private var downloadColorHex: String = ""
+    @AppStorage("menuBarUploadTextColor") private var menuBarUploadTextColor: String = "green"
+    @AppStorage("menuBarUploadTextColorHex") private var menuBarUploadTextColorHex: String = ""
+    @AppStorage("menuBarDownloadTextColor") private var menuBarDownloadTextColor: String = "blue"
+    @AppStorage("menuBarDownloadTextColorHex") private var menuBarDownloadTextColorHex: String = ""
     @AppStorage("menuBarFontSize") private var menuBarFontSize: Double = 10.0
     @AppStorage("menuBarFontDesign") private var menuBarFontDesign: String = "monospaced"
     @AppStorage("menuBarMode") private var menuBarMode: String = "rates"
+    @AppStorage("menuBarIconSymbol") private var menuBarIconSymbol: String = "network"
     @AppStorage("menuBarPinnedUnit") private var menuBarPinnedUnit: String = "auto"
     @AppStorage("menuBarDecimals") private var menuBarDecimals: Int = 0
     @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "list"
@@ -235,87 +334,126 @@ struct PreferencesView: View {
             }
 
             Section("Appearance") {
-                LabeledContent("Theme") {
-                    HStack(spacing: 6) {
-                        ForEach(AppTheme.all) { t in
-                            Button { themeName = t.id } label: {
-                                ThemeChip(theme: t, isSelected: themeName == t.id)
+                LabeledContent("Upload arrow ↑") {
+                    TrailingPreferenceControl(width: appearanceControlWidth) {
+                        ColorSwatchPicker(selection: $uploadColor, customHex: $uploadColorHex)
+                    }
+                }
+                LabeledContent("Download arrow ↓") {
+                    TrailingPreferenceControl(width: appearanceControlWidth) {
+                        ColorSwatchPicker(selection: $downloadColor, customHex: $downloadColorHex)
+                    }
+                }
+                LabeledContent("Upload number ↑") {
+                    TrailingPreferenceControl(width: appearanceControlWidth) {
+                        ColorSwatchPicker(selection: $menuBarUploadTextColor, customHex: $menuBarUploadTextColorHex)
+                    }
+                }
+                LabeledContent("Download number ↓") {
+                    TrailingPreferenceControl(width: appearanceControlWidth) {
+                        ColorSwatchPicker(selection: $menuBarDownloadTextColor, customHex: $menuBarDownloadTextColorHex)
+                    }
+                }
+                LabeledContent {
+                    TrailingPreferenceControl(width: appearanceControlWidth) {
+                        Picker("", selection: $menuBarMode) {
+                            Text("Standard").tag("rates")
+                            Text("Unified pill").tag("unified")
+                            Text("Dashboard").tag("dashboard")
+                            Text("Icon").tag("icon")
+                        }
+                        .frame(width: 180)
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Menu bar icon style")
+                        ExperimentalBadge()
+                    }
+                }
+                if menuBarMode == "icon" {
+                    LabeledContent("Menu bar icon") {
+                        TrailingPreferenceControl(width: appearanceControlWidth) {
+                            Picker("", selection: $menuBarIconSymbol) {
+                                ForEach(menuBarIconOptions, id: \.symbol) { option in
+                                    Label(option.label, systemImage: option.symbol)
+                                        .tag(option.symbol)
+                                }
                             }
-                            .buttonStyle(.plain)
+                            .frame(width: 180)
+                        }
+                    }
+                } else {
+                    LabeledContent("Menu bar size") {
+                        TrailingPreferenceControl(width: appearanceControlWidth) {
+                            HStack(spacing: 8) {
+                                Text("\(Int(menuBarFontSize)) pt")
+                                    .monospacedDigit()
+                                    .frame(width: 36, alignment: .trailing)
+                                Stepper("", value: $menuBarFontSize, in: 8...16, step: 1)
+                                    .labelsHidden()
+                            }
+                        }
+                    }
+                    LabeledContent("Menu bar font") {
+                        TrailingPreferenceControl(width: appearanceControlWidth) {
+                            Picker("", selection: $menuBarFontDesign) {
+                                Text("Monospaced").tag("monospaced")
+                                Text("System").tag("default")
+                                Text("Rounded").tag("rounded")
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 200)
+                        }
+                    }
+                    LabeledContent("Menu bar unit") {
+                        TrailingPreferenceControl(width: appearanceControlWidth) {
+                            Picker("", selection: $menuBarPinnedUnit) {
+                                Text("Auto").tag("auto")
+                                Text(useBits ? "Kb/s" : "KB/s").tag("K")
+                                Text(useBits ? "Mb/s" : "MB/s").tag("M")
+                                Text(useBits ? "Gb/s" : "GB/s").tag("G")
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 250)
+                        }
+                    }
+                    LabeledContent("Decimals") {
+                        TrailingPreferenceControl(width: appearanceControlWidth) {
+                            Picker("", selection: $menuBarDecimals) {
+                                Text("Auto").tag(0)
+                                Text("0").tag(10)
+                                Text("1").tag(1)
+                                Text("2").tag(2)
+                                Text("3").tag(3)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 220)
                         }
                     }
                 }
-                if themeName == "system" {
-                    LabeledContent("Upload ↑") {
-                        ColorSwatchPicker(selection: $uploadColor)
-                    }
-                    LabeledContent("Download ↓") {
-                        ColorSwatchPicker(selection: $downloadColor)
-                    }
-                }
-                LabeledContent("Menu bar") {
-                    Picker("", selection: $menuBarMode) {
-                        Text("Rates").tag("rates")
-                        Text("Icon").tag("icon")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 160)
-                }
-                LabeledContent("Menu bar size") {
-                    HStack(spacing: 8) {
-                        Text("\(Int(menuBarFontSize)) pt")
-                            .monospacedDigit()
-                            .frame(width: 36, alignment: .trailing)
-                        Stepper("", value: $menuBarFontSize, in: 8...16, step: 1)
-                            .labelsHidden()
-                    }
-                }
-                LabeledContent("Menu bar font") {
-                    Picker("", selection: $menuBarFontDesign) {
-                        Text("Monospaced").tag("monospaced")
-                        Text("System").tag("default")
-                        Text("Rounded").tag("rounded")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 200)
-                }
-                LabeledContent("Menu bar unit") {
-                    Picker("", selection: $menuBarPinnedUnit) {
-                        Text("Auto").tag("auto")
-                        Text(useBits ? "Kb/s" : "KB/s").tag("K")
-                        Text(useBits ? "Mb/s" : "MB/s").tag("M")
-                        Text(useBits ? "Gb/s" : "GB/s").tag("G")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 250)
-                }
-                LabeledContent("Decimals") {
-                    Picker("", selection: $menuBarDecimals) {
-                        Text("Auto").tag(0)
-                        Text("0").tag(10)
-                        Text("1").tag(1)
-                        Text("2").tag(2)
-                        Text("3").tag(3)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 220)
-                }
                 LabeledContent("IP display") {
-                    Picker("", selection: $connectionStatusMode) {
-                        Text("List").tag("list")
-                        Text("Flow").tag("flow")
+                    TrailingPreferenceControl(width: appearanceControlWidth) {
+                        Picker("", selection: $connectionStatusMode) {
+                            Text("List").tag("list")
+                            Text("Flow").tag("flow")
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 160)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 160)
                 }
                 LabeledContent("External IP") {
-                    Picker("", selection: $externalIPv6) {
-                        Text("IPv4").tag(false)
-                        Text("IPv6").tag(true)
+                    TrailingPreferenceControl(width: appearanceControlWidth) {
+                        Picker("", selection: $externalIPv6) {
+                            Text("IPv4").tag(false)
+                            Text("IPv6").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 160)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 160)
                 }
+                Text("Dashboard uses router-wide traffic when Fritz!Box, UniFi, or OpenWRT bandwidth is enabled and available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Top Apps") {
@@ -681,6 +819,11 @@ struct PreferencesView: View {
                 onDone: { showHiddenAppsSheet = false }
             )
         }
+        .onAppear {
+            if menuBarMode == "sparkline" {
+                menuBarMode = "dashboard"
+            }
+        }
     }
 
     private var adapterRows: [AdapterStatus] {
@@ -904,5 +1047,3 @@ struct HiddenAppsSheet: View {
         .frame(width: 340)
     }
 }
-
-
