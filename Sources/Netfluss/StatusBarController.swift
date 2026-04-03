@@ -1013,30 +1013,24 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
     private func effectiveTotals() -> RateTotals {
         let onlyVisible = UserDefaults.standard.bool(forKey: "totalsOnlyVisibleAdapters")
-        guard onlyVisible else { return monitor.totals }
+        let excludeTunnelAdapters = UserDefaults.standard.bool(forKey: "excludeTunnelAdaptersFromTotals")
+        guard onlyVisible || excludeTunnelAdapters else { return monitor.totals }
 
         let showInactive = UserDefaults.standard.bool(forKey: "showInactive")
         let showOtherAdapters = UserDefaults.standard.bool(forKey: "showOtherAdapters")
         let graceEnabled = UserDefaults.standard.bool(forKey: "adapterGracePeriodEnabled")
         let hidden = Set(UserDefaults.standard.stringArray(forKey: "hiddenAdapters") ?? [])
 
-        var rx: Double = 0
-        var tx: Double = 0
-
-        for adapter in monitor.adapters {
-            if !showOtherAdapters, adapter.type == .other { continue }
-            if hidden.contains(adapter.id) { continue }
-            let zeroBandwidth = adapter.rxRateBps == 0 && adapter.txRateBps == 0
-            if graceEnabled, zeroBandwidth {
-                if monitor.adapterGraceDeadlines[adapter.id] == nil { continue }
-            } else if !showInactive, zeroBandwidth, !adapter.isUp {
-                continue
-            }
-            rx += adapter.rxRateBps
-            tx += adapter.txRateBps
-        }
-
-        return RateTotals(rxRateBps: rx, txRateBps: tx)
+        return AdapterTotalsFilter.totals(
+            from: monitor.adapters,
+            onlyVisible: onlyVisible,
+            excludeTunnelAdapters: excludeTunnelAdapters,
+            showOtherAdapters: showOtherAdapters,
+            showInactive: showInactive,
+            graceEnabled: graceEnabled,
+            hidden: hidden,
+            graceDeadlines: monitor.adapterGraceDeadlines
+        )
     }
 
     private func configureRatesView(in button: NSStatusBarButton) {

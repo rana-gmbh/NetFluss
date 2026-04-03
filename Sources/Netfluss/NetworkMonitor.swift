@@ -218,6 +218,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
             let info = infoMap[sample.name]
             let type = info?.type ?? .other
             let displayName = info?.displayName ?? sample.name
+            let isTunnelInterface = AdapterClassifier.isTunnelInterface(named: sample.name)
             let wifiInfo = wifiInfoMap[sample.name]
             let isUp = (sample.flags & UInt32(IFF_UP)) != 0
             let linkSpeed = type == .ethernet ? sample.baudrate : nil
@@ -226,6 +227,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 id: sample.name,
                 displayName: displayName,
                 type: type,
+                isTunnelInterface: isTunnelInterface,
                 isUp: isUp,
                 linkSpeedBps: linkSpeed,
                 wifiMode: wifiInfo?.mode,

@@ -23,10 +23,20 @@ enum AdapterType: String, Equatable, Sendable {
     case other
 }
 
+enum AdapterClassifier {
+    private static let tunnelPrefixes = ["utun", "ipsec", "ppp", "tun", "tap"]
+
+    static func isTunnelInterface(named name: String) -> Bool {
+        let normalizedName = name.lowercased()
+        return tunnelPrefixes.contains { normalizedName.hasPrefix($0) }
+    }
+}
+
 struct AdapterStatus: Identifiable, Equatable, Sendable {
     let id: String          // BSD name (e.g. "en0")
     let displayName: String
     let type: AdapterType
+    let isTunnelInterface: Bool
     let isUp: Bool
     let linkSpeedBps: UInt64?
     let wifiMode: String?
@@ -42,6 +52,84 @@ struct AdapterStatus: Identifiable, Equatable, Sendable {
 struct RateTotals: Equatable, Sendable {
     let rxRateBps: Double
     let txRateBps: Double
+}
+
+enum AdapterTotalsFilter {
+    static func visibleAdapters(
+        from adapters: [AdapterStatus],
+        showOtherAdapters: Bool,
+        showInactive: Bool,
+        graceEnabled: Bool,
+        hidden: Set<String>,
+        graceDeadlines: [String: Date]
+    ) -> [AdapterStatus] {
+        adapters.filter {
+            isVisible(
+                $0,
+                showOtherAdapters: showOtherAdapters,
+                showInactive: showInactive,
+                graceEnabled: graceEnabled,
+                hidden: hidden,
+                graceDeadlines: graceDeadlines
+            )
+        }
+    }
+
+    static func totals(
+        from adapters: [AdapterStatus],
+        onlyVisible: Bool,
+        excludeTunnelAdapters: Bool,
+        showOtherAdapters: Bool,
+        showInactive: Bool,
+        graceEnabled: Bool,
+        hidden: Set<String>,
+        graceDeadlines: [String: Date]
+    ) -> RateTotals {
+        var rx: Double = 0
+        var tx: Double = 0
+
+        for adapter in adapters {
+            if onlyVisible,
+               !isVisible(
+                adapter,
+                showOtherAdapters: showOtherAdapters,
+                showInactive: showInactive,
+                graceEnabled: graceEnabled,
+                hidden: hidden,
+                graceDeadlines: graceDeadlines
+               ) {
+                continue
+            }
+            if excludeTunnelAdapters, adapter.isTunnelInterface {
+                continue
+            }
+            rx += adapter.rxRateBps
+            tx += adapter.txRateBps
+        }
+
+        return RateTotals(rxRateBps: rx, txRateBps: tx)
+    }
+
+    private static func isVisible(
+        _ adapter: AdapterStatus,
+        showOtherAdapters: Bool,
+        showInactive: Bool,
+        graceEnabled: Bool,
+        hidden: Set<String>,
+        graceDeadlines: [String: Date]
+    ) -> Bool {
+        if !showOtherAdapters, adapter.type == .other { return false }
+        if hidden.contains(adapter.id) { return false }
+
+        let zeroBandwidth = adapter.rxRateBps == 0 && adapter.txRateBps == 0
+        if graceEnabled, zeroBandwidth {
+            return graceDeadlines[adapter.id] != nil
+        }
+        if !showInactive, zeroBandwidth, !adapter.isUp {
+            return false
+        }
+        return true
+    }
 }
 
 struct AppTraffic: Identifiable, Equatable, Sendable {
