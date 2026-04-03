@@ -19,6 +19,9 @@ import SwiftUI
 import AppKit
 
 struct MenuBarView: View {
+    let preferredWidth: CGFloat
+    let screenVisibleFrame: CGRect
+
     @EnvironmentObject private var monitor: NetworkMonitor
     @AppStorage("showInactive") private var showInactive: Bool = false
     @AppStorage("adapterGracePeriodEnabled") private var adapterGracePeriodEnabled: Bool = false
@@ -44,13 +47,21 @@ struct MenuBarView: View {
             from: UserDefaults.standard.data(forKey: "adapterCustomNames") ?? Data())) ?? [:]
     }()
 
+    init(
+        preferredWidth: CGFloat = 340,
+        screenVisibleFrame: CGRect = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+    ) {
+        self.preferredWidth = preferredWidth
+        self.screenVisibleFrame = screenVisibleFrame
+    }
+
     var body: some View {
         let theme = AppTheme.system
         let adapters = filteredAdapters()
         let headerTotals = totalsOnlyVisibleAdapters ? totals(for: adapters) : monitor.totals
         let customNames = cachedCustomNames
 
-        let screenMax = (NSScreen.main?.visibleFrame.height ?? 800) - 30
+        let screenMax = max(screenVisibleFrame.height - 30, 240)
         let savedHeight = UserDefaults.standard.double(forKey: "popoverHeight")
         let heightLimit = savedHeight > 0 ? min(savedHeight, screenMax) : screenMax
 
@@ -63,6 +74,7 @@ struct MenuBarView: View {
             PopoverResizeHandle()
         }
         .background(theme.backgroundColor ?? .clear)
+        .frame(width: preferredWidth)
         .environment(\.appTheme, theme)
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             cachedCustomNames = (try? JSONDecoder().decode([String: String].self,

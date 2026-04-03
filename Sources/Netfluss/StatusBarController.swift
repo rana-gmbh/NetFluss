@@ -374,6 +374,18 @@ private final class MenuBarRatesView: NSView {
 
 @MainActor
 final class StatusBarController: NSObject, NSPopoverDelegate {
+    private enum PopoverLayout {
+        static let preferredWidth: CGFloat = 340
+        static let horizontalScreenMargin: CGFloat = 12
+        static let anchorScreenInset: CGFloat = 26
+    }
+
+    private struct PopoverPresentation {
+        let contentWidth: CGFloat
+        let sourceRect: NSRect
+        let visibleFrame: CGRect
+    }
+
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private let monitor: NetworkMonitor
@@ -464,13 +476,19 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             teardownPopover()
         } else {
             teardownPopover()
-            let contentView = MenuBarView()
+            let presentation = popoverPresentation(for: button)
+            let contentView = MenuBarView(
+                preferredWidth: presentation.contentWidth,
+                screenVisibleFrame: presentation.visibleFrame
+            )
                 .environmentObject(monitor)
-                .frame(width: 340)
             popover.contentViewController = NSHostingController(rootView: contentView)
             monitor.setDetailMonitoringEnabled(true)
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.show(relativeTo: presentation.sourceRect, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
+            DispatchQueue.main.async { [weak self] in
+                self?.constrainPopoverToVisibleFrame()
+            }
         }
     }
 
@@ -486,6 +504,59 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         monitor.setDetailMonitoringEnabled(false)
         if popover.contentViewController != nil {
             popover.contentViewController = nil
+        }
+    }
+
+    private func popoverPresentation(for button: NSStatusBarButton) -> PopoverPresentation {
+        let fallbackVisibleFrame = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        guard let window = button.window else {
+            return PopoverPresentation(
+                contentWidth: PopoverLayout.preferredWidth,
+                sourceRect: button.bounds,
+                visibleFrame: fallbackVisibleFrame
+            )
+        }
+
+        let visibleFrame = window.screen?.visibleFrame ?? fallbackVisibleFrame
+        let availableWidth = max(visibleFrame.width - (PopoverLayout.horizontalScreenMargin * 2), 0)
+        let contentWidth = availableWidth > 0
+            ? min(PopoverLayout.preferredWidth, availableWidth)
+            : PopoverLayout.preferredWidth
+
+        let buttonFrameInWindow = button.convert(button.bounds, to: nil)
+        let buttonFrameOnScreen = window.convertToScreen(buttonFrameInWindow)
+        let clampedAnchorX = min(
+            max(buttonFrameOnScreen.midX, visibleFrame.minX + PopoverLayout.anchorScreenInset),
+            visibleFrame.maxX - PopoverLayout.anchorScreenInset
+        )
+
+        var sourceRect = button.bounds
+        sourceRect.origin.x += clampedAnchorX - buttonFrameOnScreen.midX
+
+        return PopoverPresentation(
+            contentWidth: contentWidth,
+            sourceRect: sourceRect,
+            visibleFrame: visibleFrame
+        )
+    }
+
+    private func constrainPopoverToVisibleFrame() {
+        guard
+            let window = popover.contentViewController?.view.window,
+            let screen = window.screen ?? statusItem.button?.window?.screen
+        else { return }
+
+        let visibleFrame = screen.visibleFrame.insetBy(dx: PopoverLayout.horizontalScreenMargin, dy: 0)
+        var frame = window.frame
+
+        if frame.minX < visibleFrame.minX {
+            frame.origin.x = visibleFrame.minX
+        } else if frame.maxX > visibleFrame.maxX {
+            frame.origin.x = visibleFrame.maxX - frame.width
+        }
+
+        if frame.origin.x != window.frame.origin.x {
+            window.setFrame(frame, display: true)
         }
     }
 
