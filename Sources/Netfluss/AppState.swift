@@ -50,6 +50,7 @@ final class AppState {
             "menuBarPinnedUnit": "auto",
             "menuBarDecimals": 0,
             "totalsOnlyVisibleAdapters": false,
+            "excludeTunnelAdaptersFromTotals": false,
             "adapterGracePeriodEnabled": false,
             "adapterGracePeriodSeconds": 3.0,
             "topAppsGracePeriodEnabled": false,

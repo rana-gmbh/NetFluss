@@ -211,6 +211,7 @@ struct PreferencesView: View {
     @AppStorage("menuBarDecimals") private var menuBarDecimals: Int = 0
     @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "list"
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
+    @AppStorage("excludeTunnelAdaptersFromTotals") private var excludeTunnelAdaptersFromTotals: Bool = false
     @AppStorage("adapterGracePeriodEnabled") private var adapterGracePeriodEnabled: Bool = false
     @AppStorage("adapterGracePeriodSeconds") private var adapterGracePeriodSeconds: Double = 3.0
     @AppStorage("topAppsGracePeriodEnabled") private var topAppsGracePeriodEnabled: Bool = false
@@ -329,7 +330,11 @@ struct PreferencesView: View {
                 }
 
                 Toggle("Only include visible adapters in totals", isOn: $totalsOnlyVisibleAdapters)
+                Toggle("Exclude VPN/tunnel adapters from totals", isOn: $excludeTunnelAdaptersFromTotals)
                 Text("When enabled, the Download/Upload summary and menu bar use only adapters that are visible here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Tunnel adapters such as utun, tun, tap, ipsec, and ppp are excluded from totals but remain visible in the adapter list.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

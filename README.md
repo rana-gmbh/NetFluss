@@ -6,7 +6,7 @@
 
 A minimal macOS menubar app showing real-time upload and download rates across all active network adapters. Now with Fritz!Box, UniFi, and OpenWRT router bandwidth monitoring.
 
-Latest release: **NetFluss 1.12**
+Latest release: **NetFluss 1.12.1**
 
 <p align="center">
   <img src="screenshot.png" width="420" alt="NetFluss screenshot">
@@ -46,6 +46,7 @@ Latest release: **NetFluss 1.12**
 - **UniFi Bandwidth** *(Experimental)* — shows WAN download/upload rates from UniFi gateways (UDM, USG, UXG) via the UniFi OS REST API; credentials stored in macOS Keychain (enable in Preferences)
 - **OpenWRT Bandwidth** *(Experimental)* — shows WAN download/upload rates from OpenWRT routers via the ubus JSON-RPC API; credentials stored in macOS Keychain (enable in Preferences)
 - **Scrollable popover** — the popover is now scrollable and resizable for smaller screens, preventing overflow when many adapters or sections are active
+- **Edge-aware popover positioning** — keeps the popover fully visible when the menu bar icon sits near the left or right screen border
 - **Top Apps** — optional section listing the top 5 processes by current network traffic, with a relative usage bar per app (enable in Preferences)
   - **App filtering** — hide noisy background processes (e.g. mDNSResponder) from the list via Preferences or hover to hide directly
 - **Footer** — quick access to Preferences, About, and Quit
@@ -58,7 +59,7 @@ Latest release: **NetFluss 1.12**
 - **Adapter grace period** — keep adapters visible for 3 s, 5 s, or 10 s after they go idle, so brief inactivity doesn't make cards flicker
 - Per-adapter visibility toggles, custom names (pencil button), and drag-to-reorder (≡ handle) — order and names are reflected in the popover
 - Adapter list scrolls when more than 6 interfaces are shown
-- Option to exclude hidden adapters from the total bandwidth shown in the header and menu bar
+- Options to calculate total bandwidth from only visible adapters and to exclude VPN/tunnel adapters from totals while still showing them in the adapter list
 - Display rates in bits or bytes
 - Upload / Download arrow colours plus separate upload / download number colours
 - **Menu bar icon style** — Standard, Unified pill, Dashboard, or Icon
@@ -91,7 +92,7 @@ Latest release: **NetFluss 1.12**
 
 ## Install
 
-Download `NetFluss-1.12.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip, and move `NetFluss.app` to `/Applications`.
+Download `NetFluss-1.12.1.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip, and move `NetFluss.app` to `/Applications`.
 
 NetFluss is notarized and signed with a Developer ID — Gatekeeper will clear it automatically on first launch.
 

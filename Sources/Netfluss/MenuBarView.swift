@@ -33,6 +33,7 @@ struct MenuBarView: View {
     @AppStorage("downloadColor") private var downloadColorName: String = "blue"
     @AppStorage("downloadColorHex") private var downloadColorHex: String = ""
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
+    @AppStorage("excludeTunnelAdaptersFromTotals") private var excludeTunnelAdaptersFromTotals: Bool = false
     @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "list"
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
     @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
@@ -57,8 +58,18 @@ struct MenuBarView: View {
 
     var body: some View {
         let theme = AppTheme.system
-        let adapters = filteredAdapters()
-        let headerTotals = totalsOnlyVisibleAdapters ? totals(for: adapters) : monitor.totals
+        let hiddenAdapters = Set(UserDefaults.standard.stringArray(forKey: "hiddenAdapters") ?? [])
+        let adapters = filteredAdapters(hidden: hiddenAdapters)
+        let headerTotals = AdapterTotalsFilter.totals(
+            from: monitor.adapters,
+            onlyVisible: totalsOnlyVisibleAdapters,
+            excludeTunnelAdapters: excludeTunnelAdaptersFromTotals,
+            showOtherAdapters: showOtherAdapters,
+            showInactive: showInactive,
+            graceEnabled: adapterGracePeriodEnabled,
+            hidden: hiddenAdapters,
+            graceDeadlines: monitor.adapterGraceDeadlines
+        )
         let customNames = cachedCustomNames
 
         let screenMax = max(screenVisibleFrame.height - 30, 240)
@@ -181,20 +192,15 @@ struct MenuBarView: View {
         }
     }
 
-    private func filteredAdapters() -> [AdapterStatus] {
-        let hidden = Set(UserDefaults.standard.stringArray(forKey: "hiddenAdapters") ?? [])
-        var filtered = monitor.adapters.filter { adapter in
-            if !showOtherAdapters, adapter.type == .other { return false }
-            if hidden.contains(adapter.id) { return false }
-            let zeroBandwidth = adapter.rxRateBps == 0 && adapter.txRateBps == 0
-            // Grace period: hide zero-bandwidth adapters after grace expires
-            if adapterGracePeriodEnabled, zeroBandwidth {
-                return monitor.adapterGraceDeadlines[adapter.id] != nil
-            }
-            // Original: hide fully-down adapters immediately when showInactive is off
-            if !showInactive, zeroBandwidth, !adapter.isUp { return false }
-            return true
-        }
+    private func filteredAdapters(hidden: Set<String>) -> [AdapterStatus] {
+        var filtered = AdapterTotalsFilter.visibleAdapters(
+            from: monitor.adapters,
+            showOtherAdapters: showOtherAdapters,
+            showInactive: showInactive,
+            graceEnabled: adapterGracePeriodEnabled,
+            hidden: hidden,
+            graceDeadlines: monitor.adapterGraceDeadlines
+        )
         let order = UserDefaults.standard.stringArray(forKey: "adapterOrder") ?? []
         if !order.isEmpty {
             let orderIndex = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
@@ -206,16 +212,6 @@ struct MenuBarView: View {
             }
         }
         return filtered
-    }
-
-    private func totals(for adapters: [AdapterStatus]) -> RateTotals {
-        var rx: Double = 0
-        var tx: Double = 0
-        for adapter in adapters {
-            rx += adapter.rxRateBps
-            tx += adapter.txRateBps
-        }
-        return RateTotals(rxRateBps: rx, txRateBps: tx)
     }
 }
 
@@ -563,8 +559,6 @@ struct IPRow: View {
 
 // MARK: - Connection Status Section
 
-private let vpnPrefixes = ["utun", "ipsec", "ppp", "tun"]
-
 struct ConnectionStatusSection: View {
     let externalIP: String
     let internalIP: String
@@ -576,7 +570,7 @@ struct ConnectionStatusSection: View {
         let vpnIPs = Self.vpnInterfaceIPs()
         return adapters.filter { adapter in
             guard adapter.type == .other, adapter.isUp else { return false }
-            guard vpnPrefixes.contains(where: { adapter.id.hasPrefix($0) }) else { return false }
+            guard adapter.isTunnelInterface else { return false }
             return vpnIPs[adapter.id] != nil
         }
     }
@@ -592,7 +586,7 @@ struct ConnectionStatusSection: View {
             defer { current = entry.ifa_next }
             guard let sa = entry.ifa_addr, sa.pointee.sa_family == UInt8(AF_INET) else { continue }
             let name = String(cString: entry.ifa_name)
-            guard vpnPrefixes.contains(where: { name.hasPrefix($0) }) else { continue }
+            guard AdapterClassifier.isTunnelInterface(named: name) else { continue }
             var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             guard getnameinfo(sa, socklen_t(sa.pointee.sa_len),
                               &hostname, socklen_t(NI_MAXHOST),
