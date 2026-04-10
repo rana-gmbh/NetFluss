@@ -1273,6 +1273,7 @@ struct DNSPresetRow: View {
 
 struct FooterBar: View {
     @EnvironmentObject private var monitor: NetworkMonitor
+    @EnvironmentObject private var statisticsManager: StatisticsManager
 
     var body: some View {
         HStack {
@@ -1280,6 +1281,17 @@ struct FooterBar: View {
                 PreferencesWindowController.shared.show(monitor: monitor)
             } label: {
                 Label("Preferences", systemImage: "gearshape")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button {
+                StatisticsWindowController.shared.show(manager: statisticsManager)
+            } label: {
+                Label("Statistics", systemImage: "chart.bar.xaxis")
                     .font(.system(size: 12))
             }
             .buttonStyle(.borderless)

@@ -40,4 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         appState = AppState()
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        appState?.flushStatistics()
+    }
 }

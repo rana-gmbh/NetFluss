@@ -389,6 +389,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private let monitor: NetworkMonitor
+    private let statisticsManager: StatisticsManager
     private var cancellables: Set<AnyCancellable> = []
     private let ratesView = MenuBarRatesView()
     private var cachedFonts: [FontState: NSFont] = [:]
@@ -423,8 +424,9 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         let weight: Double
     }
 
-    init(monitor: NetworkMonitor) {
+    init(monitor: NetworkMonitor, statisticsManager: StatisticsManager) {
         self.monitor = monitor
+        self.statisticsManager = statisticsManager
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.popover = NSPopover()
         super.init()
@@ -482,6 +484,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
                 screenVisibleFrame: presentation.visibleFrame
             )
                 .environmentObject(monitor)
+                .environmentObject(statisticsManager)
             popover.contentViewController = NSHostingController(rootView: contentView)
             monitor.setDetailMonitoringEnabled(true)
             popover.show(relativeTo: presentation.sourceRect, of: button, preferredEdge: .minY)

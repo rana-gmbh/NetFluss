@@ -20,6 +20,7 @@ import Foundation
 @MainActor
 final class AppState {
     let monitor: NetworkMonitor
+    let statisticsManager: StatisticsManager
     let statusBar: StatusBarController
     let updateNotifier: UpdateNotifier
     private var defaultsObserver: NSObjectProtocol?
@@ -55,6 +56,8 @@ final class AppState {
             "adapterGracePeriodSeconds": 3.0,
             "topAppsGracePeriodEnabled": false,
             "topAppsGracePeriodSeconds": 3.0,
+            "collectStatistics": false,
+            "collectAppStatistics": true,
             "connectionStatusMode": "list",
             "hiddenApps": [],
             "externalIPv6": false,
@@ -74,7 +77,9 @@ final class AppState {
         ])
         let monitor = NetworkMonitor()
         self.monitor = monitor
-        self.statusBar = StatusBarController(monitor: monitor)
+        let statisticsManager = StatisticsManager(monitor: monitor)
+        self.statisticsManager = statisticsManager
+        self.statusBar = StatusBarController(monitor: monitor, statisticsManager: statisticsManager)
         let updateNotifier = UpdateNotifier()
         self.updateNotifier = updateNotifier
         Task {
@@ -87,6 +92,7 @@ final class AppState {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.syncAutomaticUpdateChecks()
+                self?.statisticsManager.applyPreferences()
             }
         }
     }
@@ -103,5 +109,9 @@ final class AppState {
         Task {
             await updateNotifier.setAutomaticChecksEnabled(enabled)
         }
+    }
+
+    func flushStatistics() {
+        statisticsManager.flushSynchronously()
     }
 }

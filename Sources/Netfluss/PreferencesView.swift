@@ -216,6 +216,8 @@ struct PreferencesView: View {
     @AppStorage("adapterGracePeriodSeconds") private var adapterGracePeriodSeconds: Double = 3.0
     @AppStorage("topAppsGracePeriodEnabled") private var topAppsGracePeriodEnabled: Bool = false
     @AppStorage("topAppsGracePeriodSeconds") private var topAppsGracePeriodSeconds: Double = 3.0
+    @AppStorage("collectStatistics") private var collectStatistics: Bool = false
+    @AppStorage("collectAppStatistics") private var collectAppStatistics: Bool = true
     @AppStorage("externalIPv6") private var externalIPv6: Bool = false
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
     @AppStorage("useTouchID") private var useTouchID: Bool = true
@@ -341,6 +343,20 @@ struct PreferencesView: View {
 
             Section("Units") {
                 Toggle("Display rates in bits per second", isOn: $useBits)
+            }
+
+            Section("Statistics") {
+                Toggle("Collect historical statistics", isOn: $collectStatistics)
+                Text("Disabled by default to avoid extra background work and energy use. When enabled, NetFluss keeps hourly and daily rollups for adapters and optional app traffic analysis.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if collectStatistics {
+                    Toggle("Collect app statistics", isOn: $collectAppStatistics)
+                    Text("App statistics are on by default and may increase energy consumption because NetFluss periodically samples per-app network usage in the background.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Appearance") {
