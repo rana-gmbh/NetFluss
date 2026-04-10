@@ -25,6 +25,8 @@ mkdir -p Netfluss.app/Contents/{MacOS,Resources}
 cp .build/apple/Products/Release/Netfluss Netfluss.app/Contents/MacOS/Netfluss
 cp Packaging/Info.plist Netfluss.app/Contents/Info.plist
 cp Packaging/Resources/AppIcon.icns Netfluss.app/Contents/Resources/AppIcon.icns
+cp Packaging/Resources/AppIconDark.icns Netfluss.app/Contents/Resources/AppIconDark.icns
+cp -R Packaging/Resources/SpeedTest Netfluss.app/Contents/Resources/SpeedTest
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.x.x" Netfluss.app/Contents/Info.plist
 codesign --force --deep --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
   --options=runtime --timestamp --entitlements Netfluss.entitlements Netfluss.app

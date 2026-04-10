@@ -24,13 +24,6 @@ private let colorOptions: [(id: String, label: String)] = [
     ("teal", "Teal"), ("purple", "Purple"), ("pink", "Pink"), ("white", "White"), ("black", "Black")
 ]
 
-private let menuBarIconOptions: [(symbol: String, label: String)] = [
-    ("network", "Network"),
-    ("arrow.up.arrow.down", "Arrows"),
-    ("wifi", "Wi-Fi"),
-    ("antenna.radiowaves.left.and.right", "Antenna")
-]
-
 private let appearanceControlWidth: CGFloat = 260
 
 private func swatchColor(_ name: String) -> Color {
@@ -134,17 +127,6 @@ struct ColorSwatchPicker: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-}
-
-private struct ExperimentalBadge: View {
-    var body: some View {
-        Text("Experimental")
-            .font(.system(size: 9, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(.orange, in: Capsule())
     }
 }
 
@@ -391,18 +373,21 @@ struct PreferencesView: View {
                         .frame(width: 180)
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Text("Menu bar icon style")
-                        ExperimentalBadge()
-                    }
+                    Text("Menu bar icon style")
                 }
                 if menuBarMode == "icon" {
                     LabeledContent("Menu bar icon") {
                         TrailingPreferenceControl(width: appearanceControlWidth) {
                             Picker("", selection: $menuBarIconSymbol) {
-                                ForEach(menuBarIconOptions, id: \.symbol) { option in
-                                    Label(option.label, systemImage: option.symbol)
-                                        .tag(option.symbol)
+                                ForEach(MenuBarIconLibrary.options) { option in
+                                    HStack(spacing: 8) {
+                                        if let image = MenuBarIconLibrary.image(for: option.id, pointSize: 14) {
+                                            Image(nsImage: image)
+                                                .renderingMode(.template)
+                                        }
+                                        Text(option.label)
+                                    }
+                                    .tag(option.id)
                                 }
                             }
                             .frame(width: 180)
@@ -709,15 +694,7 @@ struct PreferencesView: View {
                     }
                 }
             } header: {
-                HStack(spacing: 4) {
-                    Text("UniFi Bandwidth")
-                    Text("Experimental")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(.orange, in: Capsule())
-                }
+                Text("UniFi Bandwidth")
             }
 
             Section {
@@ -785,15 +762,7 @@ struct PreferencesView: View {
                     }
                 }
             } header: {
-                HStack(spacing: 4) {
-                    Text("OpenWRT Bandwidth")
-                    Text("Experimental")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(.orange, in: Capsule())
-                }
+                Text("OpenWRT Bandwidth")
             }
 
             Section("Launch") {
@@ -848,6 +817,14 @@ struct PreferencesView: View {
         .onAppear {
             if menuBarMode == "sparkline" {
                 menuBarMode = "dashboard"
+            }
+            if menuBarMode == "icon", menuBarIconSymbol == "network" {
+                menuBarIconSymbol = "netfluss"
+            }
+        }
+        .onChange(of: menuBarMode) { newValue in
+            if newValue == "icon", menuBarIconSymbol == "network" {
+                menuBarIconSymbol = "netfluss"
             }
         }
     }

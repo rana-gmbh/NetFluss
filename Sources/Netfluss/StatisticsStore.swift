@@ -20,6 +20,7 @@ import Foundation
 actor StatisticsStore {
     private enum Constants {
         static let flushInterval: TimeInterval = 300
+        static let minuteRetentionMinutes = 180
         static let hourlyRetentionHours = 72
         static let dailyRetentionDays = 400
     }
@@ -42,11 +43,19 @@ actor StatisticsStore {
 
     func recordAdapterDeltas(_ deltas: [StatisticsAdapterDelta], at date: Date) async {
         guard !deltas.isEmpty else { return }
+        let minuteKey = Self.minuteKey(for: date, calendar: calendar)
         let hourKey = Self.hourKey(for: date, calendar: calendar)
         let dayKey = Self.dayKey(for: date, calendar: calendar)
 
         for delta in deltas where delta.downloadBytes > 0 || delta.uploadBytes > 0 {
             archive.adapterDisplayNames[delta.id] = delta.displayName
+            accumulate(
+                into: &archive.adapterMinute,
+                bucketKey: minuteKey,
+                itemKey: delta.id,
+                downloadBytes: delta.downloadBytes,
+                uploadBytes: delta.uploadBytes
+            )
             accumulate(
                 into: &archive.adapterHourly,
                 bucketKey: hourKey,
@@ -71,10 +80,18 @@ actor StatisticsStore {
 
     func recordAppDeltas(_ deltas: [StatisticsAppDelta], at date: Date) async {
         guard !deltas.isEmpty else { return }
+        let minuteKey = Self.minuteKey(for: date, calendar: calendar)
         let hourKey = Self.hourKey(for: date, calendar: calendar)
         let dayKey = Self.dayKey(for: date, calendar: calendar)
 
         for delta in deltas where delta.downloadBytes > 0 || delta.uploadBytes > 0 {
+            accumulate(
+                into: &archive.appMinute,
+                bucketKey: minuteKey,
+                itemKey: delta.name,
+                downloadBytes: delta.downloadBytes,
+                uploadBytes: delta.uploadBytes
+            )
             accumulate(
                 into: &archive.appHourly,
                 bucketKey: hourKey,
@@ -117,6 +134,10 @@ actor StatisticsStore {
         let relevantKeys: [String]
 
         switch range {
+        case .lastHour:
+            adapterSource = archive.adapterMinute
+            appSource = archive.appMinute
+            relevantKeys = Self.minuteKeys(endingAt: now, count: 60, calendar: calendar)
         case .last24Hours:
             adapterSource = archive.adapterHourly
             appSource = archive.appHourly
@@ -212,10 +233,12 @@ actor StatisticsStore {
                     uploadBytes: totals.uploadBytes
                 )
             }
-        case .last24Hours, .last7Days, .last30Days:
+        case .lastHour, .last24Hours, .last7Days, .last30Days:
             return keys.compactMap { key in
                 let date: Date?
                 switch range {
+                case .lastHour:
+                    date = Self.date(fromMinuteKey: key, calendar: calendar)
                 case .last24Hours:
                     date = Self.date(fromHourKey: key, calendar: calendar)
                 case .last7Days, .last30Days:
@@ -331,9 +354,18 @@ actor StatisticsStore {
     }
 
     private func prune(now: Date) {
+        let minuteCutoff = calendar.date(byAdding: .minute, value: -Constants.minuteRetentionMinutes, to: now) ?? now
         let hourlyCutoff = calendar.date(byAdding: .hour, value: -Constants.hourlyRetentionHours, to: now) ?? now
         let dailyCutoff = calendar.date(byAdding: .day, value: -Constants.dailyRetentionDays, to: now) ?? now
 
+        archive.adapterMinute = archive.adapterMinute.filter { key, _ in
+            guard let date = Self.date(fromMinuteKey: key, calendar: calendar) else { return false }
+            return date >= minuteCutoff
+        }
+        archive.appMinute = archive.appMinute.filter { key, _ in
+            guard let date = Self.date(fromMinuteKey: key, calendar: calendar) else { return false }
+            return date >= minuteCutoff
+        }
         archive.adapterHourly = archive.adapterHourly.filter { key, _ in
             guard let date = Self.date(fromHourKey: key, calendar: calendar) else { return false }
             return date >= hourlyCutoff
@@ -404,6 +436,14 @@ actor StatisticsStore {
         }
     }
 
+    private static func minuteKeys(endingAt date: Date, count: Int, calendar: Calendar) -> [String] {
+        let end = calendar.dateInterval(of: .minute, for: date)?.start ?? date
+        return (0..<count).compactMap { offset in
+            let bucketDate = calendar.date(byAdding: .minute, value: -(count - 1 - offset), to: end)
+            return bucketDate.map { minuteKey(for: $0, calendar: calendar) }
+        }
+    }
+
     private static func dayKeys(endingAt date: Date, count: Int, calendar: Calendar) -> [String] {
         let end = calendar.startOfDay(for: date)
         return (0..<count).compactMap { offset in
@@ -415,6 +455,18 @@ actor StatisticsStore {
     private static func hourKey(for date: Date, calendar: Calendar) -> String {
         let comps = calendar.dateComponents([.year, .month, .day, .hour], from: date)
         return String(format: "%04d-%02d-%02d-%02d", comps.year ?? 0, comps.month ?? 0, comps.day ?? 0, comps.hour ?? 0)
+    }
+
+    private static func minuteKey(for date: Date, calendar: Calendar) -> String {
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return String(
+            format: "%04d-%02d-%02d-%02d-%02d",
+            comps.year ?? 0,
+            comps.month ?? 0,
+            comps.day ?? 0,
+            comps.hour ?? 0,
+            comps.minute ?? 0
+        )
     }
 
     private static func dayKey(for date: Date, calendar: Calendar) -> String {
@@ -431,6 +483,12 @@ actor StatisticsStore {
         let parts = key.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 4 else { return nil }
         return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: parts[3]))
+    }
+
+    private static func date(fromMinuteKey key: String, calendar: Calendar) -> Date? {
+        let parts = key.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 5 else { return nil }
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: parts[3], minute: parts[4]))
     }
 
     private static func date(fromDayKey key: String, calendar: Calendar) -> Date? {

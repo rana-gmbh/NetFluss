@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NetFluss Speed Test</title>
+</head>
+<body>
+<script src="./cloudflare/speedtest.bundle.js"></script>
+<script>
+(function() {
+    "use strict";
+
+    var activeRunId = null;
+    var engine = null;
+    var finished = false;
+    var finalizeTimer = null;
+    var maxDurationTimer = null;
+    var lastMetricSignature = "";
+    var lastMetricChangeAt = 0;
+    var firstUploadMetricAt = 0;
+
+    function bridge(message) {
+        var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.speedTestBridge;
+        if (handler) {
+            handler.postMessage(message);
+        }
+    }
+
+    function numeric(value) {
+        return typeof value === "number" && isFinite(value) ? value : null;
+    }
+
+    function toMbps(bitsPerSecond) {
+        var value = numeric(bitsPerSecond);
+        return value === null ? null : value / 1000000;
+    }
+
+    function summaryFor(results) {
+        var summary = results && typeof results.getSummary === "function" ? results.getSummary() : {};
+        return {
+            provider: "cloudflare",
+            downloadMbps: toMbps(summary.download),
+            uploadMbps: toMbps(summary.upload),
+            latencyMs: numeric(summary.latency),
+            jitterMs: numeric(summary.jitter),
+            serverName: "Cloudflare edge",
+            serverLocation: "Auto-selected nearby edge"
+        };
+    }
+
+    function summarySignature(summary) {
+        return [
+            summary.downloadMbps === null ? "na" : Math.round(summary.downloadMbps * 10) / 10,
+            summary.uploadMbps === null ? "na" : Math.round(summary.uploadMbps * 10) / 10,
+            summary.latencyMs === null ? "na" : Math.round(summary.latencyMs * 10) / 10
+        ].join("|");
+    }
+
+    function phasePayload(phase, detail) {
+        return {
+            type: "phase",
+            runId: activeRunId,
+            phase: phase,
+            detail: detail,
+            serverName: "Cloudflare edge",
+            serverLocation: "Auto-selected nearby edge"
+        };
+    }
+
+    function postProgress(phase) {
+        if (!engine || activeRunId === null) {
+            return;
+        }
+        var summary = summaryFor(engine.results);
+        summary.type = "progress";
+        summary.runId = activeRunId;
+        summary.phase = phase;
+        bridge(summary);
+    }
+
+    function clearTimers() {
+        if (finalizeTimer !== null) {
+            clearTimeout(finalizeTimer);
+            finalizeTimer = null;
+        }
+        if (maxDurationTimer !== null) {
+            clearTimeout(maxDurationTimer);
+            maxDurationTimer = null;
+        }
+    }
+
+    function measurementPlan() {
+        return [
+            { type: "latency", numPackets: 1 },
+            { type: "download", bytes: 1e5, count: 1, bypassMinDuration: true },
+            { type: "latency", numPackets: 20 },
+            { type: "download", bytes: 1e5, count: 9 },
+            { type: "download", bytes: 1e6, count: 8 },
+            { type: "upload", bytes: 1e5, count: 8 },
+            { type: "upload", bytes: 1e6, count: 6 },
+            { type: "download", bytes: 1e7, count: 6 },
+            { type: "upload", bytes: 1e7, count: 4 },
+            { type: "download", bytes: 25e6, count: 4 },
+            { type: "upload", bytes: 25e6, count: 4 },
+            { type: "download", bytes: 1e8, count: 3 },
+            { type: "upload", bytes: 5e7, count: 3 }
+        ];
+    }
+
+    function phaseForMeasurement(measurement) {
+        if (!measurement) {
+            return { phase: "preparing", detail: "Preparing the Cloudflare test..." };
+        }
+        var type = typeof measurement === "string" ? measurement : measurement.type;
+        switch (type) {
+        case "latency":
+            return { phase: "latency", detail: "Measuring latency..." };
+        case "download":
+        case "downLoadedLatency":
+            return { phase: "download", detail: "Testing download speed..." };
+        case "upload":
+        case "upLoadedLatency":
+            return { phase: "upload", detail: "Testing upload speed..." };
+        default:
+            return { phase: "finalizing", detail: "Finalizing results..." };
+        }
+    }
+
+    function emitFinalResult(runId, results) {
+        if (finished || activeRunId !== runId) {
+            return;
+        }
+
+        finished = true;
+        clearTimers();
+        try {
+            engine && typeof engine.pause === "function" && engine.pause();
+        } catch (error) {
+            // Ignore cleanup failures while finalizing the result.
+        }
+        bridge(phasePayload("finalizing", "Finalizing results..."));
+        var summary = summaryFor(results || (engine && engine.results));
+        summary.type = "result";
+        summary.runId = runId;
+        bridge(summary);
+    }
+
+    function rememberMetricChange(summary) {
+        if (summary.uploadMbps !== null && firstUploadMetricAt === 0) {
+            firstUploadMetricAt = Date.now();
+        }
+
+        var signature = summarySignature(summary);
+        if (signature !== lastMetricSignature) {
+            lastMetricSignature = signature;
+            lastMetricChangeAt = Date.now();
+        }
+    }
+
+    function scheduleFinalizeCheck(runId) {
+        clearTimeout(finalizeTimer);
+        finalizeTimer = setTimeout(function() {
+            if (finished || activeRunId !== runId || !engine) {
+                return;
+            }
+
+            var summary = summaryFor(engine.results);
+            if (summary.downloadMbps === null || summary.uploadMbps === null) {
+                return;
+            }
+
+            var now = Date.now();
+            var uploadSettled = firstUploadMetricAt !== 0 && now - firstUploadMetricAt >= 5000;
+            var metricsQuiet = lastMetricChangeAt !== 0 && now - lastMetricChangeAt >= 3200;
+            if (uploadSettled && metricsQuiet) {
+                emitFinalResult(runId, engine.results);
+            }
+        }, 1500);
+    }
+
+    function start(config) {
+        if (!window.CloudflareSpeedTestRuntime || typeof window.CloudflareSpeedTestRuntime.default !== "function") {
+            bridge({
+                type: "error",
+                runId: config && config.runId,
+                message: "The bundled Cloudflare runtime is unavailable."
+            });
+            return;
+        }
+
+        cancel();
+        activeRunId = config.runId;
+        finished = false;
+        lastMetricSignature = "";
+        lastMetricChangeAt = Date.now();
+        firstUploadMetricAt = 0;
+        bridge(phasePayload("latency", "Measuring latency..."));
+
+        engine = new window.CloudflareSpeedTestRuntime.default({
+            autoStart: false,
+            logAimApiUrl: null,
+            logMeasurementApiUrl: null,
+            measureDownloadLoadedLatency: false,
+            measureUploadLoadedLatency: false,
+            measurements: measurementPlan()
+        });
+
+        maxDurationTimer = setTimeout(function() {
+            if (finished || activeRunId !== config.runId || !engine) {
+                return;
+            }
+
+            var summary = summaryFor(engine.results);
+            if (summary.downloadMbps !== null || summary.uploadMbps !== null) {
+                emitFinalResult(config.runId, engine.results);
+                return;
+            }
+
+            bridge({
+                type: "error",
+                runId: config.runId,
+                message: "The Cloudflare speed test did not return a usable result."
+            });
+        }, 35000);
+
+        engine.onPhaseChange = function(event) {
+            if (finished || activeRunId !== config.runId) {
+                return;
+            }
+            var nextPhase = phaseForMeasurement(event && event.measurement);
+            bridge(phasePayload(nextPhase.phase, nextPhase.detail));
+        };
+
+        engine.onResultsChange = function(event) {
+            if (finished || activeRunId !== config.runId || !engine) {
+                return;
+            }
+
+            var nextPhase = phaseForMeasurement(event && event.type);
+            var summary = summaryFor(engine.results);
+            rememberMetricChange(summary);
+            postProgress(nextPhase.phase);
+
+            if ((engine.results && engine.results.isFinished) || engine.isFinished) {
+                emitFinalResult(config.runId, engine.results);
+                return;
+            }
+
+            if (summary.downloadMbps !== null && summary.uploadMbps !== null) {
+                scheduleFinalizeCheck(config.runId);
+            }
+        };
+
+        engine.onRunningChange = function(running) {
+            if (finished || activeRunId !== config.runId || !engine) {
+                return;
+            }
+
+            if (!running) {
+                if ((engine.results && engine.results.isFinished) || engine.isFinished) {
+                    emitFinalResult(config.runId, engine.results);
+                    return;
+                }
+
+                var summary = summaryFor(engine.results);
+                if (summary.downloadMbps !== null && summary.uploadMbps !== null) {
+                    scheduleFinalizeCheck(config.runId);
+                }
+            }
+        };
+
+        engine.onError = function(error) {
+            if (activeRunId !== config.runId) {
+                return;
+            }
+            clearTimers();
+            bridge({
+                type: "error",
+                runId: config.runId,
+                message: String(error)
+            });
+        };
+
+        engine.onFinish = function(results) {
+            emitFinalResult(config.runId, results);
+        };
+
+        engine.play();
+    }
+
+    function cancel() {
+        clearTimers();
+        if (engine && typeof engine.pause === "function") {
+            try {
+                engine.pause();
+            } catch (error) {
+                // Ignore cleanup failures during cancellation.
+            }
+        }
+        engine = null;
+        finished = false;
+        activeRunId = null;
+        lastMetricSignature = "";
+        lastMetricChangeAt = 0;
+        firstUploadMetricAt = 0;
+    }
+
+    window.NetFlussSpeedTest = {
+        start: start,
+        cancel: cancel
+    };
+})();
+</script>
+</body>
+</html>

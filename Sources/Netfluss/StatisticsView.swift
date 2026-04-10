@@ -108,7 +108,7 @@ struct StatisticsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 280)
+                .frame(width: 336)
             }
         }
         .padding(.horizontal, 24)
@@ -596,6 +596,8 @@ struct StatisticsView: View {
 
     private func axisDateFormat(for range: StatisticsRange) -> Date.FormatStyle {
         switch range {
+        case .lastHour:
+            return .dateTime.hour().minute()
         case .last24Hours:
             return .dateTime.hour()
         case .last7Days, .last30Days:
@@ -607,6 +609,8 @@ struct StatisticsView: View {
 
     private func xAxisTickCount(for range: StatisticsRange) -> Int {
         switch range {
+        case .lastHour:
+            return 6
         case .last24Hours:
             return 6
         case .last7Days:

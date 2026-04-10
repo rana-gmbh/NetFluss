@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appState: AppState?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppIconController.shared.start()
         appState = AppState()
     }
 

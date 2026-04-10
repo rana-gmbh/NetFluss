@@ -390,6 +390,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let popover: NSPopover
     private let monitor: NetworkMonitor
     private let statisticsManager: StatisticsManager
+    private let speedTestManager: SpeedTestManager
+    private let contextMenu = NSMenu()
     private var cancellables: Set<AnyCancellable> = []
     private let ratesView = MenuBarRatesView()
     private var cachedFonts: [FontState: NSFont] = [:]
@@ -424,19 +426,23 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         let weight: Double
     }
 
-    init(monitor: NetworkMonitor, statisticsManager: StatisticsManager) {
+    init(monitor: NetworkMonitor, statisticsManager: StatisticsManager, speedTestManager: SpeedTestManager) {
         self.monitor = monitor
         self.statisticsManager = statisticsManager
+        self.speedTestManager = speedTestManager
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.popover = NSPopover()
         super.init()
 
         if let button = statusItem.button {
             button.target = self
-            button.action = #selector(togglePopover)
+            button.action = #selector(handleStatusItemClick(_:))
             button.setButtonType(.momentaryChange)
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             configureRatesView(in: button)
         }
+
+        configureContextMenu()
 
         popover.behavior = .transient
         popover.delegate = self
@@ -471,6 +477,18 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         teardownPopover()
     }
 
+    @objc private func handleStatusItemClick(_ sender: Any?) {
+        let eventType = NSApp.currentEvent?.type
+        let modifierFlags = NSApp.currentEvent?.modifierFlags ?? []
+
+        if eventType == .rightMouseUp || (eventType == .leftMouseUp && modifierFlags.contains(.control)) {
+            showContextMenu()
+            return
+        }
+
+        togglePopover()
+    }
+
     @objc private func togglePopover() {
         guard let button = statusItem.button else { return }
         if popover.isShown {
@@ -495,6 +513,42 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         }
     }
 
+    @objc private func showPreferencesFromContextMenu(_ sender: Any?) {
+        closePopover()
+        PreferencesWindowController.shared.show(monitor: monitor)
+    }
+
+    @objc private func showStatisticsFromContextMenu(_ sender: Any?) {
+        closePopover()
+        StatisticsWindowController.shared.show(manager: statisticsManager)
+    }
+
+    @objc private func showSpeedTestFromContextMenu(_ sender: Any?) {
+        closePopover()
+        SpeedTestWindowController.shared.show(manager: speedTestManager)
+    }
+
+    @objc private func showAboutFromContextMenu(_ sender: Any?) {
+        closePopover()
+        AboutWindowController.shared.show()
+    }
+
+    @objc private func openFileFlussFromContextMenu(_ sender: Any?) {
+        closePopover()
+        guard let url = URL(string: "https://github.com/rana-gmbh/FileFluss") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func openSupportFromContextMenu(_ sender: Any?) {
+        closePopover()
+        guard let url = URL(string: "https://buymeacoffee.com/robertrudolph") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func quitFromContextMenu(_ sender: Any?) {
+        NSApplication.shared.terminate(nil)
+    }
+
     func popoverWillClose(_ notification: Notification) {
         teardownPopover()
     }
@@ -508,6 +562,48 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         if popover.contentViewController != nil {
             popover.contentViewController = nil
         }
+    }
+
+    private func configureContextMenu() {
+        contextMenu.removeAllItems()
+
+        let preferencesItem = NSMenuItem(title: "Preferences", action: #selector(showPreferencesFromContextMenu(_:)), keyEquivalent: ",")
+        preferencesItem.target = self
+        contextMenu.addItem(preferencesItem)
+
+        let statisticsItem = NSMenuItem(title: "Bandwidth Statistics", action: #selector(showStatisticsFromContextMenu(_:)), keyEquivalent: "")
+        statisticsItem.target = self
+        contextMenu.addItem(statisticsItem)
+
+        let speedTestItem = NSMenuItem(title: "Run Speed Test…", action: #selector(showSpeedTestFromContextMenu(_:)), keyEquivalent: "")
+        speedTestItem.target = self
+        contextMenu.addItem(speedTestItem)
+
+        let aboutItem = NSMenuItem(title: "About NetFluss", action: #selector(showAboutFromContextMenu(_:)), keyEquivalent: "")
+        aboutItem.target = self
+        contextMenu.addItem(aboutItem)
+
+        let fileFlussItem = NSMenuItem(title: "Try FileFluss", action: #selector(openFileFlussFromContextMenu(_:)), keyEquivalent: "")
+        fileFlussItem.target = self
+        contextMenu.addItem(fileFlussItem)
+
+        let supportItem = NSMenuItem(title: "Support NetFluss project", action: #selector(openSupportFromContextMenu(_:)), keyEquivalent: "")
+        supportItem.target = self
+        contextMenu.addItem(supportItem)
+
+        contextMenu.addItem(.separator())
+
+        let quitItem = NSMenuItem(title: "Quit NetFluss", action: #selector(quitFromContextMenu(_:)), keyEquivalent: "q")
+        quitItem.target = self
+        contextMenu.addItem(quitItem)
+    }
+
+    private func showContextMenu() {
+        closePopover()
+        guard let button = statusItem.button else { return }
+        statusItem.menu = contextMenu
+        button.performClick(nil)
+        statusItem.menu = nil
     }
 
     private func popoverPresentation(for button: NSStatusBarButton) -> PopoverPresentation {
@@ -604,11 +700,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
                 ratesView.isHidden = true
                 currentMenuBarMode = mode
             }
-            let cfg = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
-            statusItem.button?.image = NSImage(
-                systemSymbolName: symbol,
-                accessibilityDescription: "Network"
-            )?.withSymbolConfiguration(cfg)
+            statusItem.button?.image = MenuBarIconLibrary.image(for: symbol, pointSize: 14)
             statusItem.button?.imagePosition = .imageOnly
             if lastStatusItemLength != NSStatusItem.squareLength {
                 statusItem.length = NSStatusItem.squareLength
@@ -1004,14 +1096,12 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     private func normalizedMenuBarIconSymbol() -> String {
-        let symbol = UserDefaults.standard.string(forKey: "menuBarIconSymbol") ?? "network"
-        switch symbol {
-        case "network", "arrow.up.arrow.down", "wifi", "antenna.radiowaves.left.and.right":
+        let symbol = UserDefaults.standard.string(forKey: "menuBarIconSymbol") ?? "netfluss"
+        if MenuBarIconLibrary.isSupported(symbol) {
             return symbol
-        default:
-            UserDefaults.standard.set("network", forKey: "menuBarIconSymbol")
-            return "network"
         }
+        UserDefaults.standard.set("netfluss", forKey: "menuBarIconSymbol")
+        return "netfluss"
     }
 
     private func effectiveTotals() -> RateTotals {

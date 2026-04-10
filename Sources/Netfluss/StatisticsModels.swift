@@ -38,8 +38,10 @@ struct StatisticsArchive: Codable, Sendable {
     var lastAdapterSampleAt: Date?
     var lastAppSampleAt: Date?
     var adapterDisplayNames: [String: String]
+    var adapterMinute: [String: [String: StatisticsTrafficAmounts]]
     var adapterHourly: [String: [String: StatisticsTrafficAmounts]]
     var adapterDaily: [String: [String: StatisticsTrafficAmounts]]
+    var appMinute: [String: [String: StatisticsTrafficAmounts]]
     var appHourly: [String: [String: StatisticsTrafficAmounts]]
     var appDaily: [String: [String: StatisticsTrafficAmounts]]
 
@@ -48,11 +50,64 @@ struct StatisticsArchive: Codable, Sendable {
         lastAdapterSampleAt: nil,
         lastAppSampleAt: nil,
         adapterDisplayNames: [:],
+        adapterMinute: [:],
         adapterHourly: [:],
         adapterDaily: [:],
+        appMinute: [:],
         appHourly: [:],
         appDaily: [:]
     )
+
+    private enum CodingKeys: String, CodingKey {
+        case createdAt
+        case lastAdapterSampleAt
+        case lastAppSampleAt
+        case adapterDisplayNames
+        case adapterMinute
+        case adapterHourly
+        case adapterDaily
+        case appMinute
+        case appHourly
+        case appDaily
+    }
+
+    init(
+        createdAt: Date,
+        lastAdapterSampleAt: Date?,
+        lastAppSampleAt: Date?,
+        adapterDisplayNames: [String: String],
+        adapterMinute: [String: [String: StatisticsTrafficAmounts]],
+        adapterHourly: [String: [String: StatisticsTrafficAmounts]],
+        adapterDaily: [String: [String: StatisticsTrafficAmounts]],
+        appMinute: [String: [String: StatisticsTrafficAmounts]],
+        appHourly: [String: [String: StatisticsTrafficAmounts]],
+        appDaily: [String: [String: StatisticsTrafficAmounts]]
+    ) {
+        self.createdAt = createdAt
+        self.lastAdapterSampleAt = lastAdapterSampleAt
+        self.lastAppSampleAt = lastAppSampleAt
+        self.adapterDisplayNames = adapterDisplayNames
+        self.adapterMinute = adapterMinute
+        self.adapterHourly = adapterHourly
+        self.adapterDaily = adapterDaily
+        self.appMinute = appMinute
+        self.appHourly = appHourly
+        self.appDaily = appDaily
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        lastAdapterSampleAt = try container.decodeIfPresent(Date.self, forKey: .lastAdapterSampleAt)
+        lastAppSampleAt = try container.decodeIfPresent(Date.self, forKey: .lastAppSampleAt)
+        adapterDisplayNames = try container.decodeIfPresent([String: String].self, forKey: .adapterDisplayNames) ?? [:]
+        adapterMinute = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .adapterMinute) ?? [:]
+        adapterHourly = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .adapterHourly) ?? [:]
+        adapterDaily = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .adapterDaily) ?? [:]
+        appMinute = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .appMinute) ?? [:]
+        appHourly = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .appHourly) ?? [:]
+        appDaily = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .appDaily) ?? [:]
+    }
 }
 
 struct StatisticsAdapterDelta: Sendable {
@@ -69,6 +124,7 @@ struct StatisticsAppDelta: Sendable {
 }
 
 enum StatisticsRange: String, CaseIterable, Identifiable, Sendable {
+    case lastHour = "1H"
     case last24Hours = "24H"
     case last7Days = "7D"
     case last30Days = "30D"
@@ -78,6 +134,7 @@ enum StatisticsRange: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
+        case .lastHour: return "Last Hour"
         case .last24Hours: return "Last 24 Hours"
         case .last7Days: return "Last 7 Days"
         case .last30Days: return "Last 30 Days"
@@ -87,6 +144,7 @@ enum StatisticsRange: String, CaseIterable, Identifiable, Sendable {
 
     var bucketTitle: String {
         switch self {
+        case .lastHour: return "Minute Traffic"
         case .last24Hours: return "Hourly Traffic"
         case .last7Days, .last30Days: return "Daily Traffic"
         case .lastYear: return "Monthly Traffic"

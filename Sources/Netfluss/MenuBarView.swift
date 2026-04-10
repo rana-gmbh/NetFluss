@@ -178,8 +178,6 @@ struct MenuBarView: View {
                     )
                 }
 
-                Divider()
-                FooterBar()
             }
             .background(
                 GeometryReader { geo in
@@ -1266,60 +1264,5 @@ struct DNSPresetRow: View {
         }
         .buttonStyle(.borderless)
         .disabled(isActive || isChanging)
-    }
-}
-
-// MARK: - Footer
-
-struct FooterBar: View {
-    @EnvironmentObject private var monitor: NetworkMonitor
-    @EnvironmentObject private var statisticsManager: StatisticsManager
-
-    var body: some View {
-        HStack {
-            Button {
-                PreferencesWindowController.shared.show(monitor: monitor)
-            } label: {
-                Label("Preferences", systemImage: "gearshape")
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Button {
-                StatisticsWindowController.shared.show(manager: statisticsManager)
-            } label: {
-                Label("Statistics", systemImage: "chart.bar.xaxis")
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Button {
-                AboutWindowController.shared.show()
-            } label: {
-                Label("About", systemImage: "info.circle")
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                Label("Quit", systemImage: "power")
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
     }
 }

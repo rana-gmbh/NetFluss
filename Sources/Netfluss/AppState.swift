@@ -21,6 +21,7 @@ import Foundation
 final class AppState {
     let monitor: NetworkMonitor
     let statisticsManager: StatisticsManager
+    let speedTestManager: SpeedTestManager
     let statusBar: StatusBarController
     let updateNotifier: UpdateNotifier
     private var defaultsObserver: NSObjectProtocol?
@@ -47,7 +48,7 @@ final class AppState {
             "adapterOrder": [],
             "adapterCustomNames": Data(),
             "menuBarMode": "rates",
-            "menuBarIconSymbol": "network",
+            "menuBarIconSymbol": "netfluss",
             "menuBarPinnedUnit": "auto",
             "menuBarDecimals": 0,
             "totalsOnlyVisibleAdapters": false,
@@ -58,6 +59,8 @@ final class AppState {
             "topAppsGracePeriodSeconds": 3.0,
             "collectStatistics": false,
             "collectAppStatistics": true,
+            "speedTestProvider": "mlab",
+            "speedTestMLabConsentAccepted": false,
             "connectionStatusMode": "list",
             "hiddenApps": [],
             "externalIPv6": false,
@@ -79,7 +82,13 @@ final class AppState {
         self.monitor = monitor
         let statisticsManager = StatisticsManager(monitor: monitor)
         self.statisticsManager = statisticsManager
-        self.statusBar = StatusBarController(monitor: monitor, statisticsManager: statisticsManager)
+        let speedTestManager = SpeedTestManager(monitor: monitor)
+        self.speedTestManager = speedTestManager
+        self.statusBar = StatusBarController(
+            monitor: monitor,
+            statisticsManager: statisticsManager,
+            speedTestManager: speedTestManager
+        )
         let updateNotifier = UpdateNotifier()
         self.updateNotifier = updateNotifier
         Task {

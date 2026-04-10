@@ -170,6 +170,69 @@ enum StatisticsDemoData {
             }
         }
 
+        let oldestMinute = calendar.date(byAdding: .minute, value: -179, to: calendar.dateInterval(of: .minute, for: now)?.start ?? now)
+            ?? now
+
+        for minuteOffset in 0..<180 {
+            guard let date = calendar.date(byAdding: .minute, value: minuteOffset, to: oldestMinute) else { continue }
+            let minuteKey = Self.minuteKey(for: date, calendar: calendar)
+            let minuteFactor = minuteTrafficFactor(for: date, calendar: calendar)
+            let hourFactor = hourlyFactor(for: date, calendar: calendar)
+            let seasonFactor = seasonality(for: date, calendar: calendar)
+
+            for profile in adapters where adapterIsActive(profile, on: date, calendar: calendar) {
+                let downloadMB = sampledMinuteValue(
+                    from: profile.dailyDownloadMB,
+                    weight: profile.hourlyWeight,
+                    hourFactor: hourFactor,
+                    minuteFactor: minuteFactor,
+                    seasonFactor: seasonFactor,
+                    randomScale: Double.random(in: 0.78...1.22, using: &generator)
+                )
+                let uploadMB = sampledMinuteValue(
+                    from: profile.dailyUploadMB,
+                    weight: profile.hourlyWeight,
+                    hourFactor: hourFactor * 0.9,
+                    minuteFactor: minuteFactor,
+                    seasonFactor: seasonFactor,
+                    randomScale: Double.random(in: 0.80...1.20, using: &generator)
+                )
+                accumulate(
+                    into: &archive.adapterMinute,
+                    bucketKey: minuteKey,
+                    itemKey: profile.id,
+                    downloadBytes: bytes(fromMegabytes: downloadMB),
+                    uploadBytes: bytes(fromMegabytes: uploadMB)
+                )
+            }
+
+            for profile in apps where appIsActive(profile, on: date, calendar: calendar) {
+                let downloadMB = sampledMinuteValue(
+                    from: profile.dailyDownloadMB,
+                    weight: profile.hourlyWeight,
+                    hourFactor: hourFactor,
+                    minuteFactor: minuteFactor,
+                    seasonFactor: seasonFactor,
+                    randomScale: Double.random(in: 0.76...1.24, using: &generator)
+                )
+                let uploadMB = sampledMinuteValue(
+                    from: profile.dailyUploadMB,
+                    weight: profile.hourlyWeight,
+                    hourFactor: hourFactor * 0.88,
+                    minuteFactor: minuteFactor,
+                    seasonFactor: seasonFactor,
+                    randomScale: Double.random(in: 0.78...1.22, using: &generator)
+                )
+                accumulate(
+                    into: &archive.appMinute,
+                    bucketKey: minuteKey,
+                    itemKey: profile.name,
+                    downloadBytes: bytes(fromMegabytes: downloadMB),
+                    uploadBytes: bytes(fromMegabytes: uploadMB)
+                )
+            }
+        }
+
         return archive
     }
 
@@ -234,6 +297,18 @@ enum StatisticsDemoData {
         return max((dailyMidpoint / 24.0) * weight * hourFactor * seasonFactor * randomScale, 0.2)
     }
 
+    private static func sampledMinuteValue(
+        from dailyRange: ClosedRange<Double>,
+        weight: Double,
+        hourFactor: Double,
+        minuteFactor: Double,
+        seasonFactor: Double,
+        randomScale: Double
+    ) -> Double {
+        let dailyMidpoint = (dailyRange.lowerBound + dailyRange.upperBound) / 2
+        return max((dailyMidpoint / (24.0 * 60.0)) * weight * hourFactor * minuteFactor * seasonFactor * randomScale, 0.01)
+    }
+
     private static func bytes(fromMegabytes megabytes: Double) -> UInt64 {
         UInt64((megabytes * 1_000_000.0).rounded())
     }
@@ -262,6 +337,24 @@ enum StatisticsDemoData {
             return 0.68
         default:
             return 0.34
+        }
+    }
+
+    private static func minuteTrafficFactor(for date: Date, calendar: Calendar) -> Double {
+        let minute = calendar.component(.minute, from: date)
+        switch minute {
+        case 0..<10:
+            return 0.72
+        case 10..<20:
+            return 0.94
+        case 20..<35:
+            return 1.18
+        case 35..<45:
+            return 1.04
+        case 45..<55:
+            return 0.88
+        default:
+            return 0.76
         }
     }
 
@@ -315,5 +408,17 @@ enum StatisticsDemoData {
     private static func hourKey(for date: Date, calendar: Calendar) -> String {
         let comps = calendar.dateComponents([.year, .month, .day, .hour], from: date)
         return String(format: "%04d-%02d-%02d-%02d", comps.year ?? 0, comps.month ?? 0, comps.day ?? 0, comps.hour ?? 0)
+    }
+
+    private static func minuteKey(for date: Date, calendar: Calendar) -> String {
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return String(
+            format: "%04d-%02d-%02d-%02d-%02d",
+            comps.year ?? 0,
+            comps.month ?? 0,
+            comps.day ?? 0,
+            comps.hour ?? 0,
+            comps.minute ?? 0
+        )
     }
 }

@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NetFluss Speed Test</title>
+</head>
+<body>
+<script src="./m-lab/ndt7.js"></script>
+<script>
+(function() {
+    "use strict";
+
+    var activeRunId = null;
+    var cancelled = false;
+    var failed = false;
+    var finished = false;
+    var activeSocket = null;
+    var state = createState();
+
+    function createState() {
+        return {
+            provider: "mlab",
+            downloadMbps: null,
+            uploadMbps: null,
+            latencyMs: null,
+            jitterMs: null,
+            serverName: null,
+            serverLocation: null
+        };
+    }
+
+    function bridge(message) {
+        var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.speedTestBridge;
+        if (handler) {
+            handler.postMessage(message);
+        }
+    }
+
+    function closeActiveSocket() {
+        if (!activeSocket) {
+            return;
+        }
+
+        try {
+            activeSocket.onopen = null;
+            activeSocket.onmessage = null;
+            activeSocket.onclose = null;
+            activeSocket.onerror = null;
+            if (activeSocket.readyState === WebSocket.OPEN || activeSocket.readyState === WebSocket.CONNECTING) {
+                activeSocket.close();
+            }
+        } catch (error) {
+            // Ignore cleanup failures while cancelling or swapping runs.
+        }
+
+        activeSocket = null;
+    }
+
+    function fail(config, message) {
+        if (cancelled || failed || finished || activeRunId !== config.runId) {
+            return;
+        }
+
+        failed = true;
+        closeActiveSocket();
+        bridge({
+            type: "error",
+            runId: config.runId,
+            message: String(message)
+        });
+    }
+
+    function emitResult(config) {
+        if (cancelled || failed || finished || activeRunId !== config.runId) {
+            return;
+        }
+
+        finished = true;
+        closeActiveSocket();
+        postPhase("finalizing", "Finalizing results...");
+        bridge({
+            type: "result",
+            runId: config.runId,
+            provider: state.provider,
+            downloadMbps: state.downloadMbps,
+            uploadMbps: state.uploadMbps,
+            latencyMs: state.latencyMs,
+            jitterMs: state.jitterMs,
+            serverName: state.serverName,
+            serverLocation: state.serverLocation
+        });
+    }
+
+    function numeric(value) {
+        return typeof value === "number" && isFinite(value) ? value : null;
+    }
+
+    function metricValue(payload) {
+        if (!payload || typeof payload !== "object") {
+            return null;
+        }
+        return numeric(payload.MeanClientMbps) || numeric(payload.Data && payload.Data.MeanClientMbps);
+    }
+
+    function latencyValue(payload) {
+        var source = payload && payload.Data ? payload.Data : payload;
+        var tcpInfo = source && source.TCPInfo ? source.TCPInfo : null;
+        var candidate = numeric(tcpInfo && (tcpInfo.MinRTT || tcpInfo.RTT));
+        if (candidate === null) {
+            return null;
+        }
+        return candidate > 1000 ? candidate / 1000 : candidate;
+    }
+
+    function updateServer(server) {
+        if (!server || typeof server !== "object") {
+            return;
+        }
+
+        state.serverName = server.hostname || server.machine || state.serverName;
+
+        var location = server.location || {};
+        if (location.city && location.country) {
+            state.serverLocation = location.city + ", " + location.country;
+        } else if (location.city) {
+            state.serverLocation = location.city;
+        } else if (location.country) {
+            state.serverLocation = location.country;
+        }
+    }
+
+    function postPhase(phase, detail) {
+        if (activeRunId === null || cancelled) {
+            return;
+        }
+
+        bridge({
+            type: "phase",
+            runId: activeRunId,
+            phase: phase,
+            detail: detail,
+            serverName: state.serverName,
+            serverLocation: state.serverLocation
+        });
+    }
+
+    function postProgress(phase) {
+        if (activeRunId === null || cancelled) {
+            return;
+        }
+
+        bridge({
+            type: "progress",
+            runId: activeRunId,
+            phase: phase,
+            downloadMbps: state.downloadMbps,
+            uploadMbps: state.uploadMbps,
+            latencyMs: state.latencyMs,
+            jitterMs: state.jitterMs,
+            serverName: state.serverName,
+            serverLocation: state.serverLocation
+        });
+    }
+
+    function nowMs() {
+        if (typeof performance !== "undefined" && typeof performance.now === "function") {
+            return performance.now();
+        }
+        return Date.now();
+    }
+
+    function runDownloadTest(config, downloadURL) {
+        return new Promise(function(resolve, reject) {
+            if (!downloadURL) {
+                reject(new Error("The M-Lab download server URL is missing."));
+                return;
+            }
+
+            var settled = false;
+            var socket = new WebSocket(downloadURL, "net.measurementlab.ndt.v7");
+            var totalBytes = 0;
+            var startAt = 0;
+            var previousMeasurementAt = 0;
+            var stopTimer = null;
+            var hardTimeout = setTimeout(function() {
+                if (!settled) {
+                    settled = true;
+                    closeActiveSocket();
+                    reject(new Error("The M-Lab download phase timed out."));
+                }
+            }, 16000);
+
+            activeSocket = socket;
+
+            function cleanup() {
+                clearTimeout(hardTimeout);
+                if (stopTimer !== null) {
+                    clearTimeout(stopTimer);
+                    stopTimer = null;
+                }
+                if (activeSocket === socket) {
+                    activeSocket = null;
+                }
+            }
+
+            function finishSuccessfully() {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                cleanup();
+                resolve();
+            }
+
+            function finishWithError(message) {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                cleanup();
+                try {
+                    socket.close();
+                } catch (error) {
+                    // Ignore close failures while reporting the original error.
+                }
+                reject(new Error(message));
+            }
+
+            function postClientMeasurement(at) {
+                if (startAt === 0) {
+                    return;
+                }
+
+                var elapsedTime = (at - startAt) / 1000;
+                if (elapsedTime <= 0) {
+                    return;
+                }
+
+                state.downloadMbps = totalBytes * 8 / 1000000 / elapsedTime;
+                postProgress("download");
+            }
+
+            socket.onopen = function() {
+                if (cancelled || activeRunId !== config.runId) {
+                    finishSuccessfully();
+                    return;
+                }
+
+                startAt = nowMs();
+                previousMeasurementAt = startAt;
+                postPhase("download", "Testing download speed...");
+                stopTimer = setTimeout(function() {
+                    try {
+                        socket.close();
+                    } catch (error) {
+                        finishWithError("The M-Lab download socket closed unexpectedly.");
+                    }
+                }, 10000);
+            };
+
+            socket.onmessage = function(event) {
+                if (settled || cancelled || !event) {
+                    return;
+                }
+
+                if (typeof event.data === "string") {
+                    try {
+                        var serverMeasurement = JSON.parse(event.data);
+                        var nextLatency = latencyValue(serverMeasurement);
+                        if (nextLatency !== null) {
+                            state.latencyMs = nextLatency;
+                        }
+                    } catch (error) {
+                        // Ignore malformed server measurements and keep the client-side rate.
+                    }
+                } else {
+                    totalBytes += typeof event.data.size !== "undefined" ? event.data.size : event.data.length;
+                }
+
+                var currentTime = nowMs();
+                if (currentTime >= previousMeasurementAt + 250) {
+                    postClientMeasurement(currentTime);
+                    previousMeasurementAt = currentTime;
+                }
+            };
+
+            socket.onerror = function() {
+                finishWithError("The M-Lab download phase failed.");
+            };
+
+            socket.onclose = function() {
+                if (settled) {
+                    return;
+                }
+
+                var currentTime = nowMs();
+                postClientMeasurement(currentTime);
+                if (state.downloadMbps === null) {
+                    finishWithError("The M-Lab download phase did not produce a measurement.");
+                    return;
+                }
+                finishSuccessfully();
+            };
+        });
+    }
+
+    function runUploadTest(config, uploadURL) {
+        return new Promise(function(resolve, reject) {
+            if (!uploadURL) {
+                reject(new Error("The M-Lab upload server URL is missing."));
+                return;
+            }
+
+            var settled = false;
+            var socket = new WebSocket(uploadURL, "net.measurementlab.ndt.v7");
+            var totalBytes = 0;
+            var previousMeasurementAt = 0;
+            var startAt = 0;
+            var endAt = 0;
+            var payload = new Uint8Array(8192);
+            var hardTimeout = setTimeout(function() {
+                if (!settled) {
+                    settled = true;
+                    closeActiveSocket();
+                    reject(new Error("The M-Lab upload phase timed out."));
+                }
+            }, 18000);
+
+            activeSocket = socket;
+
+            function cleanup() {
+                clearTimeout(hardTimeout);
+                if (activeSocket === socket) {
+                    activeSocket = null;
+                }
+            }
+
+            function finishSuccessfully() {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                cleanup();
+                resolve();
+            }
+
+            function finishWithError(message) {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                cleanup();
+                try {
+                    socket.close();
+                } catch (error) {
+                    // Ignore close failures while reporting the original error.
+                }
+                reject(new Error(message));
+            }
+
+            function postClientMeasurement(at) {
+                if (startAt === 0) {
+                    return;
+                }
+
+                var elapsedTime = (at - startAt) / 1000;
+                if (elapsedTime <= 0) {
+                    return;
+                }
+
+                var bytesSent = totalBytes - socket.bufferedAmount;
+                if (bytesSent < 0) {
+                    bytesSent = 0;
+                }
+                state.uploadMbps = bytesSent * 8 / 1000000 / elapsedTime;
+                postProgress("upload");
+            }
+
+            function pumpUpload() {
+                if (settled || cancelled || activeRunId !== config.runId) {
+                    try {
+                        socket.close();
+                    } catch (error) {
+                        // Ignore close failures during cancellation.
+                    }
+                    return;
+                }
+
+                var currentTime = nowMs();
+                if (currentTime >= endAt) {
+                    postClientMeasurement(currentTime);
+                    try {
+                        socket.close();
+                    } catch (error) {
+                        finishWithError("The M-Lab upload socket closed unexpectedly.");
+                    }
+                    return;
+                }
+
+                var maxMessageSize = 8388608;
+                var nextSizeIncrement = payload.length >= maxMessageSize ? Infinity : 16 * payload.length;
+                if ((totalBytes - socket.bufferedAmount) >= nextSizeIncrement) {
+                    payload = new Uint8Array(payload.length * 2);
+                }
+
+                var desiredBuffer = 7 * payload.length;
+                if (socket.bufferedAmount < desiredBuffer) {
+                    socket.send(payload);
+                    totalBytes += payload.length;
+                }
+
+                if (currentTime >= previousMeasurementAt + 250) {
+                    postClientMeasurement(currentTime);
+                    previousMeasurementAt = currentTime;
+                }
+
+                setTimeout(pumpUpload, 0);
+            }
+
+            socket.onopen = function() {
+                if (cancelled || activeRunId !== config.runId) {
+                    finishSuccessfully();
+                    return;
+                }
+
+                startAt = nowMs();
+                previousMeasurementAt = startAt;
+                endAt = startAt + 10000;
+                postPhase("upload", "Testing upload speed...");
+                pumpUpload();
+            };
+
+            socket.onmessage = function(event) {
+                if (settled || cancelled || !event || typeof event.data !== "string") {
+                    return;
+                }
+
+                try {
+                    var serverMeasurement = JSON.parse(event.data);
+                    var nextLatency = latencyValue(serverMeasurement);
+                    if (nextLatency !== null) {
+                        state.latencyMs = nextLatency;
+                    }
+                } catch (error) {
+                    // Ignore malformed server measurements and keep the client-side rate.
+                }
+            };
+
+            socket.onerror = function() {
+                finishWithError("The M-Lab upload phase failed.");
+            };
+
+            socket.onclose = function() {
+                if (settled) {
+                    return;
+                }
+
+                var currentTime = nowMs();
+                postClientMeasurement(currentTime);
+                if (state.uploadMbps === null) {
+                    finishWithError("The M-Lab upload phase did not produce a measurement.");
+                    return;
+                }
+                finishSuccessfully();
+            };
+        });
+    }
+
+    async function start(config) {
+        if (!window.ndt7 || typeof window.ndt7.discoverServerURLs !== "function") {
+            bridge({
+                type: "error",
+                runId: config && config.runId,
+                message: "The bundled M-Lab runtime is unavailable."
+            });
+            return;
+        }
+
+        cancelled = false;
+        failed = false;
+        finished = false;
+        closeActiveSocket();
+        activeRunId = config.runId;
+        state = createState();
+        postPhase("discoveringServer", "Finding the nearest M-Lab server...");
+
+        var runtimeConfig = {
+            protocol: "wss",
+            userAcceptedDataPolicy: true,
+            metadata: {
+                client_name: config.clientName || "NetFluss",
+                client_version: config.clientVersion || "dev"
+            }
+        };
+
+        var callbacks = {
+            error: function(message) {
+                fail(config, message);
+            },
+            serverDiscovery: function() {
+                postPhase("discoveringServer", "Finding the nearest M-Lab server...");
+            },
+            serverChosen: function(server) {
+                updateServer(server);
+                postPhase("discoveringServer", "Connected to a nearby M-Lab server.");
+            },
+        };
+
+        window.addEventListener("error", function(event) {
+            if (!event || !event.message) {
+                return;
+            }
+            fail(config, event.message);
+        }, { once: true });
+
+        window.addEventListener("unhandledrejection", function(event) {
+            var reason = event && event.reason ? event.reason : "An unexpected M-Lab error occurred.";
+            fail(config, reason && reason.message ? reason.message : reason);
+        }, { once: true });
+
+        try {
+            var urls = await window.ndt7.discoverServerURLs(runtimeConfig, callbacks);
+            if (cancelled || failed || activeRunId !== config.runId) {
+                return;
+            }
+
+            await runDownloadTest(config, urls["///ndt/v7/download"]);
+            if (cancelled || failed || activeRunId !== config.runId) {
+                return;
+            }
+            await runUploadTest(config, urls["///ndt/v7/upload"]);
+            if (cancelled || failed || activeRunId !== config.runId) {
+                return;
+            }
+
+            emitResult(config);
+        } catch (error) {
+            fail(config, error && error.message ? error.message : error);
+        }
+    }
+
+    function cancel() {
+        cancelled = true;
+        closeActiveSocket();
+        activeRunId = null;
+    }
+
+    window.NetFlussSpeedTest = {
+        start: start,
+        cancel: cancel
+    };
+})();
+</script>
+</body>
+</html>
