@@ -1262,6 +1262,87 @@ enum ProcessNetworkSampler {
 
 enum InterfaceSampler {
     static func fetchSamples() -> [InterfaceSample] {
+        let routeSamples = fetchSamplesViaRoutingTable()
+        if !routeSamples.isEmpty {
+            return routeSamples
+        }
+
+        return fetchSamplesViaGetifaddrs()
+    }
+
+    private static func fetchSamplesViaRoutingTable() -> [InterfaceSample] {
+        // getifaddrs(AF_LINK) only exposes `if_data`, whose byte counters are
+        // 32-bit on macOS. Fast LAN transfers can wrap those counters and make
+        // receive/upload rates collapse to zero. NET_RT_IFLIST2 exposes
+        // `if_msghdr2.ifm_data` with 64-bit interface counters.
+        var mib = [
+            Int32(CTL_NET),
+            Int32(PF_ROUTE),
+            0,
+            0,
+            Int32(NET_RT_IFLIST2),
+            0
+        ]
+
+        var length: size_t = 0
+        guard sysctl(&mib, u_int(mib.count), nil, &length, nil, 0) == 0,
+              length > 0 else {
+            return []
+        }
+
+        var buffer = [UInt8](repeating: 0, count: length)
+        let sysctlResult = buffer.withUnsafeMutableBytes { rawBuffer -> Int32 in
+            guard let baseAddress = rawBuffer.baseAddress else { return -1 }
+            return sysctl(&mib, u_int(mib.count), baseAddress, &length, nil, 0)
+        }
+        guard sysctlResult == 0 else { return [] }
+
+        var samples: [InterfaceSample] = []
+        samples.reserveCapacity(16)
+
+        buffer.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return }
+
+            var offset = 0
+            while offset + MemoryLayout<if_msghdr>.size <= length {
+                let messageHeader = baseAddress
+                    .advanced(by: offset)
+                    .assumingMemoryBound(to: if_msghdr.self)
+                    .pointee
+
+                let messageLength = Int(messageHeader.ifm_msglen)
+                guard messageLength > 0, offset + messageLength <= length else { break }
+                defer { offset += messageLength }
+
+                guard messageHeader.ifm_type == UInt8(RTM_IFINFO2),
+                      messageLength >= MemoryLayout<if_msghdr2>.size else {
+                    continue
+                }
+
+                let interfaceMessage = baseAddress
+                    .advanced(by: offset)
+                    .assumingMemoryBound(to: if_msghdr2.self)
+                    .pointee
+
+                guard let name = interfaceName(for: interfaceMessage.ifm_index) else {
+                    continue
+                }
+
+                let sample = InterfaceSample(
+                    name: name,
+                    flags: UInt32(interfaceMessage.ifm_flags),
+                    rxBytes: interfaceMessage.ifm_data.ifi_ibytes,
+                    txBytes: interfaceMessage.ifm_data.ifi_obytes,
+                    baudrate: interfaceMessage.ifm_data.ifi_baudrate
+                )
+                samples.append(sample)
+            }
+        }
+
+        return samples
+    }
+
+    private static func fetchSamplesViaGetifaddrs() -> [InterfaceSample] {
         var samples: [InterfaceSample] = []
         var pointer: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&pointer) == 0, let first = pointer else { return [] }
@@ -1289,6 +1370,18 @@ enum InterfaceSampler {
         }
 
         return samples
+    }
+
+    private static func interfaceName(for index: UInt16) -> String? {
+        var buffer = [CChar](repeating: 0, count: Int(IFNAMSIZ))
+        let resolved = buffer.withUnsafeMutableBufferPointer {
+            if_indextoname(UInt32(index), $0.baseAddress)
+        }
+        guard resolved != nil else { return nil }
+        return buffer.withUnsafeBufferPointer { pointer in
+            guard let baseAddress = pointer.baseAddress else { return "" }
+            return String(cString: baseAddress)
+        }
     }
 
     struct InterfaceInfo: Equatable, Sendable {

@@ -107,7 +107,7 @@ final class AddDNSWindowController {
         panel.styleMask = [.titled, .closable, .nonactivatingPanel]
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = false
-        panel.setContentSize(NSSize(width: 300, height: 200))
+        panel.setContentSize(NSSize(width: 340, height: 270))
         panel.isReleasedWhenClosed = false
         panel.center()
         panel.makeKeyAndOrderFront(nil)
@@ -391,6 +391,8 @@ struct AddDNSPanelView: View {
     @State private var name: String = ""
     @State private var primary: String = ""
     @State private var secondary: String = ""
+    @State private var tertiary: String = ""
+    @State private var quaternary: String = ""
 
     init(editing preset: DNSPreset? = nil,
          onSave: @escaping (DNSPreset) -> Void,
@@ -418,6 +420,10 @@ struct AddDNSPanelView: View {
                     .textFieldStyle(.roundedBorder)
                 TextField("Secondary DNS (optional)", text: $secondary)
                     .textFieldStyle(.roundedBorder)
+                TextField("Tertiary DNS (optional)", text: $tertiary)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Quaternary DNS (optional)", text: $quaternary)
+                    .textFieldStyle(.roundedBorder)
             }
             HStack(spacing: 12) {
                 Button("Cancel", action: onCancel)
@@ -434,16 +440,20 @@ struct AddDNSPanelView: View {
                 name = preset.name
                 primary = preset.servers.first ?? ""
                 secondary = preset.servers.count > 1 ? preset.servers[1] : ""
+                tertiary = preset.servers.count > 2 ? preset.servers[2] : ""
+                quaternary = preset.servers.count > 3 ? preset.servers[3] : ""
             }
         }
     }
 
     private func save() {
         let trimName = name.trimmingCharacters(in: .whitespaces)
-        let trimPrimary = primary.trimmingCharacters(in: .whitespaces)
-        let trimSecondary = secondary.trimmingCharacters(in: .whitespaces)
-        var servers = [trimPrimary]
-        if !trimSecondary.isEmpty { servers.append(trimSecondary) }
+        let servers = [
+            primary.trimmingCharacters(in: .whitespaces),
+            secondary.trimmingCharacters(in: .whitespaces),
+            tertiary.trimmingCharacters(in: .whitespaces),
+            quaternary.trimmingCharacters(in: .whitespaces)
+        ].filter { !$0.isEmpty }
         onSave(DNSPreset(
             id: editingPreset?.id ?? UUID().uuidString,
             name: trimName,
