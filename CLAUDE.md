@@ -23,18 +23,21 @@ The CI workflow (`.github/workflows/release.yml`) handles this automatically on 
 
 ```bash
 swift build -c release --arch arm64 --arch x86_64
-mkdir -p Netfluss.app/Contents/{MacOS,Resources}
-cp .build/apple/Products/Release/Netfluss Netfluss.app/Contents/MacOS/Netfluss
-cp Packaging/Info.plist Netfluss.app/Contents/Info.plist
-cp Packaging/Resources/AppIcon.icns Netfluss.app/Contents/Resources/AppIcon.icns
-cp Packaging/Resources/AppIconDark.icns Netfluss.app/Contents/Resources/AppIconDark.icns
-cp -R Packaging/Resources/SpeedTest Netfluss.app/Contents/Resources/SpeedTest
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.x.x" Netfluss.app/Contents/Info.plist
+mkdir -p NetFluss.app/Contents/{MacOS,Resources,Library/HelperTools,Library/LaunchDaemons}
+cp .build/apple/Products/Release/Netfluss NetFluss.app/Contents/MacOS/NetFluss
+cp .build/apple/Products/Release/NetflussPrivilegedHelper NetFluss.app/Contents/Library/HelperTools/NetflussPrivilegedHelper
+cp Packaging/Info.plist NetFluss.app/Contents/Info.plist
+cp Packaging/LaunchDaemons/com.local.netfluss.privilegedhelper.plist \
+  NetFluss.app/Contents/Library/LaunchDaemons/com.local.netfluss.privilegedhelper.plist
+cp Packaging/Resources/AppIcon.icns NetFluss.app/Contents/Resources/AppIcon.icns
+cp Packaging/Resources/AppIconDark.icns NetFluss.app/Contents/Resources/AppIconDark.icns
+cp -R Packaging/Resources/SpeedTest NetFluss.app/Contents/Resources/SpeedTest
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.x.x" NetFluss.app/Contents/Info.plist
 codesign --force --deep --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
-  --options=runtime --timestamp --entitlements Netfluss.entitlements Netfluss.app
-ditto -c -k --sequesterRsrc --keepParent Netfluss.app Netfluss-1.x.x.zip
+  --options=runtime --timestamp --entitlements Netfluss.entitlements NetFluss.app
+ditto -c -k --sequesterRsrc --keepParent NetFluss.app Netfluss-1.x.x.zip
 xcrun notarytool submit Netfluss-1.x.x.zip --apple-id <id> --password <pwd> --team-id D6P24X5377 --wait
-xcrun stapler staple Netfluss.app
+xcrun stapler staple NetFluss.app
 ```
 
 Signing identity: `Developer ID Application: Rana GmbH (D6P24X5377)`

@@ -68,7 +68,6 @@ final class AppState {
             "customDNSPresets": Data(),
             "hiddenDNSPresets": [],
             "dnsPresetOrder": [],
-            "useTouchID": true,
             "fritzBoxEnabled": false,
             "fritzBoxHost": "",
             "unifiEnabled": false,

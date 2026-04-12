@@ -608,7 +608,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 let joined = servers.joined(separator: " ")
                 command = "/usr/sbin/networksetup -setdnsservers '\(service)' \(joined)"
             }
-            let result = await Self.executeWithAuth(command: command)
+            let result = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers) ??
+                Self.executeWithAuth(command: command)
 
             _ = await MainActor.run { [weak self] in
                 self?.dnsChanging = false
@@ -654,7 +655,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 Self.runSync("/usr/sbin/networksetup", ["-setairportpower", port, "on"])
             case .ethernet:
-                _ = await Self.executeWithAuth(command: "ifconfig \(bsdName) down && sleep 1 && ifconfig \(bsdName) up")
+                _ = await PrivilegedHelperManager.shared.reconnectEthernet(interfaceName: bsdName) ??
+                    Self.executeWithAuth(command: "ifconfig \(bsdName) down && sleep 1 && ifconfig \(bsdName) up")
             case .other:
                 break
             }
@@ -700,9 +702,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
         return nil
     }
 
-    /// Runs a shell command with administrator privileges via the macOS system
-    /// authentication dialog and returns its exit status and output.
-    private nonisolated static func executeWithAuth(command: String) async -> CommandResult {
+    /// Legacy fallback for raw dev runs where the privileged helper is not bundled.
+    private nonisolated static func executeWithAuth(command: String) -> CommandResult {
         let prompt = "Netfluss needs administrator permission to modify network settings."
         let privilegedResult = command.withCString { commandPointer in
             prompt.withCString { promptPointer in
@@ -782,6 +783,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
     private nonisolated static func describePrivilegedCommandFailure(_ result: CommandResult) -> String {
         switch result.terminationStatus {
+        case PrivilegedCommandStatus.helperApprovalRequired:
+            return "Approve the Netfluss helper in System Settings, then try again."
         case Int32(errAuthorizationCanceled):
             return "DNS change was canceled."
         case Int32(errAuthorizationDenied):
@@ -960,7 +963,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     }
 }
 
-private struct CommandResult: Sendable {
+struct CommandResult: Sendable {
     let terminationStatus: Int32
     let stdout: String
     let stderr: String

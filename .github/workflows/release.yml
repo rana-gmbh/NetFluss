@@ -21,8 +21,13 @@ jobs:
         run: |
           mkdir -p NetFluss.app/Contents/MacOS
           mkdir -p NetFluss.app/Contents/Resources
+          mkdir -p NetFluss.app/Contents/Library/HelperTools
+          mkdir -p NetFluss.app/Contents/Library/LaunchDaemons
           cp .build/apple/Products/Release/Netfluss NetFluss.app/Contents/MacOS/NetFluss
+          cp .build/apple/Products/Release/NetflussPrivilegedHelper NetFluss.app/Contents/Library/HelperTools/NetflussPrivilegedHelper
           cp Packaging/Info.plist NetFluss.app/Contents/Info.plist
+          cp Packaging/LaunchDaemons/com.local.netfluss.privilegedhelper.plist \
+            NetFluss.app/Contents/Library/LaunchDaemons/com.local.netfluss.privilegedhelper.plist
           cp Packaging/Resources/AppIcon.icns NetFluss.app/Contents/Resources/AppIcon.icns
           cp Packaging/Resources/AppIconDark.icns NetFluss.app/Contents/Resources/AppIconDark.icns
           cp -R Packaging/Resources/SpeedTest NetFluss.app/Contents/Resources/SpeedTest

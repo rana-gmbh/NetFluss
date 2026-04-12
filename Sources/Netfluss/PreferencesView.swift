@@ -495,7 +495,7 @@ struct PreferencesView: View {
             Section("DNS Switcher") {
                 Toggle("Show DNS switcher in popover", isOn: $showDNSSwitcher)
                 if showDNSSwitcher {
-                    Text("DNS changes and Ethernet reconnects use the macOS system authentication dialog. Depending on your Mac settings, that may allow Touch ID or password authentication.")
+                    Text("DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
 
