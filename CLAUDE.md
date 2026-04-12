@@ -15,6 +15,8 @@ No Xcode project — SPM only (`Package.swift`). Minimum platform: macOS 13.
 
 Open `.build/release/Netfluss` directly or `swift run` (debug build). The app is a `LSUIElement` (menu-bar-only, no Dock icon).
 
+Important: text input and focus can behave differently when running the raw binary (`.build/.../Netfluss`) versus a real bundled `Netfluss.app`. If typing does not work in text fields during local testing, verify the issue with a packaged `.app` before changing UI code.
+
 ## Manual release build (notarized zip)
 
 The CI workflow (`.github/workflows/release.yml`) handles this automatically on tag push. To build locally:

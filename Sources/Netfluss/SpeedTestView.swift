@@ -24,10 +24,11 @@ struct SpeedTestView: View {
     static let preferredWindowWidth: CGFloat = 1040
     static let preferredWindowHeight: CGFloat = 760
     static let minimumWindowHeight: CGFloat = 560
+    private static let headerActionButtonWidth: CGFloat = 120
 
     @EnvironmentObject private var manager: SpeedTestManager
     @AppStorage("speedTestProvider") private var speedTestProviderRaw: String = SpeedTestProvider.mlab.rawValue
-    @State private var isHistoryPresented = false
+    @State private var editingNoteResult: SpeedTestResult?
 
     private let uniformInfoCardHeight: CGFloat = 188
 
@@ -55,14 +56,41 @@ struct SpeedTestView: View {
         }
         .background(AppTheme.system.backgroundColor ?? Color(NSColor.windowBackgroundColor))
         .frame(minWidth: Self.minimumWindowWidth)
-        .sheet(isPresented: $isHistoryPresented) {
-            SpeedTestHistorySheet(history: manager.history)
+        .sheet(
+            isPresented: Binding(
+                get: { manager.isHistoryPresented },
+                set: { isPresented in
+                    if isPresented {
+                        manager.presentHistory()
+                    } else {
+                        manager.dismissHistory()
+                    }
+                }
+            )
+        ) {
+            SpeedTestHistorySheet()
+                .environmentObject(manager)
+        }
+        .sheet(item: $editingNoteResult) { result in
+            SpeedTestNoteEditorSheet(
+                result: result,
+                currentNote: manager.note(for: result.id),
+                onSave: { note in
+                    manager.updateNote(note, for: result.id)
+                    editingNoteResult = nil
+                },
+                onCancel: {
+                    editingNoteResult = nil
+                }
+            )
         }
         .overlay(alignment: .bottomTrailing) {
-            SpeedTestRuntimeHost(webView: manager.runtimeWebView)
-                .frame(width: 1, height: 1)
-                .opacity(0.01)
-                .allowsHitTesting(false)
+            if manager.phase.isRunning {
+                SpeedTestRuntimeHost(webView: manager.runtimeWebView)
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
+                    .allowsHitTesting(false)
+            }
         }
     }
 
@@ -109,16 +137,18 @@ struct SpeedTestView: View {
                         }
                         .buttonStyle(.bordered)
                     } else {
-                        Button("Run Again") {
+                        Button(runButtonTitle) {
                             manager.startWithSelectedProvider()
                         }
                         .buttonStyle(.borderedProminent)
+                        .frame(width: Self.headerActionButtonWidth)
                     }
 
                     Button("History") {
-                        isHistoryPresented = true
+                        manager.presentHistory()
                     }
                     .buttonStyle(.bordered)
+                    .frame(width: Self.headerActionButtonWidth)
                 }
             }
         }
@@ -286,15 +316,25 @@ struct SpeedTestView: View {
                     }
 
                     infoCard(
-                        title: "Next Step",
-                        icon: "arrow.clockwise.circle",
+                        title: "Remember This Test",
+                        icon: "square.and.pencil",
                         tint: .green,
                         fixedHeight: uniformInfoCardHeight
                     ) {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Choose another provider in the selector above if you want to compare a public measurement network against Cloudflare's edge.")
+                            Text("Add a short note so you can remember exactly where you took this measurement later.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
+                            if let note = noteSummary(for: result), !note.isEmpty {
+                                Text(note)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(3)
+                            }
+                            Button(result.note?.isEmpty == false ? "Edit Note" : "Add Note") {
+                                editingNoteResult = result
+                            }
+                            .buttonStyle(.bordered)
                         }
                     }
                 }
@@ -483,6 +523,18 @@ struct SpeedTestView: View {
         return String(format: "%.0f ms", value)
     }
 
+    private var runButtonTitle: String {
+        if manager.result != nil || manager.finishedAt != nil || manager.lastErrorMessage != nil {
+            return "Run Again"
+        }
+        return "Run Test"
+    }
+
+    private func noteSummary(for result: SpeedTestResult) -> String? {
+        let note = manager.note(for: result.id).trimmingCharacters(in: .whitespacesAndNewlines)
+        return note.isEmpty ? nil : note
+    }
+
     private func timestamp(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -546,6 +598,13 @@ private struct SpeedTestRuntimeHost: NSViewRepresentable {
         webView.frame = nsView.bounds
     }
 
+    static func dismantleNSView(_ nsView: NSView, coordinator: ()) {
+        if let window = nsView.window, window.firstResponder === nsView.subviews.first {
+            window.makeFirstResponder(nil)
+        }
+        nsView.subviews.forEach { $0.removeFromSuperview() }
+    }
+
     private func attachWebView(to container: NSView) {
         if webView.superview !== container {
             webView.removeFromSuperview()
@@ -563,8 +622,8 @@ private struct SpeedTestRuntimeHost: NSViewRepresentable {
 
 private struct SpeedTestHistorySheet: View {
     @Environment(\.dismiss) private var dismiss
-
-    let history: [SpeedTestResult]
+    @EnvironmentObject private var manager: SpeedTestManager
+    @State private var editingNoteResult: SpeedTestResult?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -572,7 +631,7 @@ private struct SpeedTestHistorySheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Speed Test History")
                         .font(.system(size: 22, weight: .bold, design: .rounded))
-                    Text("Recent results saved on this Mac.")
+                    Text("Recent results saved on this Mac. Add notes to remember the exact place.")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
@@ -589,14 +648,14 @@ private struct SpeedTestHistorySheet: View {
 
             Divider()
 
-            if history.isEmpty {
+            if manager.history.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 28))
                         .foregroundStyle(.secondary)
                     Text("No speed tests yet")
                         .font(.system(size: 18, weight: .semibold))
-                    Text("Run a speed test and NetFluss will keep the recent results here.")
+                    Text("Run a speed test when you want and NetFluss will keep the recent results here.")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
@@ -607,8 +666,11 @@ private struct SpeedTestHistorySheet: View {
                     Divider()
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(history) { result in
-                                historyRow(result)
+                            ForEach(manager.history) { result in
+                                SpeedTestHistoryRow(result: result) {
+                                    editingNoteResult = result
+                                }
+                                .environmentObject(manager)
                                 Divider()
                             }
                         }
@@ -616,45 +678,141 @@ private struct SpeedTestHistorySheet: View {
                 }
             }
         }
-        .frame(width: 760, height: 380)
+        .frame(width: 980, height: 420)
         .background(Color(NSColor.windowBackgroundColor))
+        .sheet(item: $editingNoteResult) { result in
+            SpeedTestNoteEditorSheet(
+                result: result,
+                currentNote: manager.note(for: result.id),
+                onSave: { note in
+                    manager.updateNote(note, for: result.id)
+                    editingNoteResult = nil
+                },
+                onCancel: {
+                    editingNoteResult = nil
+                }
+            )
+        }
     }
 
     private var historyHeader: some View {
         HStack(spacing: 12) {
-            Text("Date & Time")
-                .frame(width: 180, alignment: .leading)
+            Text("When")
+                .frame(width: 150, alignment: .leading)
             Text("Provider")
-                .frame(width: 110, alignment: .leading)
+                .frame(width: 96, alignment: .leading)
             Text("Download")
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(width: 110, alignment: .trailing)
             Text("Upload")
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(width: 110, alignment: .trailing)
             Text("Latency")
-                .frame(width: 90, alignment: .trailing)
+                .frame(width: 78, alignment: .trailing)
+            Text("Note")
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.system(size: 12, weight: .semibold))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 24)
         .padding(.vertical, 12)
     }
+}
 
-    private func historyRow(_ result: SpeedTestResult) -> some View {
-        HStack(spacing: 12) {
-            Text(timestamp(result.finishedAt))
-                .frame(width: 180, alignment: .leading)
-            Text(result.provider.displayName)
-                .frame(width: 110, alignment: .leading)
-            Text(RateFormatter.formatMbps(result.downloadMbps))
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            Text(RateFormatter.formatMbps(result.uploadMbps))
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            Text(latencyLabel(result.latencyMs))
-                .frame(width: 90, alignment: .trailing)
+private struct SpeedTestNoteEditorSheet: View {
+    let result: SpeedTestResult
+    let currentNote: String
+    let onSave: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var noteText: String = ""
+    @FocusState private var isNoteFieldFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Speed Test Note")
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+            Text(contextLine)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            TextField("Cafe X, back room, hotel Wi-Fi, coworking desk 4…", text: $noteText)
+                .textFieldStyle(.roundedBorder)
+                .focused($isNoteFieldFocused)
+                .onSubmit {
+                    onSave(noteText)
+                }
+            HStack(spacing: 12) {
+                Button("Clear") {
+                    onSave("")
+                }
+                .disabled(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    onSave(noteText)
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+            }
         }
-        .font(.system(size: 13, design: .monospaced))
+        .padding(24)
+        .frame(width: 420)
+        .onAppear {
+            noteText = currentNote
+            DispatchQueue.main.async {
+                isNoteFieldFocused = true
+            }
+        }
+    }
+
+    private var contextLine: String {
+        let when = result.finishedAt.formatted(date: .numeric, time: .shortened)
+        return "\(result.provider.displayName) • \(when)"
+    }
+}
+
+private struct SpeedTestHistoryRow: View {
+    @EnvironmentObject private var manager: SpeedTestManager
+
+    let result: SpeedTestResult
+    let onEditNote: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(compactTimestamp(result.finishedAt))
+                .font(.system(size: 13, design: .monospaced))
+                .frame(width: 150, alignment: .leading)
+            Text(result.provider.displayName)
+                .font(.system(size: 13))
+                .frame(width: 96, alignment: .leading)
+            Text(RateFormatter.formatMbps(result.downloadMbps))
+                .font(.system(size: 13, design: .monospaced))
+                .frame(width: 110, alignment: .trailing)
+            Text(RateFormatter.formatMbps(result.uploadMbps))
+                .font(.system(size: 13, design: .monospaced))
+                .frame(width: 110, alignment: .trailing)
+            Text(latencyLabel(result.latencyMs))
+                .font(.system(size: 13, design: .monospaced))
+                .frame(width: 78, alignment: .trailing)
+            Button {
+                onEditNote()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.pencil")
+                        .foregroundStyle(.secondary)
+                    Text(noteSummary ?? "Add note")
+                        .font(.system(size: 13))
+                        .foregroundStyle(noteSummary == nil ? .secondary : .primary)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
         .padding(.horizontal, 24)
-        .padding(.vertical, 13)
+        .padding(.vertical, 10)
     }
 
     private func latencyLabel(_ value: Double?) -> String {
@@ -665,10 +823,12 @@ private struct SpeedTestHistorySheet: View {
         return String(format: "%.0f ms", value)
     }
 
-    private func timestamp(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+    private func compactTimestamp(_ date: Date) -> String {
+        date.formatted(date: .numeric, time: .shortened)
+    }
+
+    private var noteSummary: String? {
+        let note = manager.note(for: result.id).trimmingCharacters(in: .whitespacesAndNewlines)
+        return note.isEmpty ? nil : note
     }
 }

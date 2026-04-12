@@ -22,7 +22,7 @@ import WebKit
 final class SpeedTestManager: NSObject, ObservableObject, WKNavigationDelegate, WKScriptMessageHandler {
     @Published private(set) var activeProvider: SpeedTestProvider = .mlab
     @Published private(set) var phase: SpeedTestPhase = .idle
-    @Published private(set) var phaseDetail = "Run a speed test from the NetFluss menu bar icon."
+    @Published private(set) var phaseDetail = "Choose a provider and run a speed test when you want."
     @Published private(set) var currentDownloadMbps: Double?
     @Published private(set) var currentUploadMbps: Double?
     @Published private(set) var currentLatencyMs: Double?
@@ -35,6 +35,7 @@ final class SpeedTestManager: NSObject, ObservableObject, WKNavigationDelegate, 
     @Published private(set) var startedAt: Date?
     @Published private(set) var finishedAt: Date?
     @Published private(set) var history: [SpeedTestResult]
+    @Published var isHistoryPresented = false
 
     private struct PendingRun {
         let runID: Int
@@ -83,7 +84,33 @@ final class SpeedTestManager: NSObject, ObservableObject, WKNavigationDelegate, 
     }
 
     func startWithSelectedProvider() {
+        isHistoryPresented = false
         start(provider: selectedProvider, bypassConsent: false)
+    }
+
+    func presentHistory() {
+        isHistoryPresented = true
+    }
+
+    func dismissHistory() {
+        isHistoryPresented = false
+    }
+
+    func note(for resultID: UUID) -> String {
+        history.first(where: { $0.id == resultID })?.note ?? ""
+    }
+
+    func updateNote(_ note: String, for resultID: UUID) {
+        guard let index = history.firstIndex(where: { $0.id == resultID }) else { return }
+
+        let normalizedNote = note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note
+        guard history[index].note != normalizedNote else { return }
+
+        history[index].note = normalizedNote
+        if result?.id == resultID {
+            result?.note = normalizedNote
+        }
+        persistHistory()
     }
 
     func acceptMLabPolicyAndStart() {

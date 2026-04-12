@@ -121,6 +121,7 @@ struct SpeedTestResult: Equatable, Sendable, Codable, Identifiable {
     let jitterMs: Double?
     let serverName: String?
     let serverLocation: String?
+    var note: String?
 
     init(
         id: UUID = UUID(),
@@ -132,7 +133,8 @@ struct SpeedTestResult: Equatable, Sendable, Codable, Identifiable {
         latencyMs: Double?,
         jitterMs: Double?,
         serverName: String?,
-        serverLocation: String?
+        serverLocation: String?,
+        note: String? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -144,5 +146,6 @@ struct SpeedTestResult: Equatable, Sendable, Codable, Identifiable {
         self.jitterMs = jitterMs
         self.serverName = serverName
         self.serverLocation = serverLocation
+        self.note = note
     }
 }

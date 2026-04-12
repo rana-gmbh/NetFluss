@@ -37,16 +37,27 @@ final class AppIconController {
             name: Notification.Name("AppleInterfaceThemeChangedNotification"),
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applicationDidBecomeActive(_:)),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
         updateIcon()
     }
 
     deinit {
         if themeObserverInstalled {
             DistributedNotificationCenter.default().removeObserver(self)
+            NotificationCenter.default.removeObserver(self)
         }
     }
 
     @objc private func systemAppearanceDidChange(_ notification: Notification) {
+        updateIcon()
+    }
+
+    @objc private func applicationDidBecomeActive(_ notification: Notification) {
         updateIcon()
     }
 
@@ -56,7 +67,7 @@ final class AppIconController {
     }
 
     private func preferredIconImage() -> NSImage? {
-        let isDarkMode = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let isDarkMode = prefersDarkIcon()
         let candidates = isDarkMode ? darkIconCandidates() + lightIconCandidates() : lightIconCandidates() + darkIconCandidates()
 
         for url in candidates where FileManager.default.fileExists(atPath: url.path) {
@@ -66,6 +77,15 @@ final class AppIconController {
         }
 
         return nil
+    }
+
+    private func prefersDarkIcon() -> Bool {
+        if let globalDomain = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain),
+           let style = globalDomain["AppleInterfaceStyle"] as? String {
+            return style.caseInsensitiveCompare("Dark") == .orderedSame
+        }
+
+        return NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     }
 
     private func darkIconCandidates() -> [URL] {

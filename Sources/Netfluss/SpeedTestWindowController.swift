@@ -26,7 +26,7 @@ final class SpeedTestWindowController: NSObject, NSWindowDelegate {
     private var manager: SpeedTestManager?
     private var closingWindows: [NSWindow] = []
 
-    func show(manager: SpeedTestManager, startImmediately: Bool = true) {
+    func show(manager: SpeedTestManager, startImmediately: Bool = false, showHistory: Bool = false) {
         NotificationCenter.default.post(name: .closePopover, object: nil)
 
         self.manager = manager
@@ -35,6 +35,11 @@ final class SpeedTestWindowController: NSObject, NSWindowDelegate {
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
             NSApp.activate(ignoringOtherApps: true)
+            if showHistory {
+                manager.presentHistory()
+            } else {
+                manager.dismissHistory()
+            }
             if startImmediately {
                 manager.startWithSelectedProvider()
             }
@@ -76,6 +81,13 @@ final class SpeedTestWindowController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         self.window = window
+        if showHistory {
+            DispatchQueue.main.async {
+                manager.presentHistory()
+            }
+        } else {
+            manager.dismissHistory()
+        }
 
         if startImmediately {
             manager.startWithSelectedProvider()
@@ -88,6 +100,7 @@ final class SpeedTestWindowController: NSObject, NSWindowDelegate {
         if manager?.phase.isRunning == true || manager?.isAwaitingMLabConsent == true {
             manager?.cancel()
         }
+        manager?.dismissHistory()
 
         window = nil
         closingWindows.append(closingWindow)

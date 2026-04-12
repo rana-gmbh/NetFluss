@@ -575,7 +575,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         statisticsItem.target = self
         contextMenu.addItem(statisticsItem)
 
-        let speedTestItem = NSMenuItem(title: "Run Speed Test…", action: #selector(showSpeedTestFromContextMenu(_:)), keyEquivalent: "")
+        let speedTestItem = NSMenuItem(title: "Speed Test…", action: #selector(showSpeedTestFromContextMenu(_:)), keyEquivalent: "")
         speedTestItem.target = self
         contextMenu.addItem(speedTestItem)
 
