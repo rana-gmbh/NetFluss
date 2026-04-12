@@ -190,7 +190,7 @@ struct StatisticsView: View {
         }
         if collectStatistics {
             if collectAppStatistics {
-                let interval = ProcessInfo.processInfo.isLowPowerModeEnabled ? "120 s" : "60 s"
+                let interval = StatisticsManager.appSamplingIntervalDescription
                 return "Adapter statistics are collected continuously while NetFluss runs. App statistics are sampled every \(interval)."
             }
             return "Adapter statistics are being collected. App statistics are currently disabled."

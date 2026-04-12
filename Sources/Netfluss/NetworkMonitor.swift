@@ -15,8 +15,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Netfluss. If not, see <https://www.gnu.org/licenses/>.
 
-import Foundation
 import CoreWLAN
+import AppKit
+import Foundation
 import LocalAuthentication
 import SystemConfiguration
 
@@ -57,7 +58,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var lastExternalIPUpdate: Date?
     private var externalIPInFlight = false
     private var lastExternalIPv6Setting: Bool?
-    private var processSnapshot: [String: (rx: UInt64, tx: UInt64)] = [:]
+    private var processSnapshot: [String: ProcessConnectionSnapshot] = [:]
     private var processSnapshotTime: Date?
     private var topAppsTaskInFlight = false
     private var adapterLastActiveTime: [String: Date] = [:]
@@ -84,7 +85,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
     private static let interfaceInfoRefreshInterval: TimeInterval = 30
     private static let wifiDetailsRefreshInterval: TimeInterval = 15
-    private static let topAppsRefreshInterval: TimeInterval = 3
+    private static let topAppsRefreshInterval: TimeInterval = 5
     private static let addressDetailsRefreshInterval: TimeInterval = 15
     private static let dnsRefreshInterval: TimeInterval = 30
     private static let routerRefreshInterval: TimeInterval = 5
@@ -314,7 +315,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
         // Clean up tracking for adapters no longer returned by getifaddrs
         adapterLastActiveTime = adapterLastActiveTime.filter { currentAdapterIDs.contains($0.key) }
 
-        // Top Apps: every 3 ticks (~3s at 1Hz) while the popover is open.
+        // Top Apps: refresh on a slower cadence because `nettop` is significantly
+        // heavier than `netstat`, but it captures Safari/WebKit traffic reliably.
         if shouldRefreshTopApps {
             lastTopAppsRefresh = now
             updateTopApps()
@@ -370,7 +372,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         Task { [weak self] in
             let sampleTime = Date()
             let snapshot = await Task.detached(priority: .utility) {
-                ProcessNetworkSampler.sample()
+                ProcessNetworkSampler.sampleConnections()
             }.value
 
             guard let self else { return }
@@ -385,8 +387,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
                     // Get all active apps (unlimited) to track recently seen names
                     let allActive = ProcessNetworkSampler.rates(
-                        current: snapshot,
-                        previous: previousSnapshot,
+                        from: ProcessNetworkSampler.appDeltas(current: snapshot, previous: previousSnapshot),
                         elapsed: elapsed,
                         limit: Int.max
                     )
@@ -855,12 +856,40 @@ extension NetworkMonitor: @preconcurrency CWEventDelegate {
 
 // MARK: - Process Network Sampler
 
+struct ProcessConnectionSnapshot: Equatable, Sendable {
+    let id: String
+    let name: String
+    let source: ProcessTrafficSource
+    let downloadBytes: UInt64
+    let uploadBytes: UInt64
+}
+
+enum ProcessTrafficSource: Hashable, Sendable {
+    case processSummary
+    case internetSocket
+    case networkSource
+
+    var countsInitialObservationAsDelta: Bool {
+        switch self {
+        case .processSummary:
+            return false
+        case .internetSocket, .networkSource:
+            return true
+        }
+    }
+}
+
 enum ProcessNetworkSampler {
 
     // PID→name cache: avoids repeated proc_pidpath + filesystem lookups.
     // Cleared every ~10 samples (caller resets via clearNameCache()).
     private static var pidNameCache: [pid_t: String] = [:]
     private static var pidNameCacheAge: UInt64 = 0
+    private static let sampleCondition = NSCondition()
+    private static let snapshotReuseInterval: TimeInterval = 2
+    private static var cachedSnapshot: [String: ProcessConnectionSnapshot] = [:]
+    private static var cachedSnapshotTime: Date?
+    private static var sampleInFlight = false
 
     static func clearNameCacheIfNeeded() {
         pidNameCacheAge &+= 1
@@ -869,24 +898,79 @@ enum ProcessNetworkSampler {
         }
     }
 
-    /// Snapshot: cumulative inet bytes per process name at a point in time.
-    /// Uses `netstat -n -b -v` which exposes per-connection rxbytes/txbytes with process:pid.
-    static func sample() -> [String: (rx: UInt64, tx: UInt64)] {
+    /// Snapshot: cumulative bytes per process at a point in time.
+    /// Primary source is `nettop -P`, which exposes per-process byte totals and
+    /// captures Safari/WebKit traffic more reliably than per-socket `netstat`.
+    /// Falls back to `netstat -n -b -v` if `nettop` is unavailable.
+    static func sampleConnections() -> [String: ProcessConnectionSnapshot] {
         clearNameCacheIfNeeded()
+        while true {
+            sampleCondition.lock()
+            let now = Date()
+            if let cachedSnapshotTime,
+               now.timeIntervalSince(cachedSnapshotTime) < snapshotReuseInterval {
+                let snapshot = cachedSnapshot
+                sampleCondition.unlock()
+                return snapshot
+            }
+            if !sampleInFlight {
+                sampleInFlight = true
+                sampleCondition.unlock()
+                break
+            }
+            sampleCondition.wait()
+            sampleCondition.unlock()
+        }
+
+        var snapshot = sampleConnectionsFromNettop()
+        if snapshot.isEmpty {
+            snapshot = sampleConnectionsFromNetstat()
+        }
+
+        sampleCondition.lock()
+        cachedSnapshot = snapshot
+        cachedSnapshotTime = Date()
+        sampleInFlight = false
+        sampleCondition.broadcast()
+        sampleCondition.unlock()
+
+        return snapshot
+    }
+
+    /// Fallback snapshot: cumulative inet bytes per live socket at a point in time.
+    /// Uses `netstat -n -b -v` which exposes per-connection rxbytes/txbytes with process:pid.
+    private static func sampleConnectionsFromNetstat() -> [String: ProcessConnectionSnapshot] {
         let output = runNetstat()
-        var pidBytes: [pid_t: (rx: UInt64, tx: UInt64)] = [:]
+        var connections: [String: ProcessConnectionSnapshot] = [:]
 
         for line in output.split(separator: "\n") {
             let parts = line.split(separator: " ", omittingEmptySubsequences: true)
             guard parts.count >= 8 else { continue }
-            let isTCP = parts[0].hasPrefix("tcp")
-            let isUDP = parts[0].hasPrefix("udp")
-            guard isTCP || isUDP else { continue }
+            let proto = String(parts[0])
+            let isTCP = proto.hasPrefix("tcp")
+            let isUDP = proto.hasPrefix("udp")
+            let isNetworkSource = proto == "kctl" && parts.last == "com.apple.netsrc"
+            guard isTCP || isUDP || isNetworkSource else { continue }
 
-            // TCP: proto recv-q send-q local foreign STATE rxbytes txbytes ...
-            // UDP: proto recv-q send-q local foreign rxbytes txbytes ...
-            let rxIndex = isTCP ? 6 : 5
-            let txIndex = isTCP ? 7 : 6
+            // TCP:  proto recv-q send-q local foreign STATE rxbytes txbytes ...
+            // UDP:  proto recv-q send-q local foreign rxbytes txbytes ...
+            // KCTL: proto recv-q send-q rxbytes txbytes rhiwat shiwat process:pid ... unit id service
+            let rxIndex: Int
+            let txIndex: Int
+            let source: ProcessTrafficSource
+            if isTCP {
+                rxIndex = 6
+                txIndex = 7
+                source = .internetSocket
+            } else if isUDP {
+                rxIndex = 5
+                txIndex = 6
+                source = .internetSocket
+            } else {
+                rxIndex = 3
+                txIndex = 4
+                source = .networkSource
+            }
             guard txIndex < parts.count,
                   let rx = UInt64(parts[rxIndex]),
                   let tx = UInt64(parts[txIndex]),
@@ -911,13 +995,6 @@ enum ProcessNetworkSampler {
             }
             guard let pid, pid > 0 else { continue }
 
-            let prev = pidBytes[pid] ?? (rx: 0, tx: 0)
-            pidBytes[pid] = (rx: prev.rx + rx, tx: prev.tx + tx)
-        }
-
-        // Resolve PIDs to clean display names via proc_pidpath (cached)
-        var result: [String: (rx: UInt64, tx: UInt64)] = [:]
-        for (pid, bytes) in pidBytes {
             let name: String
             if let cached = pidNameCache[pid] {
                 name = cached
@@ -926,26 +1003,139 @@ enum ProcessNetworkSampler {
                 pidNameCache[pid] = resolved
                 name = resolved
             }
-            let prev = result[name] ?? (rx: 0, tx: 0)
-            result[name] = (rx: prev.rx + bytes.rx, tx: prev.tx + bytes.tx)
+
+            let connectionID: String
+            if isNetworkSource, parts.count >= 19 {
+                connectionID = [
+                    proto,
+                    String(pid),
+                    String(parts[16]),
+                    String(parts[17]),
+                    String(parts[18])
+                ].joined(separator: "|")
+            } else {
+                connectionID = [
+                    proto,
+                    String(parts[3]),
+                    String(parts[4]),
+                    String(pid)
+                ].joined(separator: "|")
+            }
+
+            connections[connectionID] = ProcessConnectionSnapshot(
+                id: connectionID,
+                name: name,
+                source: source,
+                downloadBytes: rx,
+                uploadBytes: tx
+            )
         }
-        return result
+        return connections
     }
 
-    /// Convert two snapshots into per-second rates, sorted by total traffic.
-    static func rates(current: [String: (rx: UInt64, tx: UInt64)],
-                      previous: [String: (rx: UInt64, tx: UInt64)],
-                      elapsed: Double,
-                      limit: Int) -> [AppTraffic] {
+    private static func sampleConnectionsFromNettop() -> [String: ProcessConnectionSnapshot] {
+        let output = runNettop()
+        var connections: [String: ProcessConnectionSnapshot] = [:]
+
+        for line in output.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: ",", omittingEmptySubsequences: false)
+            guard parts.count >= 3 else { continue }
+
+            let rawIdentifier = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !rawIdentifier.isEmpty else { continue } // CSV header row
+            guard let separatorIndex = rawIdentifier.lastIndex(of: ".") else { continue }
+
+            let pidSuffix = rawIdentifier[rawIdentifier.index(after: separatorIndex)...]
+            guard let pid = Int32(pidSuffix), pid > 0 else { continue }
+
+            let rawDownload = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawUpload = String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let downloadBytes = UInt64(rawDownload),
+                  let uploadBytes = UInt64(rawUpload),
+                  downloadBytes > 0 || uploadBytes > 0 else { continue }
+
+            let name: String
+            if let cached = pidNameCache[pid] {
+                name = cached
+            } else {
+                let resolved = processName(for: pid) ?? "PID \(pid)"
+                pidNameCache[pid] = resolved
+                name = resolved
+            }
+
+            let id = String(pid)
+            connections[id] = ProcessConnectionSnapshot(
+                id: id,
+                name: name,
+                source: .processSummary,
+                downloadBytes: downloadBytes,
+                uploadBytes: uploadBytes
+            )
+        }
+
+        return connections
+    }
+
+    /// Aggregate per-connection deltas back to app names.
+    static func appDeltas(
+        current: [String: ProcessConnectionSnapshot],
+        previous: [String: ProcessConnectionSnapshot]
+    ) -> [String: (rx: UInt64, tx: UInt64)] {
+        var totals: [String: [ProcessTrafficSource: (rx: UInt64, tx: UInt64)]] = [:]
+
+        for connection in current.values {
+            let previousConnection = previous[connection.id]
+            let rxDelta: UInt64
+            let txDelta: UInt64
+            if let previousConnection {
+                rxDelta = delta(current: connection.downloadBytes, previous: previousConnection.downloadBytes)
+                txDelta = delta(current: connection.uploadBytes, previous: previousConnection.uploadBytes)
+            } else if connection.source.countsInitialObservationAsDelta {
+                rxDelta = connection.downloadBytes
+                txDelta = connection.uploadBytes
+            } else {
+                continue
+            }
+            guard rxDelta > 0 || txDelta > 0 else { continue }
+
+            var sourceTotals = totals[connection.name] ?? [:]
+            let existing = sourceTotals[connection.source] ?? (rx: 0, tx: 0)
+            sourceTotals[connection.source] = (
+                rx: existing.rx + rxDelta,
+                tx: existing.tx + txDelta
+            )
+            totals[connection.name] = sourceTotals
+        }
+
+        var selectedTotals: [String: (rx: UInt64, tx: UInt64)] = [:]
+        selectedTotals.reserveCapacity(totals.count)
+
+        for (name, sourceTotals) in totals {
+            if let processSummaryTotals = sourceTotals[.processSummary] {
+                selectedTotals[name] = processSummaryTotals
+                continue
+            }
+            let socketTotals = sourceTotals[.internetSocket] ?? (rx: 0, tx: 0)
+            let networkSourceTotals = sourceTotals[.networkSource] ?? (rx: 0, tx: 0)
+            let socketBytes = socketTotals.rx + socketTotals.tx
+            let networkSourceBytes = networkSourceTotals.rx + networkSourceTotals.tx
+            selectedTotals[name] = networkSourceBytes > socketBytes ? networkSourceTotals : socketTotals
+        }
+
+        return selectedTotals
+    }
+
+    /// Convert app delta totals into per-second rates, sorted by total traffic.
+    static func rates(
+        from deltas: [String: (rx: UInt64, tx: UInt64)],
+        elapsed: Double,
+        limit: Int
+    ) -> [AppTraffic] {
         var apps: [AppTraffic] = []
 
-        for (name, curr) in current {
-            let prev = previous[name] ?? (rx: 0, tx: 0)
-            // Guard against counter reset (connection closed/reopened)
-            let rxDelta = curr.rx >= prev.rx ? curr.rx - prev.rx : curr.rx
-            let txDelta = curr.tx >= prev.tx ? curr.tx - prev.tx : curr.tx
-            let rxRate = Double(rxDelta) / elapsed
-            let txRate = Double(txDelta) / elapsed
+        for (name, deltaTotals) in deltas {
+            let rxRate = Double(deltaTotals.rx) / elapsed
+            let txRate = Double(deltaTotals.tx) / elapsed
             guard rxRate > 0 || txRate > 0 else { continue }
             apps.append(AppTraffic(id: name, name: name, rxRateBps: rxRate, txRateBps: txRate))
         }
@@ -954,6 +1144,11 @@ enum ProcessNetworkSampler {
             .sorted { ($0.rxRateBps + $0.txRateBps) > ($1.rxRateBps + $1.txRateBps) }
             .prefix(limit)
             .map { $0 }
+    }
+
+    private static func delta(current: UInt64, previous: UInt64?) -> UInt64 {
+        guard let previous else { return current }
+        return current >= previous ? current - previous : current
     }
 
     // MARK: - Helpers
@@ -972,6 +1167,19 @@ enum ProcessNetworkSampler {
         return String(data: data, encoding: .utf8) ?? ""
     }
 
+    private static func runNettop() -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
+        process.arguments = ["-P", "-x", "-L", "1", "-J", "bytes_in,bytes_out"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        guard (try? process.run()) != nil else { return "" }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
     /// Best-effort process name: tries full path (for clean app names), falls back to proc_name.
     /// Uses a shared buffer to avoid per-call heap allocations.
     private static var pathBuffer = [CChar](repeating: 0, count: Int(PATH_MAX) * 4)
@@ -982,19 +1190,19 @@ enum ProcessNetworkSampler {
         }
         if pathLen > 0 {
             let path = pathBuffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
-            // Strip .app bundle path: ".../Safari.app/Contents/MacOS/Safari" → "Safari"
-            if let appRange = path.range(of: ".app/", options: .caseInsensitive) {
-                let appPath = String(path[path.startIndex..<appRange.lowerBound])
-                if let lastSlash = appPath.lastIndex(of: "/") {
-                    let name = String(appPath[appPath.index(after: lastSlash)...])
-                    if !name.isEmpty { return name }
-                }
-                let name = appPath.isEmpty ? "" : (appPath as NSString).lastPathComponent
-                if !name.isEmpty { return name }
+            if let appBundleName = enclosingAppBundleName(from: path) {
+                return normalizedProcessName(appBundleName, path: path)
+            }
+            if let appName = runningApplicationName(for: pid) {
+                return normalizedProcessName(appName, path: path)
             }
             let url = URL(fileURLWithPath: path)
             let name = url.deletingPathExtension().lastPathComponent
-            if !name.isEmpty { return name }
+            if !name.isEmpty { return normalizedProcessName(name, path: path) }
+        }
+
+        if let appName = runningApplicationName(for: pid) {
+            return normalizedProcessName(appName, path: nil)
         }
 
         var nameBuf = [CChar](repeating: 0, count: 1024)
@@ -1002,7 +1210,51 @@ enum ProcessNetworkSampler {
             proc_name(pid, $0.baseAddress, UInt32($0.count))
         }
         guard nameLen > 0 else { return nil }
-        return nameBuf.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+        return nameBuf.withUnsafeBufferPointer { normalizedProcessName(String(cString: $0.baseAddress!), path: nil) }
+    }
+
+    private static func enclosingAppBundleName(from path: String) -> String? {
+        // Strip .app bundle path: ".../Safari.app/Contents/MacOS/Safari" → "Safari"
+        guard let appRange = path.range(of: ".app/", options: .caseInsensitive) else { return nil }
+        let appPath = String(path[path.startIndex..<appRange.lowerBound])
+        if let lastSlash = appPath.lastIndex(of: "/") {
+            let name = String(appPath[appPath.index(after: lastSlash)...])
+            if !name.isEmpty { return name }
+        }
+        let name = appPath.isEmpty ? "" : (appPath as NSString).lastPathComponent
+        return name.isEmpty ? nil : name
+    }
+
+    private static func runningApplicationName(for pid: pid_t) -> String? {
+        guard let app = NSRunningApplication(processIdentifier: pid),
+              var name = app.localizedName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty
+        else {
+            return nil
+        }
+
+        for suffix in [" Networking", " Web Content", " GPU"] where name.hasSuffix(suffix) {
+            name.removeLast(suffix.count)
+            break
+        }
+
+        return name.isEmpty ? nil : name
+    }
+
+    private static func normalizedProcessName(_ rawName: String, path: String?) -> String {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return rawName }
+
+        if name == "Safari" || name.hasPrefix("Safari ") || name.hasPrefix("com.apple.Safari.") {
+            return "Safari"
+        }
+
+        if let path,
+           path.contains("/SafariSafeBrowsing.framework/") || path.contains("/SafariShared.framework/") {
+            return "Safari"
+        }
+
+        return name
     }
 }
 

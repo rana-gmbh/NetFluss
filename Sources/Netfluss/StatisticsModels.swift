@@ -34,9 +34,12 @@ struct StatisticsTrafficAmounts: Codable, Equatable, Sendable {
 }
 
 struct StatisticsArchive: Codable, Sendable {
+    static let currentAppTrafficSchemaVersion = 2
+
     var createdAt: Date
     var lastAdapterSampleAt: Date?
     var lastAppSampleAt: Date?
+    var appTrafficSchemaVersion: Int
     var adapterDisplayNames: [String: String]
     var adapterMinute: [String: [String: StatisticsTrafficAmounts]]
     var adapterHourly: [String: [String: StatisticsTrafficAmounts]]
@@ -49,6 +52,7 @@ struct StatisticsArchive: Codable, Sendable {
         createdAt: Date(),
         lastAdapterSampleAt: nil,
         lastAppSampleAt: nil,
+        appTrafficSchemaVersion: currentAppTrafficSchemaVersion,
         adapterDisplayNames: [:],
         adapterMinute: [:],
         adapterHourly: [:],
@@ -62,6 +66,7 @@ struct StatisticsArchive: Codable, Sendable {
         case createdAt
         case lastAdapterSampleAt
         case lastAppSampleAt
+        case appTrafficSchemaVersion
         case adapterDisplayNames
         case adapterMinute
         case adapterHourly
@@ -75,6 +80,7 @@ struct StatisticsArchive: Codable, Sendable {
         createdAt: Date,
         lastAdapterSampleAt: Date?,
         lastAppSampleAt: Date?,
+        appTrafficSchemaVersion: Int = Self.currentAppTrafficSchemaVersion,
         adapterDisplayNames: [String: String],
         adapterMinute: [String: [String: StatisticsTrafficAmounts]],
         adapterHourly: [String: [String: StatisticsTrafficAmounts]],
@@ -86,6 +92,7 @@ struct StatisticsArchive: Codable, Sendable {
         self.createdAt = createdAt
         self.lastAdapterSampleAt = lastAdapterSampleAt
         self.lastAppSampleAt = lastAppSampleAt
+        self.appTrafficSchemaVersion = appTrafficSchemaVersion
         self.adapterDisplayNames = adapterDisplayNames
         self.adapterMinute = adapterMinute
         self.adapterHourly = adapterHourly
@@ -100,6 +107,7 @@ struct StatisticsArchive: Codable, Sendable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         lastAdapterSampleAt = try container.decodeIfPresent(Date.self, forKey: .lastAdapterSampleAt)
         lastAppSampleAt = try container.decodeIfPresent(Date.self, forKey: .lastAppSampleAt)
+        appTrafficSchemaVersion = try container.decodeIfPresent(Int.self, forKey: .appTrafficSchemaVersion) ?? 0
         adapterDisplayNames = try container.decodeIfPresent([String: String].self, forKey: .adapterDisplayNames) ?? [:]
         adapterMinute = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .adapterMinute) ?? [:]
         adapterHourly = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .adapterHourly) ?? [:]

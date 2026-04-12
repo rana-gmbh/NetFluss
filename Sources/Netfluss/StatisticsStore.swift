@@ -33,7 +33,9 @@ actor StatisticsStore {
 
     init(url: URL) {
         self.url = url
-        self.archive = Self.loadArchive(from: url)
+        let loaded = Self.loadArchive(from: url)
+        self.archive = loaded.archive
+        self.hasPendingChanges = loaded.didMigrate
     }
 
     init(archive: StatisticsArchive) {
@@ -412,14 +414,30 @@ actor StatisticsStore {
         }
     }
 
-    private static func loadArchive(from url: URL) -> StatisticsArchive {
+    private static func loadArchive(from url: URL) -> (archive: StatisticsArchive, didMigrate: Bool) {
         guard
             let data = try? Data(contentsOf: url),
             let archive = try? decodedArchive(from: data)
         else {
-            return .empty
+            return (.empty, false)
         }
-        return archive
+        return migrateArchiveIfNeeded(archive)
+    }
+
+    private static func migrateArchiveIfNeeded(_ archive: StatisticsArchive) -> (archive: StatisticsArchive, didMigrate: Bool) {
+        var archive = archive
+        var didMigrate = false
+
+        if archive.appTrafficSchemaVersion < StatisticsArchive.currentAppTrafficSchemaVersion {
+            archive.appMinute = [:]
+            archive.appHourly = [:]
+            archive.appDaily = [:]
+            archive.lastAppSampleAt = nil
+            archive.appTrafficSchemaVersion = StatisticsArchive.currentAppTrafficSchemaVersion
+            didMigrate = true
+        }
+
+        return (archive, didMigrate)
     }
 
     private static func decodedArchive(from data: Data) throws -> StatisticsArchive {

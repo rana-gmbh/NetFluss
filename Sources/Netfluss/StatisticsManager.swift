@@ -20,6 +20,11 @@ import Foundation
 
 @MainActor
 final class StatisticsManager: ObservableObject {
+    private enum Constants {
+        static let appSamplingInterval: TimeInterval = 5
+        static let lowPowerAppSamplingInterval: TimeInterval = 10
+    }
+
     @Published private(set) var report: StatisticsReport?
     @Published private(set) var isLoading = false
     @Published private(set) var isShowingSampleData = false
@@ -29,7 +34,7 @@ final class StatisticsManager: ObservableObject {
     private var sampleStore: StatisticsStore?
     private var cancellables: Set<AnyCancellable> = []
     private var previousAdapterSnapshot: [String: (downloadBytes: UInt64, uploadBytes: UInt64)] = [:]
-    private var previousAppSnapshot: [String: (downloadBytes: UInt64, uploadBytes: UInt64)] = [:]
+    private var previousAppSnapshot: [String: ProcessConnectionSnapshot] = [:]
     private var previousAppSampleTime: Date?
     private let appSamplingQueue = DispatchQueue(label: "com.local.netfluss.statistics.apps", qos: .utility)
     private var appSamplingTimer: DispatchSourceTimer?
@@ -165,7 +170,9 @@ final class StatisticsManager: ObservableObject {
         guard appSamplingTimer == nil else { return }
 
         let timer = DispatchSource.makeTimerSource(queue: appSamplingQueue)
-        let interval = ProcessInfo.processInfo.isLowPowerModeEnabled ? 120.0 : 60.0
+        let interval = ProcessInfo.processInfo.isLowPowerModeEnabled
+            ? Constants.lowPowerAppSamplingInterval
+            : Constants.appSamplingInterval
         let leeway = DispatchTimeInterval.seconds(Int(interval / 6))
         timer.schedule(deadline: .now() + 5.0, repeating: interval, leeway: leeway)
         timer.setEventHandler { [weak self] in
@@ -195,27 +202,25 @@ final class StatisticsManager: ObservableObject {
         Task { [weak self] in
             let sampleTime = Date()
             let snapshot = await Task.detached(priority: .utility) {
-                ProcessNetworkSampler.sample()
+                ProcessNetworkSampler.sampleConnections()
             }.value
 
             guard let self else { return }
             self.appSamplingInFlight = false
             guard self.appStatisticsEnabled else {
-                self.previousAppSnapshot = snapshot.mapValues { (downloadBytes: $0.rx, uploadBytes: $0.tx) }
+                self.previousAppSnapshot = snapshot
                 self.previousAppSampleTime = sampleTime
                 return
             }
 
             if let previousTime, !previousSnapshot.isEmpty, sampleTime.timeIntervalSince(previousTime) >= 1 {
-                let deltas = snapshot.compactMap { name, current -> StatisticsAppDelta? in
-                    let previous = previousSnapshot[name]
-                    let downloadDelta = self.delta(current: current.rx, previous: previous?.downloadBytes)
-                    let uploadDelta = self.delta(current: current.tx, previous: previous?.uploadBytes)
-                    guard downloadDelta > 0 || uploadDelta > 0 else { return nil }
+                let deltas = ProcessNetworkSampler.appDeltas(current: snapshot, previous: previousSnapshot).compactMap {
+                    name, totals -> StatisticsAppDelta? in
+                    guard totals.rx > 0 || totals.tx > 0 else { return nil }
                     return StatisticsAppDelta(
                         name: name,
-                        downloadBytes: downloadDelta,
-                        uploadBytes: uploadDelta
+                        downloadBytes: totals.rx,
+                        uploadBytes: totals.tx
                     )
                 }
 
@@ -226,7 +231,7 @@ final class StatisticsManager: ObservableObject {
                 }
             }
 
-            self.previousAppSnapshot = snapshot.mapValues { (downloadBytes: $0.rx, uploadBytes: $0.tx) }
+            self.previousAppSnapshot = snapshot
             self.previousAppSampleTime = sampleTime
         }
     }
@@ -256,6 +261,13 @@ final class StatisticsManager: ObservableObject {
             return [:]
         }
         return names
+    }
+
+    static var appSamplingIntervalDescription: String {
+        let interval = ProcessInfo.processInfo.isLowPowerModeEnabled
+            ? Constants.lowPowerAppSamplingInterval
+            : Constants.appSamplingInterval
+        return "\(Int(interval)) s"
     }
 
     private static var sampleDataEnabledForLaunch: Bool {
