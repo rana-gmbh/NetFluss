@@ -18,7 +18,8 @@
 import CoreWLAN
 import AppKit
 import Foundation
-import LocalAuthentication
+import PrivilegedExecution
+import Security
 import SystemConfiguration
 
 @MainActor
@@ -36,6 +37,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     @Published var currentDNSServers: [String] = []
     @Published var activeDNSPresetID: String? = nil
     @Published var dnsChanging = false
+    @Published var dnsError: String?
     @Published var fritzBox: FritzBoxBandwidth?
     @Published var fritzBoxMaxDown: UInt64 = 0
     @Published var fritzBoxMaxUp: UInt64 = 0
@@ -580,15 +582,22 @@ final class NetworkMonitor: NSObject, ObservableObject {
         // Validate server addresses: only allow IP-safe characters
         let validChars = CharacterSet(charactersIn: "0123456789abcdefABCDEF.:[]")
         for s in preset.servers {
-            guard s.unicodeScalars.allSatisfy({ validChars.contains($0) }) else { return }
+            guard s.unicodeScalars.allSatisfy({ validChars.contains($0) }) else {
+                dnsError = "Invalid DNS server address."
+                return
+            }
         }
         dnsChanging = true
+        dnsError = nil
 
         let servers = preset.servers
         Task.detached(priority: .userInitiated) { [weak self] in
             let service = Self.primaryNetworkService()
             guard !service.isEmpty else {
-                _ = await MainActor.run { [weak self] in self?.dnsChanging = false }
+                _ = await MainActor.run { [weak self] in
+                    self?.dnsChanging = false
+                    self?.dnsError = "No active network service found."
+                }
                 return
             }
 
@@ -599,10 +608,11 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 let joined = servers.joined(separator: " ")
                 command = "/usr/sbin/networksetup -setdnsservers '\(service)' \(joined)"
             }
-            await Self.executeWithAuth(command: command)
+            let result = await Self.executeWithAuth(command: command)
 
             _ = await MainActor.run { [weak self] in
                 self?.dnsChanging = false
+                self?.dnsError = result.success ? nil : Self.describePrivilegedCommandFailure(result)
                 self?.updateCurrentDNS()
             }
         }
@@ -611,9 +621,19 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private nonisolated static func primaryNetworkService(store: SCDynamicStore? = nil) -> String {
         let s = store ?? SCDynamicStoreCreate(nil, "NetFluss.DNS" as CFString, nil, nil)
         let key = SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, kSCEntNetIPv4)
-        guard let dict = SCDynamicStoreCopyValue(s, key) as? [String: Any],
-              let primaryInterface = dict["PrimaryInterface"] as? String else { return "" }
-        return hardwarePortName(for: primaryInterface)
+        guard let dict = SCDynamicStoreCopyValue(s, key) as? [String: Any] else { return "" }
+
+        if let primaryServiceID = dict["PrimaryService"] as? String,
+           let serviceName = networkServiceName(for: primaryServiceID),
+           !serviceName.isEmpty {
+            return serviceName
+        }
+
+        if let primaryInterface = dict["PrimaryInterface"] as? String {
+            return hardwarePortName(for: primaryInterface)
+        }
+
+        return ""
     }
 
     // MARK: - Reconnect
@@ -634,7 +654,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 Self.runSync("/usr/sbin/networksetup", ["-setairportpower", port, "on"])
             case .ethernet:
-                await Self.executeWithAuth(command: "ifconfig \(bsdName) down && sleep 1 && ifconfig \(bsdName) up")
+                _ = await Self.executeWithAuth(command: "ifconfig \(bsdName) down && sleep 1 && ifconfig \(bsdName) up")
             case .other:
                 break
             }
@@ -659,35 +679,66 @@ final class NetworkMonitor: NSObject, ObservableObject {
         return bsdName
     }
 
-    /// Runs a shell command with authentication. Uses TouchID when available and
-    /// enabled in preferences; falls back to the AppleScript admin-password dialog.
-    private nonisolated static func executeWithAuth(command: String) async {
-        let useTouchID = UserDefaults.standard.bool(forKey: "useTouchID")
+    private nonisolated static func networkServiceName(for serviceID: String) -> String? {
+        guard let preferences = SCPreferencesCreate(nil, "NetFluss.DNS" as CFString, nil),
+              let services = SCNetworkServiceCopyAll(preferences) as? [SCNetworkService] else {
+            return nil
+        }
 
-        if useTouchID {
-            let context = LAContext()
-            context.localizedReason = "NetFluss needs to modify network settings"
+        for service in services {
+            guard let currentServiceID = SCNetworkServiceGetServiceID(service) as String?,
+                  currentServiceID == serviceID else {
+                continue
+            }
 
-            var error: NSError?
-            if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) {
-                do {
-                    let success = try await context.evaluatePolicy(
-                        .deviceOwnerAuthentication,
-                        localizedReason: "NetFluss needs to modify network settings"
-                    )
-                    if success {
-                        runSync("/bin/bash", ["-c", command])
-                        return
-                    }
-                } catch {
-                    // Authentication failed or was cancelled — fall through to AppleScript
-                }
+            if let name = SCNetworkServiceGetName(service) as String?,
+               !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return name
             }
         }
 
-        // Fallback: AppleScript with administrator privileges
-        let script = "do shell script \"\(command)\" with administrator privileges"
-        runSync("/usr/bin/osascript", ["-e", script])
+        return nil
+    }
+
+    /// Runs a shell command with administrator privileges via the macOS system
+    /// authentication dialog and returns its exit status and output.
+    private nonisolated static func executeWithAuth(command: String) async -> CommandResult {
+        let prompt = "Netfluss needs administrator permission to modify network settings."
+        let privilegedResult = command.withCString { commandPointer in
+            prompt.withCString { promptPointer in
+                NetflussExecutePrivilegedCommand(commandPointer, promptPointer)
+            }
+        }
+
+        let output: String
+        if let outputPointer = privilegedResult.output {
+            output = String(cString: outputPointer)
+        } else {
+            output = ""
+        }
+        NetflussFreePrivilegedCommandResult(privilegedResult)
+
+        if privilegedResult.authorizationStatus == Int32(errAuthorizationSuccess) {
+            return CommandResult(
+                terminationStatus: privilegedResult.commandStatus,
+                stdout: privilegedResult.commandStatus == 0 ? output : "",
+                stderr: privilegedResult.commandStatus == 0 ? "" : output
+            )
+        }
+
+        if shouldFallbackToAppleScript(for: privilegedResult.authorizationStatus) {
+            let escapedCommand = command
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            let script = "do shell script \"\(escapedCommand)\" with administrator privileges"
+            return runSyncResult("/usr/bin/osascript", ["-e", script])
+        }
+
+        return CommandResult(
+            terminationStatus: privilegedResult.authorizationStatus,
+            stdout: "",
+            stderr: output
+        )
     }
 
     private nonisolated static func runSync(_ path: String, _ args: [String]) {
@@ -698,6 +749,83 @@ final class NetworkMonitor: NSObject, ObservableObject {
         p.standardError = Pipe()
         try? p.run()
         p.waitUntilExit()
+    }
+
+    private nonisolated static func runSyncResult(_ path: String, _ args: [String]) -> CommandResult {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = args
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        guard (try? process.run()) != nil else {
+            return CommandResult(
+                terminationStatus: -1,
+                stdout: "",
+                stderr: "Failed to launch \(path)."
+            )
+        }
+
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        return CommandResult(
+            terminationStatus: process.terminationStatus,
+            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
+            stderr: String(data: stderrData, encoding: .utf8) ?? ""
+        )
+    }
+
+    private nonisolated static func describePrivilegedCommandFailure(_ result: CommandResult) -> String {
+        switch result.terminationStatus {
+        case Int32(errAuthorizationCanceled):
+            return "DNS change was canceled."
+        case Int32(errAuthorizationDenied):
+            return "Administrator permission was denied."
+        case Int32(errAuthorizationInteractionNotAllowed):
+            return "Administrator authentication is not available right now."
+        case Int32(errAuthorizationToolExecuteFailure):
+            return "The privileged helper could not be started."
+        default:
+            break
+        }
+
+        let combined = [result.stderr, result.stdout]
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if combined.localizedCaseInsensitiveContains("User canceled") {
+            return "DNS change was canceled."
+        }
+        if combined.localizedCaseInsensitiveContains("privilege") ||
+            combined.localizedCaseInsensitiveContains("not authorized") {
+            return "Administrator permission was not granted."
+        }
+        if combined.localizedCaseInsensitiveContains("not a recognized network service") {
+            return "The active network service could not be identified."
+        }
+
+        if let firstLine = combined
+            .split(whereSeparator: \.isNewline)
+            .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .first(where: { !$0.isEmpty }) {
+            return firstLine
+        }
+
+        return "DNS change failed."
+    }
+
+    private nonisolated static func shouldFallbackToAppleScript(for authorizationStatus: Int32) -> Bool {
+        switch authorizationStatus {
+        case Int32(errAuthorizationCanceled), Int32(errAuthorizationDenied), Int32(errAuthorizationInteractionNotAllowed):
+            return false
+        default:
+            return true
+        }
     }
 
     // MARK: - Fritz!Box
@@ -828,17 +956,17 @@ final class NetworkMonitor: NSObject, ObservableObject {
     }
 
     private nonisolated static func runSyncOutput(_ path: String, _ args: [String]) -> String {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: path)
-        p.arguments = args
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = Pipe()
-        guard (try? p.run()) != nil else { return "" }
-        // Read before waitUntilExit to avoid pipe-buffer deadlock.
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        return String(data: data, encoding: .utf8) ?? ""
+        runSyncResult(path, args).stdout
+    }
+}
+
+private struct CommandResult: Sendable {
+    let terminationStatus: Int32
+    let stdout: String
+    let stderr: String
+
+    var success: Bool {
+        terminationStatus == 0
     }
 }
 

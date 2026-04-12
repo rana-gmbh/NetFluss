@@ -1215,8 +1215,22 @@ struct DNSSwitcherSection: View {
                 }
             }
             .padding(.horizontal, 8)
-            .padding(.bottom, 8)
+
+            if let dnsError = monitor.dnsError, !dnsError.isEmpty {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                    Text(dnsError)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+            }
         }
+        .padding(.bottom, 8)
     }
 }
 

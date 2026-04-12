@@ -202,7 +202,6 @@ struct PreferencesView: View {
     @AppStorage("collectAppStatistics") private var collectAppStatistics: Bool = true
     @AppStorage("externalIPv6") private var externalIPv6: Bool = false
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
-    @AppStorage("useTouchID") private var useTouchID: Bool = true
     @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
     @AppStorage("fritzBoxHost") private var fritzBoxHost: String = ""
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
@@ -496,8 +495,7 @@ struct PreferencesView: View {
             Section("DNS Switcher") {
                 Toggle("Show DNS switcher in popover", isOn: $showDNSSwitcher)
                 if showDNSSwitcher {
-                    Toggle("Use Touch ID for authentication", isOn: $useTouchID)
-                    Text("When enabled, Touch ID is used to authenticate DNS changes and Ethernet reconnects. Falls back to admin password if Touch ID is unavailable.")
+                    Text("DNS changes and Ethernet reconnects use the macOS system authentication dialog. Depending on your Mac settings, that may allow Touch ID or password authentication.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
 
