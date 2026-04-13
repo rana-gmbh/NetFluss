@@ -80,7 +80,16 @@ jobs:
       - name: Staple
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          xcrun stapler staple NetFluss.app
+          for attempt in 1 2 3 4 5 6; do
+            if xcrun stapler staple NetFluss.app; then
+              break
+            fi
+            if [ "$attempt" -eq 6 ]; then
+              exit 1
+            fi
+            sleep 20
+          done
+          xcrun stapler validate NetFluss.app
           rm "NetFluss-${VERSION}.zip"
           ditto -c -k --sequesterRsrc --keepParent NetFluss.app "NetFluss-${VERSION}.zip"
 
