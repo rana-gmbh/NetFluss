@@ -27,8 +27,10 @@ struct FritzBoxBandwidth: Equatable, Sendable {
 }
 
 enum FritzBoxError: Error {
+    case invalidHost
     case invalidURL
-    case requestFailed
+    case requestFailed(statusCode: Int?)
+    case transport(description: String)
     case parseError
 }
 
@@ -38,7 +40,7 @@ enum FritzBoxMonitor {
     /// Uses `GetAddonInfos` which returns real-time byte rates and totals without authentication.
     static func fetchBandwidth(host: String) async throws -> FritzBoxBandwidth {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw FritzBoxError.invalidURL }
+        guard !trimmed.isEmpty, trimmed != "—" else { throw FritzBoxError.invalidHost }
 
         // Validate host: only allow safe characters (alphanumeric, dots, hyphens, colons for IPv6, brackets)
         let safeChars = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-:[]")
@@ -66,9 +68,15 @@ enum FritzBoxMonitor {
                          forHTTPHeaderField: "SOAPAction")
         request.httpBody = soapBody.data(using: .utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw FritzBoxError.transport(description: (error as NSError).localizedDescription)
+        }
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw FritzBoxError.requestFailed
+            throw FritzBoxError.requestFailed(statusCode: (response as? HTTPURLResponse)?.statusCode)
         }
 
         return try parseAddonInfos(data)
@@ -77,7 +85,7 @@ enum FritzBoxMonitor {
     /// Queries max downstream/upstream via GetCommonLinkProperties (no auth required).
     static func fetchLinkProperties(host: String) async throws -> (maxDown: UInt64, maxUp: UInt64) {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw FritzBoxError.invalidURL }
+        guard !trimmed.isEmpty, trimmed != "—" else { throw FritzBoxError.invalidHost }
 
         let safeChars = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-:[]")
         guard trimmed.unicodeScalars.allSatisfy({ safeChars.contains($0) }) else {
@@ -104,9 +112,15 @@ enum FritzBoxMonitor {
                          forHTTPHeaderField: "SOAPAction")
         request.httpBody = soapBody.data(using: .utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw FritzBoxError.transport(description: (error as NSError).localizedDescription)
+        }
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw FritzBoxError.requestFailed
+            throw FritzBoxError.requestFailed(statusCode: (response as? HTTPURLResponse)?.statusCode)
         }
 
         return try parseLinkProperties(data)

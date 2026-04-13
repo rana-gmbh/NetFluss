@@ -876,21 +876,10 @@ struct FritzBoxSection: View {
             Text("Fritz!Box")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-
-            if let error = monitor.fritzBoxError {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.orange)
-                    Text(error)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
                 .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-            } else if let fb = monitor.fritzBox {
+                .padding(.top, 8)
+
+            if let fb = monitor.fritzBox {
                 VStack(spacing: 4) {
                     FritzBoxRateRow(
                         icon: "arrow.down",
@@ -917,6 +906,20 @@ struct FritzBoxSection: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
                     .padding(.bottom, 8)
+            }
+
+            if let error = monitor.fritzBoxError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
             }
         }
     }

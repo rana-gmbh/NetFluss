@@ -51,6 +51,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private let refreshQueue = DispatchQueue(label: "com.local.netfluss.refresh", qos: .utility)
     private var fritzBoxInFlight = false
     private var fritzBoxLinkFetched = false
+    private var fritzBoxFailureCount = 0
     private var unifiInFlight = false
     private var openWRTInFlight = false
     private var openWRTLastSample: OpenWRTSample?
@@ -92,6 +93,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private static let dnsRefreshInterval: TimeInterval = 30
     private static let routerRefreshInterval: TimeInterval = 5
     private static let externalIPRefreshInterval: TimeInterval = 300
+    private static let fritzBoxFailureThreshold = 3
 
     private struct RefreshResult {
         let adapters: [AdapterStatus]
@@ -838,6 +840,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
             if fritzBox != nil { fritzBox = nil }
             if fritzBoxError != nil { fritzBoxError = nil }
             fritzBoxLinkFetched = false
+            fritzBoxFailureCount = 0
             return
         }
         guard !fritzBoxInFlight else { return }
@@ -846,23 +849,37 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let customHost = UserDefaults.standard.string(forKey: "fritzBoxHost") ?? ""
         let host = customHost.isEmpty ? gatewayIP : customHost
         let needsLink = !fritzBoxLinkFetched
+        let usesAutoHost = customHost.isEmpty
 
         Task { [weak self] in
             guard let self else { return }
-            do {
-                if needsLink {
+            if needsLink {
+                do {
                     let link = try await FritzBoxMonitor.fetchLinkProperties(host: host)
                     if self.fritzBoxMaxDown != link.maxDown { self.fritzBoxMaxDown = link.maxDown }
                     if self.fritzBoxMaxUp != link.maxUp { self.fritzBoxMaxUp = link.maxUp }
                     self.fritzBoxLinkFetched = true
+                } catch {
+                    self.fritzBoxLinkFetched = false
                 }
+            }
+
+            do {
                 let bandwidth = try await FritzBoxMonitor.fetchBandwidth(host: host)
                 self.setIfChanged(\.fritzBox, to: bandwidth)
+                self.fritzBoxFailureCount = 0
                 self.setIfChanged(\.fritzBoxError, to: nil)
             } catch {
-                self.setIfChanged(\.fritzBox, to: nil)
-                let msg = "Cannot reach Fritz!Box"
-                self.setIfChanged(\.fritzBoxError, to: msg)
+                self.fritzBoxFailureCount += 1
+
+                let errorMessage = Self.describeFritzBoxError(
+                    error,
+                    host: host,
+                    usesAutoHost: usesAutoHost
+                )
+                if self.fritzBox == nil || self.fritzBoxFailureCount >= Self.fritzBoxFailureThreshold {
+                    self.setIfChanged(\.fritzBoxError, to: errorMessage)
+                }
             }
             self.fritzBoxInFlight = false
         }
@@ -960,6 +977,58 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
     private nonisolated static func runSyncOutput(_ path: String, _ args: [String]) -> String {
         runSyncResult(path, args).stdout
+    }
+
+    private nonisolated static func describeFritzBoxError(
+        _ error: Error,
+        host: String,
+        usesAutoHost: Bool
+    ) -> String {
+        if let fritzBoxError = error as? FritzBoxError {
+            switch fritzBoxError {
+            case .invalidHost:
+                return usesAutoHost
+                    ? "No Fritz!Box gateway detected. Set the router address manually."
+                    : "Enter a valid Fritz!Box address."
+            case .invalidURL:
+                return "Enter a valid Fritz!Box address."
+            case .requestFailed(let statusCode):
+                if let statusCode {
+                    return "Fritz!Box TR-064 request failed (HTTP \(statusCode))."
+                }
+                return "Fritz!Box TR-064 request failed."
+            case .transport(let description):
+                if usesAutoHost {
+                    return "Cannot reach Fritz!Box at \(host). Set the router address manually if auto detection picked the wrong gateway."
+                }
+                if !description.isEmpty {
+                    return description
+                }
+                return "Cannot reach Fritz!Box at \(host)."
+            case .parseError:
+                return "Fritz!Box returned an unexpected TR-064 response."
+            }
+        }
+
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut:
+                return "Fritz!Box did not respond in time."
+            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .networkConnectionLost, .notConnectedToInternet:
+                if usesAutoHost {
+                    return "Cannot reach Fritz!Box at \(host). Set the router address manually if auto detection picked the wrong gateway."
+                }
+                return "Cannot reach Fritz!Box at \(host)."
+            default:
+                break
+            }
+        }
+
+        let message = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !message.isEmpty {
+            return message
+        }
+        return "Cannot reach Fritz!Box."
     }
 }
 

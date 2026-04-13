@@ -609,7 +609,7 @@ struct PreferencesView: View {
                             }
                         }
                     }
-                    Text("Queries your Fritz!Box via TR-064 (no authentication needed for bandwidth data). The router must be reachable on port 49000.")
+                    Text("Queries your Fritz!Box via TR-064 (no authentication needed for bandwidth data). Auto uses the current default gateway. Set a fixed address if your Fritz!Box is reachable at a different IP. Port 49000 must be reachable.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                     if let error = monitor.fritzBoxError {
