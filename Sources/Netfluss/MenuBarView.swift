@@ -21,6 +21,8 @@ import AppKit
 struct MenuBarView: View {
     let preferredWidth: CGFloat
     let screenVisibleFrame: CGRect
+    let isPinned: Bool
+    let onTogglePin: () -> Void
 
     @EnvironmentObject private var monitor: NetworkMonitor
     @AppStorage("showInactive") private var showInactive: Bool = false
@@ -50,10 +52,14 @@ struct MenuBarView: View {
 
     init(
         preferredWidth: CGFloat = 340,
-        screenVisibleFrame: CGRect = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        screenVisibleFrame: CGRect = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900),
+        isPinned: Bool = false,
+        onTogglePin: @escaping () -> Void = {}
     ) {
         self.preferredWidth = preferredWidth
         self.screenVisibleFrame = screenVisibleFrame
+        self.isPinned = isPinned
+        self.onTogglePin = onTogglePin
     }
 
     var body: some View {
@@ -79,10 +85,28 @@ struct MenuBarView: View {
         let scrollHeight = min(contentHeight, heightLimit)
 
         VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button(action: onTogglePin) {
+                    Image(systemName: isPinned ? "pin.fill" : "pin")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(isPinned ? Color.accentColor : .secondary)
+                        .frame(width: 24, height: 24)
+                        .background(.quaternary.opacity(0.5), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help(isPinned ? "Unpin window" : "Pin as window")
+            }
+            .padding(.top, 8)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 2)
+
             popoverContent(adapters: adapters, customNames: customNames, headerTotals: headerTotals)
                 .frame(height: contentHeight > 0 ? scrollHeight : nil)
 
-            PopoverResizeHandle()
+            if !isPinned {
+                PopoverResizeHandle()
+            }
         }
         .background(theme.backgroundColor ?? .clear)
         .frame(width: preferredWidth)
@@ -1001,17 +1025,9 @@ struct UniFiSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Text("UniFi")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Text("Experimental")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(.orange, in: Capsule())
-            }
+            Text("UniFi")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
             .padding(.horizontal, 12)
             .padding(.top, 8)
 
@@ -1068,17 +1084,9 @@ struct OpenWRTSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Text("OpenWRT")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Text("Experimental")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(.orange, in: Capsule())
-            }
+            Text("OpenWRT")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
             .padding(.horizontal, 12)
             .padding(.top, 8)
 

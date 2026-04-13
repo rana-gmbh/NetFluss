@@ -715,7 +715,7 @@ struct PreferencesView: View {
                             Button("Edit…") {
                                 EditRouterHostController.shared.show(
                                     title: "OpenWRT Address",
-                                    placeholder: "Router IP (auto-detect)",
+                                    placeholder: "Router IP or URL (auto uses gateway)",
                                     currentHost: openWRTHost
                                 ) { newHost in
                                     openWRTHost = newHost
@@ -745,7 +745,7 @@ struct PreferencesView: View {
                             }
                         }
                     }
-                    Text("Queries your OpenWRT router via ubus JSON-RPC (HTTP). Requires the router's admin credentials.")
+                    Text("Queries your OpenWRT router via ubus JSON-RPC over HTTPS or HTTP. Auto uses the current default gateway, which may be the wrong router on dual-router setups. Set a fixed OpenWRT IP or URL if needed. Requires the router's admin credentials and the uhttpd-mod-ubus package.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                     if let error = monitor.openWRTError {

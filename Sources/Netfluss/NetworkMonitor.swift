@@ -55,6 +55,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var unifiInFlight = false
     private var openWRTInFlight = false
     private var openWRTLastSample: OpenWRTSample?
+    private var openWRTLastSampleHost: String?
     private var lastSample: [String: InterfaceSample] = [:]
     private var lastUpdate: Date?
     private var currentInterval: Double?
@@ -67,6 +68,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var adapterLastActiveTime: [String: Date] = [:]
     private var topAppLastActiveTime: [String: (lastSeen: Date, rxRate: Double, txRate: Double)] = [:]
     private var allAppLastSeen: [String: Date] = [:]
+    private let liveTopAppsCollector = LiveNettopCollector()
     private var refreshInFlight = false
     private var detailMonitoringEnabled = false
     private var forceDetailRefresh = false
@@ -88,7 +90,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
     private static let interfaceInfoRefreshInterval: TimeInterval = 30
     private static let wifiDetailsRefreshInterval: TimeInterval = 15
-    private static let topAppsRefreshInterval: TimeInterval = 5
+    private static let topAppsRefreshInterval: TimeInterval = 1
     private static let addressDetailsRefreshInterval: TimeInterval = 15
     private static let dnsRefreshInterval: TimeInterval = 30
     private static let routerRefreshInterval: TimeInterval = 5
@@ -106,6 +108,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
     override init() {
         super.init()
         wifiClient.delegate = self
+        liveTopAppsCollector.onSample = { [weak self] apps, sampleTime in
+            self?.applyTopAppsSample(apps, sampledAt: sampleTime)
+        }
         startListeningForWiFiEvents()
     }
 
@@ -136,9 +141,11 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         if enabled {
             forceDetailRefresh = true
+            updateTopAppsCollectionState()
             refresh()
         } else {
             forceDetailRefresh = false
+            liveTopAppsCollector.stop()
             processSnapshot = [:]
             processSnapshotTime = nil
             topAppLastActiveTime.removeAll()
@@ -151,6 +158,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private func refresh() {
         guard !refreshInFlight else { return }
         refreshInFlight = true
+        updateTopAppsCollectionState()
 
         let now = Date()
         let forcedDetailRefresh = forceDetailRefresh
@@ -162,6 +170,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         )
         let shouldRefreshTopApps = detailMonitoringEnabled &&
             UserDefaults.standard.bool(forKey: "showTopApps") &&
+            !liveTopAppsCollector.isRunning &&
             (forcedDetailRefresh || shouldRefresh(lastTopAppsRefresh, at: now, interval: Self.topAppsRefreshInterval))
         let shouldRefreshAddressDetails = detailMonitoringEnabled &&
             (forcedDetailRefresh || shouldRefresh(lastAddressDetailsRefresh, at: now, interval: Self.addressDetailsRefreshInterval))
@@ -361,6 +370,20 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
     // MARK: - Top Apps
 
+    private func updateTopAppsCollectionState() {
+        let shouldRunLiveCollector = detailMonitoringEnabled &&
+            UserDefaults.standard.bool(forKey: "showTopApps")
+
+        if shouldRunLiveCollector {
+            liveTopAppsCollector.start()
+        } else {
+            liveTopAppsCollector.stop()
+            if !UserDefaults.standard.bool(forKey: "showTopApps"), !topApps.isEmpty {
+                topApps = []
+            }
+        }
+    }
+
     private func updateTopApps() {
         guard UserDefaults.standard.bool(forKey: "showTopApps") else {
             if !topApps.isEmpty { topApps = [] }
@@ -386,67 +409,67 @@ final class NetworkMonitor: NSObject, ObservableObject {
             if let prevTime = previousTime, !previousSnapshot.isEmpty {
                 let elapsed = sampleTime.timeIntervalSince(prevTime)
                 if elapsed >= 0.1 {
-                    let hiddenApps = Set(UserDefaults.standard.stringArray(forKey: "hiddenApps") ?? [])
-                    let now = Date()
-
-                    // Get all active apps (unlimited) to track recently seen names
                     let allActive = ProcessNetworkSampler.rates(
                         from: ProcessNetworkSampler.appDeltas(current: snapshot, previous: previousSnapshot),
                         elapsed: elapsed,
                         limit: Int.max
                     )
-                    for app in allActive {
-                        self.allAppLastSeen[app.name] = now
-                    }
-                    // Expire entries older than 60 seconds and publish sorted list
-                    self.allAppLastSeen = self.allAppLastSeen.filter { now.timeIntervalSince($0.value) < 60 }
-                    self.setIfChanged(\.recentAppNames, to: self.allAppLastSeen.keys.sorted())
-
-                    // Top 5 visible apps (filter out hidden)
-                    var apps = Array(allActive.filter { !hiddenApps.contains($0.name) }.prefix(5))
-
-                    let topAppsGraceEnabled = UserDefaults.standard.bool(forKey: "topAppsGracePeriodEnabled")
-                    let topAppsGraceSeconds = UserDefaults.standard.double(forKey: "topAppsGracePeriodSeconds")
-
-                    // Update last-active tracking for currently active apps
-                    let activeNames = Set(apps.map(\.name))
-                    for app in apps {
-                        self.topAppLastActiveTime[app.name] = (lastSeen: now, rxRate: app.rxRateBps, txRate: app.txRateBps)
-                    }
-
-                    if topAppsGraceEnabled {
-                        // Re-insert recently-active apps that are no longer active
-                        for (name, entry) in self.topAppLastActiveTime {
-                            if activeNames.contains(name) { continue }
-                            if hiddenApps.contains(name) { continue }
-                            let deadline = entry.lastSeen.addingTimeInterval(topAppsGraceSeconds)
-                            if now < deadline {
-                                apps.append(AppTraffic(id: name, name: name, rxRateBps: 0, txRateBps: 0))
-                            }
-                        }
-                        // Sort: active apps first by throughput, then grace apps by name
-                        apps.sort {
-                            let aTotal = $0.rxRateBps + $0.txRateBps
-                            let bTotal = $1.rxRateBps + $1.txRateBps
-                            if aTotal > 0 && bTotal == 0 { return true }
-                            if aTotal == 0 && bTotal > 0 { return false }
-                            if aTotal > 0 && bTotal > 0 { return aTotal > bTotal }
-                            return $0.name < $1.name
-                        }
-                        apps = Array(apps.prefix(5))
-                        // Clean up expired entries
-                        self.topAppLastActiveTime = self.topAppLastActiveTime.filter { now < $0.value.lastSeen.addingTimeInterval(topAppsGraceSeconds) }
-                    } else {
-                        self.topAppLastActiveTime.removeAll()
-                    }
-
-                    self.setIfChanged(\.topApps, to: apps)
+                    self.applyTopAppsSample(allActive, sampledAt: sampleTime)
                 }
             }
 
             self.processSnapshot = snapshot
             self.processSnapshotTime = sampleTime
         }
+    }
+
+    private func applyTopAppsSample(_ allActive: [AppTraffic], sampledAt now: Date) {
+        guard detailMonitoringEnabled else { return }
+
+        let hiddenApps = Set(UserDefaults.standard.stringArray(forKey: "hiddenApps") ?? [])
+
+        for app in allActive {
+            allAppLastSeen[app.name] = now
+        }
+        allAppLastSeen = allAppLastSeen.filter { now.timeIntervalSince($0.value) < 60 }
+        setIfChanged(\.recentAppNames, to: allAppLastSeen.keys.sorted())
+
+        var apps = Array(allActive.filter { !hiddenApps.contains($0.name) }.prefix(5))
+
+        let topAppsGraceEnabled = UserDefaults.standard.bool(forKey: "topAppsGracePeriodEnabled")
+        let topAppsGraceSeconds = UserDefaults.standard.double(forKey: "topAppsGracePeriodSeconds")
+
+        let activeNames = Set(apps.map(\.name))
+        for app in apps {
+            topAppLastActiveTime[app.name] = (lastSeen: now, rxRate: app.rxRateBps, txRate: app.txRateBps)
+        }
+
+        if topAppsGraceEnabled {
+            for (name, entry) in topAppLastActiveTime {
+                if activeNames.contains(name) { continue }
+                if hiddenApps.contains(name) { continue }
+                let deadline = entry.lastSeen.addingTimeInterval(topAppsGraceSeconds)
+                if now < deadline {
+                    apps.append(AppTraffic(id: name, name: name, rxRateBps: 0, txRateBps: 0))
+                }
+            }
+            apps.sort {
+                let aTotal = $0.rxRateBps + $0.txRateBps
+                let bTotal = $1.rxRateBps + $1.txRateBps
+                if aTotal > 0 && bTotal == 0 { return true }
+                if aTotal == 0 && bTotal > 0 { return false }
+                if aTotal > 0 && bTotal > 0 { return aTotal > bTotal }
+                return $0.name < $1.name
+            }
+            apps = Array(apps.prefix(5))
+            topAppLastActiveTime = topAppLastActiveTime.filter {
+                now < $0.value.lastSeen.addingTimeInterval(topAppsGraceSeconds)
+            }
+        } else {
+            topAppLastActiveTime.removeAll()
+        }
+
+        setIfChanged(\.topApps, to: apps)
     }
 
     // MARK: - IP Addresses
@@ -930,6 +953,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
             if openWRT != nil { openWRT = nil }
             if openWRTError != nil { openWRTError = nil }
             openWRTLastSample = nil
+            openWRTLastSampleHost = nil
             return
         }
         guard !openWRTInFlight else { return }
@@ -937,6 +961,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         let customHost = UserDefaults.standard.string(forKey: "openWRTHost") ?? ""
         let host = customHost.isEmpty ? gatewayIP : customHost
+        let usesAutoHost = customHost.isEmpty
 
         Task { [weak self] in
             guard let self else { return }
@@ -952,7 +977,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
                     host: host, username: creds.username, password: creds.password
                 )
                 // Compute rates from previous sample
-                if let prev = self.openWRTLastSample {
+                if let prev = self.openWRTLastSample, self.openWRTLastSampleHost == host {
                     let dt = sample.timestamp.timeIntervalSince(prev.timestamp)
                     if dt > 0 {
                         let rxRate = Double(sample.rxBytes &- prev.rxBytes) / dt
@@ -965,10 +990,17 @@ final class NetworkMonitor: NSObject, ObservableObject {
                     }
                 }
                 self.openWRTLastSample = sample
+                self.openWRTLastSampleHost = host
                 self.setIfChanged(\.openWRTError, to: nil)
             } catch {
                 self.setIfChanged(\.openWRT, to: nil)
-                let msg = "Cannot reach OpenWRT router"
+                self.openWRTLastSample = nil
+                self.openWRTLastSampleHost = nil
+                let msg = Self.describeOpenWRTError(
+                    error,
+                    host: host,
+                    usesAutoHost: usesAutoHost
+                )
                 self.setIfChanged(\.openWRTError, to: msg)
             }
             self.openWRTInFlight = false
@@ -1029,6 +1061,72 @@ final class NetworkMonitor: NSObject, ObservableObject {
             return message
         }
         return "Cannot reach Fritz!Box."
+    }
+
+    private nonisolated static func describeOpenWRTError(
+        _ error: Error,
+        host: String,
+        usesAutoHost: Bool
+    ) -> String {
+        let autoHint = "Auto uses the current default gateway. Set the OpenWRT address manually if that is a different router."
+
+        if let openWRTError = error as? OpenWRTError {
+            switch openWRTError {
+            case .invalidURL:
+                return usesAutoHost
+                    ? "No OpenWRT gateway address is available. \(autoHint)"
+                    : "Enter a valid OpenWRT address or URL."
+            case .authFailed:
+                return "OpenWRT login failed. Check the router credentials."
+            case .ubusUnavailable:
+                return usesAutoHost
+                    ? "OpenWRT ubus is not available at \(host). \(autoHint) Install the uhttpd-mod-ubus package if needed."
+                    : "OpenWRT ubus is not available at \(host). Install the uhttpd-mod-ubus package and check the router address."
+            case .httpStatus(let statusCode):
+                if statusCode == 404 {
+                    return usesAutoHost
+                        ? "OpenWRT ubus was not found at \(host). \(autoHint)"
+                        : "OpenWRT ubus was not found at \(host)."
+                }
+                return "OpenWRT request failed (HTTP \(statusCode))."
+            case .rpcFailure(let code, let message):
+                if code == 4 || code == 3 {
+                    return usesAutoHost
+                        ? "OpenWRT network status is not available on \(host). \(autoHint)"
+                        : "OpenWRT network status is not available on this router."
+                }
+                return "OpenWRT returned an error: \(message)."
+            case .noWANDevice:
+                return "OpenWRT responded, but no WAN interface could be identified."
+            case .parseError:
+                return "OpenWRT returned an unexpected ubus response."
+            case .requestFailed:
+                return usesAutoHost
+                    ? "Cannot reach OpenWRT at \(host). \(autoHint)"
+                    : "Cannot reach OpenWRT at \(host)."
+            }
+        }
+
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut:
+                return "OpenWRT did not respond in time."
+            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .networkConnectionLost, .notConnectedToInternet:
+                return usesAutoHost
+                    ? "Cannot reach OpenWRT at \(host). \(autoHint)"
+                    : "Cannot reach OpenWRT at \(host)."
+            default:
+                break
+            }
+        }
+
+        let message = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !message.isEmpty {
+            return message
+        }
+        return usesAutoHost
+            ? "Cannot reach OpenWRT. \(autoHint)"
+            : "Cannot reach OpenWRT."
     }
 }
 
@@ -1096,6 +1194,23 @@ enum ProcessNetworkSampler {
         if pidNameCacheAge % 10 == 0 {
             pidNameCache.removeAll(keepingCapacity: true)
         }
+    }
+
+    static func pid(from rawIdentifier: String) -> pid_t? {
+        guard let separatorIndex = rawIdentifier.lastIndex(of: ".") else { return nil }
+        let pidSuffix = rawIdentifier[rawIdentifier.index(after: separatorIndex)...]
+        guard let pid = Int32(pidSuffix), pid > 0 else { return nil }
+        return pid
+    }
+
+    static func cachedProcessName(for pid: pid_t) -> String {
+        if let cached = pidNameCache[pid] {
+            return cached
+        }
+
+        let resolved = processName(for: pid) ?? "PID \(pid)"
+        pidNameCache[pid] = resolved
+        return resolved
     }
 
     /// Snapshot: cumulative bytes per process at a point in time.
@@ -1243,10 +1358,7 @@ enum ProcessNetworkSampler {
 
             let rawIdentifier = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !rawIdentifier.isEmpty else { continue } // CSV header row
-            guard let separatorIndex = rawIdentifier.lastIndex(of: ".") else { continue }
-
-            let pidSuffix = rawIdentifier[rawIdentifier.index(after: separatorIndex)...]
-            guard let pid = Int32(pidSuffix), pid > 0 else { continue }
+            guard let pid = pid(from: rawIdentifier) else { continue }
 
             let rawDownload = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
             let rawUpload = String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1254,14 +1366,7 @@ enum ProcessNetworkSampler {
                   let uploadBytes = UInt64(rawUpload),
                   downloadBytes > 0 || uploadBytes > 0 else { continue }
 
-            let name: String
-            if let cached = pidNameCache[pid] {
-                name = cached
-            } else {
-                let resolved = processName(for: pid) ?? "PID \(pid)"
-                pidNameCache[pid] = resolved
-                name = resolved
-            }
+            let name = cachedProcessName(for: pid)
 
             let id = String(pid)
             connections[id] = ProcessConnectionSnapshot(

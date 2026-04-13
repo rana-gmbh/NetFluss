@@ -392,6 +392,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let statisticsManager: StatisticsManager
     private let speedTestManager: SpeedTestManager
     private let contextMenu = NSMenu()
+    private let pinnedWindowController = PinnedMenuBarWindowController()
     private var cancellables: Set<AnyCancellable> = []
     private let ratesView = MenuBarRatesView()
     private var cachedFonts: [FontState: NSFont] = [:]
@@ -491,25 +492,15 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
     @objc private func togglePopover() {
         guard let button = statusItem.button else { return }
+        if pinnedWindowController.isVisible {
+            pinnedWindowController.bringToFront()
+            return
+        }
         if popover.isShown {
             popover.performClose(nil)
             teardownPopover()
         } else {
-            teardownPopover()
-            let presentation = popoverPresentation(for: button)
-            let contentView = MenuBarView(
-                preferredWidth: presentation.contentWidth,
-                screenVisibleFrame: presentation.visibleFrame
-            )
-                .environmentObject(monitor)
-                .environmentObject(statisticsManager)
-            popover.contentViewController = NSHostingController(rootView: contentView)
-            monitor.setDetailMonitoringEnabled(true)
-            popover.show(relativeTo: presentation.sourceRect, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
-            DispatchQueue.main.async { [weak self] in
-                self?.constrainPopoverToVisibleFrame()
-            }
+            showPopover(relativeTo: button)
         }
     }
 
@@ -558,10 +549,10 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     private func teardownPopover() {
-        monitor.setDetailMonitoringEnabled(false)
         if popover.contentViewController != nil {
             popover.contentViewController = nil
         }
+        updateDetailMonitoring()
     }
 
     private func configureContextMenu() {
@@ -604,6 +595,76 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         statusItem.menu = contextMenu
         button.performClick(nil)
         statusItem.menu = nil
+    }
+
+    private func showPopover(relativeTo button: NSStatusBarButton) {
+        teardownPopover()
+        let presentation = popoverPresentation(for: button)
+        let contentView = menuBarRootView(
+            preferredWidth: presentation.contentWidth,
+            visibleFrame: presentation.visibleFrame,
+            isPinned: false
+        )
+        popover.contentViewController = NSHostingController(rootView: contentView)
+        popover.show(relativeTo: presentation.sourceRect, of: button, preferredEdge: .minY)
+        updateDetailMonitoring()
+        popover.contentViewController?.view.window?.makeKey()
+        DispatchQueue.main.async { [weak self] in
+            self?.constrainPopoverToVisibleFrame()
+        }
+    }
+
+    private func togglePinnedWindow() {
+        guard let button = statusItem.button else { return }
+
+        if pinnedWindowController.isVisible {
+            pinnedWindowController.close()
+            showPopover(relativeTo: button)
+            return
+        }
+
+        let presentation = popoverPresentation(for: button)
+        let initialFrame = popover.contentViewController?.view.window?.frame
+        let rootView = menuBarRootView(
+            preferredWidth: presentation.contentWidth,
+            visibleFrame: presentation.visibleFrame,
+            isPinned: true
+        )
+
+        pinnedWindowController.show(
+            rootView: rootView,
+            preferredWidth: presentation.contentWidth,
+            screenVisibleFrame: presentation.visibleFrame,
+            initialFrame: initialFrame
+        ) { [weak self] in
+            self?.updateDetailMonitoring()
+        }
+
+        if popover.isShown {
+            popover.performClose(nil)
+        }
+        teardownPopover()
+    }
+
+    private func menuBarRootView(
+        preferredWidth: CGFloat,
+        visibleFrame: CGRect,
+        isPinned: Bool
+    ) -> some View {
+        MenuBarView(
+            preferredWidth: preferredWidth,
+            screenVisibleFrame: visibleFrame,
+            isPinned: isPinned,
+            onTogglePin: { [weak self] in
+                self?.togglePinnedWindow()
+            }
+        )
+        .environmentObject(monitor)
+        .environmentObject(statisticsManager)
+    }
+
+    private func updateDetailMonitoring() {
+        monitor.setDetailMonitoringEnabled(popover.isShown || pinnedWindowController.isVisible)
     }
 
     private func popoverPresentation(for button: NSStatusBarButton) -> PopoverPresentation {
