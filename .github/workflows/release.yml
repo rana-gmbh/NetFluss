@@ -52,7 +52,12 @@ jobs:
 
       - name: Sign
         run: |
-          codesign --force --deep \
+          codesign --force \
+            --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
+            --options=runtime \
+            --timestamp \
+            NetFluss.app/Contents/Library/HelperTools/NetflussPrivilegedHelper
+          codesign --force \
             --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
             --options=runtime \
             --timestamp \

@@ -33,7 +33,9 @@ cp Packaging/Resources/AppIcon.icns NetFluss.app/Contents/Resources/AppIcon.icns
 cp Packaging/Resources/AppIconDark.icns NetFluss.app/Contents/Resources/AppIconDark.icns
 cp -R Packaging/Resources/SpeedTest NetFluss.app/Contents/Resources/SpeedTest
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.x.x" NetFluss.app/Contents/Info.plist
-codesign --force --deep --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
+codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
+  --options=runtime --timestamp NetFluss.app/Contents/Library/HelperTools/NetflussPrivilegedHelper
+codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
   --options=runtime --timestamp --entitlements Netfluss.entitlements NetFluss.app
 ditto -c -k --sequesterRsrc --keepParent NetFluss.app Netfluss-1.x.x.zip
 xcrun notarytool submit Netfluss-1.x.x.zip --apple-id <id> --password <pwd> --team-id D6P24X5377 --wait
