@@ -1177,6 +1177,11 @@ enum ProcessTrafficSource: Hashable, Sendable {
     }
 }
 
+enum ProcessStatisticsSample: Sendable {
+    case directDeltas([String: (rx: UInt64, tx: UInt64)])
+    case snapshot([String: ProcessConnectionSnapshot])
+}
+
 enum ProcessNetworkSampler {
 
     // PID→name cache: avoids repeated proc_pidpath + filesystem lookups.
@@ -1250,6 +1255,19 @@ enum ProcessNetworkSampler {
         sampleCondition.unlock()
 
         return snapshot
+    }
+
+    /// Historical app statistics need true interval deltas.
+    /// `nettop -P -x -L 1` does not expose monotonic per-process lifetime counters,
+    /// so diffing successive one-shot samples inflates totals badly. Instead we ask
+    /// `nettop` for two delta-mode CSV frames and consume the second frame directly.
+    /// If that path fails, fall back to diffable `netstat` socket snapshots.
+    static func sampleStatisticsAppTraffic() -> ProcessStatisticsSample {
+        clearNameCacheIfNeeded()
+        if let deltas = sampleAppDeltasFromNettop() {
+            return .directDeltas(deltas)
+        }
+        return .snapshot(sampleConnectionsFromNetstat())
     }
 
     /// Fallback snapshot: cumulative inet bytes per live socket at a point in time.
@@ -1381,6 +1399,61 @@ enum ProcessNetworkSampler {
         return connections
     }
 
+    private static func sampleAppDeltasFromNettop() -> [String: (rx: UInt64, tx: UInt64)]? {
+        let output = runNettopDelta()
+        let header = ",bytes_in,bytes_out,"
+
+        var frames: [[String]] = []
+        var currentRows: [String] = []
+
+        for rawLine in output.split(whereSeparator: \.isNewline) {
+            let line = String(rawLine).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+
+            if line == header {
+                if !currentRows.isEmpty {
+                    frames.append(currentRows)
+                    currentRows.removeAll(keepingCapacity: true)
+                }
+                continue
+            }
+
+            currentRows.append(line)
+        }
+
+        if !currentRows.isEmpty {
+            frames.append(currentRows)
+        }
+
+        guard let deltaRows = frames.last, frames.count >= 2 else {
+            return nil
+        }
+
+        var totals: [String: (rx: UInt64, tx: UInt64)] = [:]
+        totals.reserveCapacity(deltaRows.count)
+
+        for row in deltaRows {
+            let parts = row.split(separator: ",", omittingEmptySubsequences: false)
+            guard parts.count >= 3 else { continue }
+
+            let rawIdentifier = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let pid = pid(from: rawIdentifier) else { continue }
+
+            let downloadBytes = UInt64(String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+            let uploadBytes = UInt64(String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+            guard downloadBytes > 0 || uploadBytes > 0 else { continue }
+
+            let name = cachedProcessName(for: pid)
+            let existing = totals[name] ?? (rx: 0, tx: 0)
+            totals[name] = (
+                rx: existing.rx + downloadBytes,
+                tx: existing.tx + uploadBytes
+            )
+        }
+
+        return totals
+    }
+
     /// Aggregate per-connection deltas back to app names.
     static func appDeltas(
         current: [String: ProcessConnectionSnapshot],
@@ -1476,6 +1549,19 @@ enum ProcessNetworkSampler {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
         process.arguments = ["-P", "-x", "-L", "1", "-J", "bytes_in,bytes_out"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        guard (try? process.run()) != nil else { return "" }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    private static func runNettopDelta() -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
+        process.arguments = ["-P", "-d", "-x", "-L", "2", "-J", "bytes_in,bytes_out"]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()

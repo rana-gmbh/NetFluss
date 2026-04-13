@@ -196,26 +196,23 @@ final class StatisticsManager: ObservableObject {
         guard appStatisticsEnabled, !appSamplingInFlight else { return }
         appSamplingInFlight = true
 
-        let previousSnapshot = previousAppSnapshot
-        let previousTime = previousAppSampleTime
-
         Task { [weak self] in
             let sampleTime = Date()
-            let snapshot = await Task.detached(priority: .utility) {
-                ProcessNetworkSampler.sampleConnections()
+            let sample = await Task.detached(priority: .utility) {
+                ProcessNetworkSampler.sampleStatisticsAppTraffic()
             }.value
 
             guard let self else { return }
             self.appSamplingInFlight = false
             guard self.appStatisticsEnabled else {
-                self.previousAppSnapshot = snapshot
+                self.previousAppSnapshot = [:]
                 self.previousAppSampleTime = sampleTime
                 return
             }
 
-            if let previousTime, !previousSnapshot.isEmpty, sampleTime.timeIntervalSince(previousTime) >= 1 {
-                let deltas = ProcessNetworkSampler.appDeltas(current: snapshot, previous: previousSnapshot).compactMap {
-                    name, totals -> StatisticsAppDelta? in
+            switch sample {
+            case .directDeltas(let totalsByName):
+                let deltas = totalsByName.compactMap { name, totals -> StatisticsAppDelta? in
                     guard totals.rx > 0 || totals.tx > 0 else { return nil }
                     return StatisticsAppDelta(
                         name: name,
@@ -229,10 +226,35 @@ final class StatisticsManager: ObservableObject {
                         await store.recordAppDeltas(deltas, at: sampleTime)
                     }
                 }
-            }
 
-            self.previousAppSnapshot = snapshot
-            self.previousAppSampleTime = sampleTime
+                self.previousAppSnapshot = [:]
+                self.previousAppSampleTime = sampleTime
+
+            case .snapshot(let snapshot):
+                let previousSnapshot = self.previousAppSnapshot
+                let previousTime = self.previousAppSampleTime
+
+                if let previousTime, !previousSnapshot.isEmpty, sampleTime.timeIntervalSince(previousTime) >= 1 {
+                    let deltas = ProcessNetworkSampler.appDeltas(current: snapshot, previous: previousSnapshot).compactMap {
+                        name, totals -> StatisticsAppDelta? in
+                        guard totals.rx > 0 || totals.tx > 0 else { return nil }
+                        return StatisticsAppDelta(
+                            name: name,
+                            downloadBytes: totals.rx,
+                            uploadBytes: totals.tx
+                        )
+                    }
+
+                    if !deltas.isEmpty {
+                        Task.detached(priority: .utility) { [store] in
+                            await store.recordAppDeltas(deltas, at: sampleTime)
+                        }
+                    }
+                }
+
+                self.previousAppSnapshot = snapshot
+                self.previousAppSampleTime = sampleTime
+            }
         }
     }
 

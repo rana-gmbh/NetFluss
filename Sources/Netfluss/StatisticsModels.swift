@@ -34,7 +34,7 @@ struct StatisticsTrafficAmounts: Codable, Equatable, Sendable {
 }
 
 struct StatisticsArchive: Codable, Sendable {
-    static let currentAppTrafficSchemaVersion = 2
+    static let currentAppTrafficSchemaVersion = 3
 
     var createdAt: Date
     var lastAdapterSampleAt: Date?
