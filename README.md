@@ -4,107 +4,152 @@
 [![Downloads](https://img.shields.io/github/downloads/rana-gmbh/NetFluss/total)](https://github.com/rana-gmbh/NetFluss/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-NetFluss is a native macOS menu bar app for live bandwidth monitoring, historical traffic analysis, router-aware WAN monitoring, and built-in speed testing.
+A native macOS menubar app showing real-time upload and download rates, router-wide bandwidth, historical traffic statistics, and built-in speed testing.
 
 Latest release: **NetFluss 2.1**
 
-## Statistics
-
-![NetFluss statistics](Screenshots/statistics.webp)
-
-- Dedicated statistics window with `1H`, `24H`, `7D`, `30D`, and `1Y` ranges
-- Download and upload timelines, top adapters, and top apps
-- Improved app attribution for Safari/WebKit traffic and more reliable adapter accounting for LAN/NAS transfers
-- Optional app statistics collection with energy-conscious background sampling
-- Demo/sample data mode for previewing the interface before real history accumulates
-
-## Speed Test
-
-![NetFluss speed test](Screenshots/speedtest.webp)
-
-- Integrated M-Lab and Cloudflare speed tests
-- Download, upload, latency, and server details in a dedicated window
-- Provider selector remembered between runs
-- Right-click the menu bar icon to start a test instantly
-- Open the history window without starting a new test
-
-## Speed Test History
-
-![NetFluss speed test history](Screenshots/speedtest%20history.webp)
-
-- Recent test history with compact locale-based timestamps, provider, download, upload, and latency
-- Add a note to remember where or why a measurement was taken
-- Useful for quick comparisons across runs and providers
-
-## App Icon
-
-- NetFluss includes a refreshed app icon and matching menu bar icon option
-- Thanks to GitHub user **JohnnyFireOne** for the new icon design
+<p align="center">
+  <img src="screenshot.png" width="420" alt="NetFluss screenshot">
+</p>
 
 ## Features
 
-### Menu Bar
+### Menubar
 
-- Live upload and download rates directly in the macOS menu bar
-- Four menu bar styles: `Standard`, `Unified pill`, `Dashboard`, and `Icon`
+- Live upload ↑ and download ↓ rates displayed in the menu bar
+- Four menu bar styles: Standard, Unified pill, Dashboard, and Icon
 - Separate color choices for upload arrow, download arrow, upload number, and download number
-- Configurable font size, font style, unit pinning, and decimal precision
-- `Icon` mode with multiple selectable icons, including the new NetFluss app-style icon
-- Pin the popup into a movable floating window so NetFluss can stay open like a live widget
+- Monospaced digits for stable layout
+- Configurable font size (8–16 pt), font style (Monospaced / System / Rounded), pinned unit, and decimal precision
+- **Icon mode** — switch to a single symbol in the menu bar and choose between multiple icon options, including the NetFluss app-style icon
+- **Launch at login** — toggle in Preferences → Launch
 
 ### Popover
 
-- Prominent total download and upload summary
-- Adapter cards for active interfaces with Wi-Fi / Ethernet / virtual interface details
-- Live Top Apps updates while the popup or pinned window is open
-- Wi-Fi information popover with standard, security, channel, RSSI, noise, SNR, ESSID, BSSID, and TX rate
-- External/internal/router IP display in either classic list mode or connection flow mode
-- DNS switcher with built-in presets, four-server custom presets, drag-to-reorder, and reliable privileged switching through the bundled helper
-- Optional Top Apps view for current per-process traffic
-- Router-wide WAN monitoring for Fritz!Box, UniFi, and OpenWRT
-- Screen-edge-aware popup positioning so the window stays visible near menu bar borders
+- **Header** — total Download and Upload rates shown prominently at the top
+- **Adapter cards** — each active network interface as a card with:
+  - SF Symbol icon for Wi-Fi, Ethernet, or other adapters
+  - Link speed badge (Wi-Fi TX rate or Ethernet speed)
+  - Per-card DL/UL rates with coloured arrows
+  - Wi-Fi frequency band (2.4 GHz / 5 GHz / 6 GHz) or "Ethernet"
+  - ↺ reconnect button — cycles the adapter off and back on (Wi-Fi: no password needed; Ethernet: approved via the NetFluss helper)
+  - ℹ️ **Wi-Fi detail popover** — click the (i) button on any Wi-Fi card to see: Standard (e.g. Wi-Fi 6 / 802.11ax), Security (WPA3 Personal, etc.), Channel & Width, RSSI, Noise, SNR, ESSID, BSSID (with copy), and Tx Rate
+- **IP addresses** — two display modes:
+  - **List view** — External, Internal, and Router IP, each with a one-click copy button
+  - **Connection flow view** — visual network path from your Mac through the router (and VPN, if active) to the internet, with country flag for VPN exit nodes
+- **DNS Switcher** — switch between DNS providers directly from the popover (enable in Preferences):
+  - Built-in presets: System Default, Cloudflare, Google, Quad9, OpenDNS
+  - Add your own custom DNS presets with up to four DNS servers
+  - Shows the currently active DNS with a green checkmark
+  - Built on a bundled privileged helper for reliable DNS changes and Ethernet resets
+- **Router Bandwidth** — shows total WAN download/upload rates from supported routers:
+  - **Fritz!Box** via TR-064 API
+  - **UniFi** via the UniFi OS / controller REST API
+  - **OpenWRT** via the ubus JSON-RPC API
+- **Top Apps** — optional section listing the top 5 processes by current network traffic, with a relative usage bar per app (enable in Preferences)
+  - **Live updates while visible** — app traffic refreshes live while the popup or pinned window is open
+  - **App filtering** — hide noisy background processes (e.g. mDNSResponder) from the list via Preferences or hover to hide directly
+- **Pin button** — turn the popup into a movable floating window so NetFluss can stay open like a live widget
+- **Scrollable popover** — the popover is scrollable and resizable for smaller screens, preventing overflow when many adapters or sections are active
+- **Edge-aware popover positioning** — keeps the popover fully visible when the menu bar icon sits near the left or right screen border
+- **Footer** — quick access to Preferences, About, and Quit
 
 ### Statistics
 
+- Dedicated statistics window with `1H`, `24H`, `7D`, `30D`, and `1Y` ranges
+- Download and upload timelines, top adapters, and top apps
 - Historical bandwidth analysis by adapter and by app
 - Top adapter ranking with automatic `Other` grouping when many interfaces are active
 - Top 10 apps for download and upload over each selected range
-- More reliable app history sampling for Safari/WebKit traffic
 - Minute-level detail for the `1H` view
-- Default-off collection mode to avoid unnecessary energy use
+- Optional app statistics collection with energy-conscious background sampling
+- Demo/sample data mode for previewing the interface before real history accumulates
+- Improved app attribution for Safari/WebKit traffic and more reliable adapter accounting for LAN/NAS transfers
+
+<p align="center">
+  <img src="Screenshots/statistics.webp" width="820" alt="NetFluss statistics window">
+</p>
 
 ### Speed Test
 
 - Dedicated speed test window launched from the menu bar icon context menu
-- M-Lab and Cloudflare providers
-- M-Lab consent flow for the first public measurement test
+- Integrated M-Lab and Cloudflare speed tests
+- Download, upload, latency, jitter, and server details in a dedicated window
+- Provider selector remembered between runs
+- Right-click the menu bar icon to start a test instantly
+- Speed test history can be opened without automatically starting a new test
 - Persistent speed test history stored locally on the Mac
-- Notes field for each saved test result
+- Notes field for each saved result, useful for remembering where or why the test was taken
+- Compact locale-aware timestamps in speed test history
+
+<p align="center">
+  <img src="Screenshots/speedtest.webp" width="820" alt="NetFluss speed test">
+</p>
+
+#### Speed Test History
+
+<p align="center">
+  <img src="Screenshots/speedtest%20history.webp" width="820" alt="NetFluss speed test history">
+</p>
 
 ### Preferences
 
-- Refresh interval from `0.5` to `5` seconds
-- Show or hide inactive adapters and virtual/tunnel adapters
-- Adapter grace period to keep interfaces visible briefly after they go idle
-- Per-adapter visibility, custom names, and drag-to-reorder
-- Totals based on visible adapters only, with optional tunnel/VPN exclusion
-- Toggle historical statistics collection and app statistics collection separately
-- DNS switcher, Top Apps, router bandwidth, menu bar styling, and launch-at-login controls
-- Manual router address overrides for Fritz!Box, UniFi, and OpenWRT when auto-detection is not the right gateway
+- Refresh interval (0.5 – 5 seconds)
+- Optional automatic GitHub update checks once per day, with the manual About check still available
+- Show/hide inactive adapters
+- Show/hide other adapters (VPN, virtual interfaces)
+- **Adapter grace period** — keep adapters visible for 3 s, 5 s, or 10 s after they go idle, so brief inactivity doesn't make cards flicker
+- Per-adapter visibility toggles, custom names (pencil button), and drag-to-reorder (≡ handle) — order and names are reflected in the popover
+- Adapter list scrolls when more than 6 interfaces are shown
+- Options to calculate total bandwidth from only visible adapters and to exclude VPN/tunnel adapters from totals while still showing them in the adapter list
+- Display rates in bits or bytes
+- Upload / Download arrow colours plus separate upload / download number colours
+- **Menu bar style** — Standard, Unified pill, Dashboard, or Icon
+- Menu bar font size (8–16 pt stepper) and font style (Monospaced / System / Rounded)
+- **Pinned unit** — lock menu bar rates to KB/s, MB/s, or GB/s instead of auto-scaling
+- **Decimal places** — choose 0, 1, 2, or 3 fixed decimals for menu bar rates
+- **Connection status mode** — choose between the classic IP list or the connection flow view
+- **Bandwidth Statistics** — toggle historical adapter statistics and app statistics separately
+- **Top Apps** toggle
+- **Top Apps grace period** — keep apps visible for 3 s, 5 s, or 10 s after their traffic stops, preventing the list from constantly reshuffling
+- **App filtering** — hide specific apps from the Top Apps list; "Apps to Hide" shows all recently active processes for easy selection
+- **DNS Switcher** — toggle to show the DNS picker in the popover; includes built-in presets plus editable custom presets with up to four server fields, visibility toggles, drag-to-reorder, and delete for each preset
+- **Fritz!Box Bandwidth** — toggle to show total WAN bandwidth from your Fritz!Box router; configurable router address (auto-detected from gateway, fallback: fritz.box); queries TR-064 API on port 49000 (no authentication required)
+- **UniFi Bandwidth** — toggle to show WAN bandwidth from UniFi gateways; configurable host; credentials stored securely in macOS Keychain; supports UniFi OS (UDM) and legacy controller
+- **OpenWRT Bandwidth** — toggle to show WAN bandwidth from OpenWRT routers; configurable host; credentials stored securely in macOS Keychain; uses ubus JSON-RPC API with automatic session management
+- **Router address overrides** — manually set the Fritz!Box, UniFi, or OpenWRT host when auto-detection is not the right gateway
+- **Launch at login** toggle
+
+### About
+
+- Version number with link to release notes on GitHub
+- Made by Rana GmbH — www.ranagmbh.de
+- Refreshed app icon introduced with NetFluss 2.x
+- Check for Updates — queries GitHub Releases, shows release notes and a Download button when a newer version is found
+- Optional daily background update checks with a direct link to the newest release page
+
+<p align="center">
+  <img src="Screenshots/About%20with%20new%20icon.webp" width="420" alt="NetFluss About window with new icon">
+</p>
+
+## Requirements
+
+- macOS 13 Ventura or later
+- Xcode 15+ or Swift 5.10+ toolchain (to build from source)
 
 ## Install
 
 Download `NetFluss-2.1.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
 
-NetFluss is signed and notarized with a Developer ID certificate, so Gatekeeper should clear it automatically on first launch.
+NetFluss is notarized and signed with a Developer ID certificate, so Gatekeeper should clear it automatically on first launch.
 
-You can also install NetFluss with Homebrew:
+You can also use Homebrew to install NetFluss:
 
 ```bash
 brew install --cask rana-gmbh/netfluss/netfluss
 ```
 
-## Build From Source
+## Build from source
 
 ```bash
 swift build -c release
@@ -114,21 +159,19 @@ Or open `Package.swift` in Xcode and run the executable scheme.
 
 ## Notes
 
-- Wi-Fi SSID and band use CoreWLAN. macOS may ask for Location Services permission to expose SSID details.
+- Wi-Fi SSID and band use CoreWLAN. macOS may prompt for Location Services permission to expose SSID details.
 - Ethernet link speed is read from `ifi_baudrate` and may show `—` when unavailable.
-- External IP is fetched from `ipwho.is` with `api.ipify.org` as a fallback.
-- Popup Top Apps use live `nettop` sampling while visible; historical app statistics use periodic per-process snapshots with a `netstat` fallback for compatibility.
-- DNS changes and Ethernet resets use the bundled privileged helper in the packaged app; macOS may ask for one-time approval on first use.
-- OpenWRT monitoring expects LuCI/uHTTPd ubus access and can work better with a manually entered router address when `Auto` resolves to a different gateway.
+- External IP is fetched from `ipwho.is` (with `api.ipify.org` as fallback).
+- Popup Top Apps uses live per-process sampling while visible; historical app statistics can be enabled separately in Preferences.
+- DNS changes and Ethernet resets in the packaged app use the bundled NetFluss helper and may require one-time system approval.
+- OpenWRT monitoring expects ubus access to be available on the router; a manual host can help when auto-detection resolves to a different gateway.
 - Speed test adapter pinning is not implemented yet; tests currently follow the default active route.
 
-## Support
+## Buy me a coffee
 
-If you enjoy using NetFluss, consider supporting the project here:
-
-[buymeacoffee.com/robertrudolph](https://buymeacoffee.com/robertrudolph)
+If you enjoy using NetFluss please consider supporting the project via this link: https://buymeacoffee.com/robertrudolph
 
 ## License
 
-NetFluss is released under the [GNU General Public License v3.0](LICENSE).  
+NetFluss is released under the [GNU General Public License v3.0](LICENSE).
 Copyright © 2026 Rana GmbH
