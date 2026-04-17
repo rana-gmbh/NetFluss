@@ -74,6 +74,8 @@ final class AppState {
             "unifiHost": "",
             "openWRTEnabled": false,
             "openWRTHost": "",
+            "opnsenseEnabled": false,
+            "opnsenseHost": "",
             "automaticUpdateChecksEnabled": true,
             "backgroundUpdateLastNotifiedVersion": ""
         ])

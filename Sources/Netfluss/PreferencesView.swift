@@ -208,6 +208,8 @@ struct PreferencesView: View {
     @AppStorage("unifiHost") private var unifiHost: String = ""
     @AppStorage("openWRTEnabled") private var openWRTEnabled: Bool = false
     @AppStorage("openWRTHost") private var openWRTHost: String = ""
+    @AppStorage("opnsenseEnabled") private var opnsenseEnabled: Bool = false
+    @AppStorage("opnsenseHost") private var opnsenseHost: String = ""
     @AppStorage("automaticUpdateChecksEnabled") private var automaticUpdateChecksEnabled: Bool = true
     @State private var hiddenAdapters: Set<String> = []
     @State private var adapterNames: [String: String] = [:]
@@ -461,7 +463,7 @@ struct PreferencesView: View {
                         .frame(width: 160)
                     }
                 }
-                Text("Dashboard uses router-wide traffic when Fritz!Box, UniFi, or OpenWRT bandwidth is enabled and available.")
+                Text("Dashboard uses router-wide traffic when Fritz!Box, UniFi, OpenWRT, or OPNsense bandwidth is enabled and available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -761,6 +763,69 @@ struct PreferencesView: View {
                 }
             } header: {
                 Text("OpenWRT Bandwidth")
+            }
+
+            Section {
+                Toggle("Show OPNsense bandwidth in popover", isOn: $opnsenseEnabled)
+                if opnsenseEnabled {
+                    LabeledContent("Router address") {
+                        HStack(spacing: 6) {
+                            if opnsenseHost.isEmpty {
+                                Text(monitor.gatewayIP)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                                Text("(auto)")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.tertiary)
+                            } else {
+                                Text(opnsenseHost)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.primary)
+                            }
+                            Button("Edit…") {
+                                EditRouterHostController.shared.show(
+                                    title: "OPNsense Address",
+                                    placeholder: "Router IP or URL (auto uses gateway)",
+                                    currentHost: opnsenseHost
+                                ) { newHost in
+                                    opnsenseHost = newHost
+                                }
+                            }
+                        }
+                    }
+                    LabeledContent("API Credentials") {
+                        HStack(spacing: 6) {
+                            let host = opnsenseHost.isEmpty ? monitor.gatewayIP : opnsenseHost
+                            if OPNsenseMonitor.loadCredentials(host: host) != nil {
+                                Text("Configured")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("Not set")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.orange)
+                            }
+                            Button("Edit…") {
+                                EditOPNsenseCredentialsController.shared.show(host: host)
+                            }
+                        }
+                    }
+                    Text("Queries your OPNsense router via REST API over HTTPS or HTTP. Auto uses the current default gateway. Requires API key and secret configured in OPNsense.")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                    if let error = monitor.opnsenseError {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                                .font(.system(size: 11))
+                            Text(error)
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                        }
+                    }
+                }
+            } header: {
+                Text("OPNsense Bandwidth")
             }
 
             Section("Launch") {

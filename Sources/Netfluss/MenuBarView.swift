@@ -41,6 +41,7 @@ struct MenuBarView: View {
     @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
     @AppStorage("openWRTEnabled") private var openWRTEnabled: Bool = false
+    @AppStorage("opnsenseEnabled") private var opnsenseEnabled: Bool = false
 
     private static let cardSpacing: CGFloat = 6   // VStack spacing between cards
     @State private var contentHeight: CGFloat = 0
@@ -187,6 +188,11 @@ struct MenuBarView: View {
                 if openWRTEnabled {
                     Divider()
                     OpenWRTSection(useBits: useBits)
+                }
+
+                if opnsenseEnabled {
+                    Divider()
+                    OPNsenseSection(useBits: useBits)
                 }
 
                 if showDNSSwitcher {
@@ -1289,5 +1295,62 @@ struct DNSPresetRow: View {
         }
         .buttonStyle(.borderless)
         .disabled(isActive || isChanging)
+    }
+}
+
+struct OPNsenseSection: View {
+    let useBits: Bool
+
+    @EnvironmentObject private var monitor: NetworkMonitor
+    @Environment(\.appTheme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("OPNsense")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+
+            if let error = monitor.opnsenseError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            } else if let data = monitor.opnsense {
+                VStack(spacing: 4) {
+                    RouterRateRow(
+                        icon: "arrow.down",
+                        label: "Download",
+                        rate: data.rxRateBps,
+                        maxRateMbps: data.linkSpeedMbps,
+                        color: downloadAccentColor(for: theme),
+                        useBits: useBits
+                    )
+                    RouterRateRow(
+                        icon: "arrow.up",
+                        label: "Upload",
+                        rate: data.txRateBps,
+                        maxRateMbps: data.linkSpeedMbps,
+                        color: uploadAccentColor(for: theme),
+                        useBits: useBits
+                    )
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            } else {
+                Text("Gathering data…")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+            }
+        }
     }
 }

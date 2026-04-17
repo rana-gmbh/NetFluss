@@ -46,6 +46,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
     @Published var unifiError: String?
     @Published var openWRT: OpenWRTBandwidth?
     @Published var openWRTError: String?
+    @Published var opnsense: OPNsenseBandwidth?
+    @Published var opnsenseError: String?
 
     private var timer: DispatchSourceTimer?
     private let refreshQueue = DispatchQueue(label: "com.local.netfluss.refresh", qos: .utility)
@@ -56,6 +58,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var openWRTInFlight = false
     private var openWRTLastSample: OpenWRTSample?
     private var openWRTLastSampleHost: String?
+    private var opnsenseInFlight = false
+    private var opnsenseLastSample: OPNsenseSample?
+    private var opnsenseLastSampleHost: String?
     private var lastSample: [String: InterfaceSample] = [:]
     private var lastUpdate: Date?
     private var currentInterval: Double?
@@ -345,6 +350,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
             updateFritzBox()
             updateUniFi()
             updateOpenWRT()
+            updateOPNsense()
         }
 
         let needsImmediateFollowUp = detailMonitoringEnabled && forceDetailRefresh
@@ -1007,6 +1013,67 @@ final class NetworkMonitor: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - OPNsense
+
+    private func updateOPNsense() {
+        guard UserDefaults.standard.bool(forKey: "opnsenseEnabled") else {
+            if opnsense != nil { opnsense = nil }
+            if opnsenseError != nil { opnsenseError = nil }
+            opnsenseLastSample = nil
+            opnsenseLastSampleHost = nil
+            return
+        }
+        guard !opnsenseInFlight else { return }
+        opnsenseInFlight = true
+
+        let customHost = UserDefaults.standard.string(forKey: "opnsenseHost") ?? ""
+        let host = customHost.isEmpty ? gatewayIP : customHost
+        let usesAutoHost = customHost.isEmpty
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                guard let creds = OPNsenseMonitor.loadCredentials(host: host) else {
+                    let msg = "No credentials configured"
+                    self.setIfChanged(\.opnsenseError, to: msg)
+                    self.setIfChanged(\.opnsense, to: nil)
+                    self.opnsenseInFlight = false
+                    return
+                }
+                let sample = try await OPNsenseMonitor.fetchSample(
+                    host: host, apiKey: creds.apiKey, apiSecret: creds.apiSecret
+                )
+                // Compute rates from previous sample
+                if let prev = self.opnsenseLastSample, self.opnsenseLastSampleHost == host {
+                    let dt = sample.timestamp.timeIntervalSince(prev.timestamp)
+                    if dt > 0 {
+                        let rxRate = Double(sample.rxBytes &- prev.rxBytes) / dt
+                        let txRate = Double(sample.txBytes &- prev.txBytes) / dt
+                        self.setIfChanged(\.opnsense, to: OPNsenseBandwidth(
+                            rxRateBps: rxRate,
+                            txRateBps: txRate,
+                            linkSpeedMbps: sample.linkSpeedMbps
+                        ))
+                    }
+                }
+                self.opnsenseLastSample = sample
+                self.opnsenseLastSampleHost = host
+                self.setIfChanged(\.opnsenseError, to: nil)
+            } catch {
+                self.setIfChanged(\.opnsense, to: nil)
+                self.opnsenseLastSample = nil
+                self.opnsenseLastSampleHost = nil
+                let msg = Self.describeOPNsenseError(
+                    error,
+                    host: host,
+                    usesAutoHost: usesAutoHost
+                )
+                self.setIfChanged(\.opnsenseError, to: msg)
+            }
+            self.opnsenseInFlight = false
+        }
+    }
+
     private nonisolated static func runSyncOutput(_ path: String, _ args: [String]) -> String {
         runSyncResult(path, args).stdout
     }
@@ -1127,6 +1194,59 @@ final class NetworkMonitor: NSObject, ObservableObject {
         return usesAutoHost
             ? "Cannot reach OpenWRT. \(autoHint)"
             : "Cannot reach OpenWRT."
+    }
+
+    private nonisolated static func describeOPNsenseError(
+        _ error: Error,
+        host: String,
+        usesAutoHost: Bool
+    ) -> String {
+        let autoHint = "Auto uses the current default gateway. Set the OPNsense address manually if that is a different router."
+
+        if let opnsenseError = error as? OPNsenseError {
+            switch opnsenseError {
+            case .invalidURL:
+                return usesAutoHost
+                    ? "No OPNsense gateway address is available. \(autoHint)"
+                    : "Enter a valid OPNsense address or URL."
+            case .authFailed:
+                return "OPNsense login failed. Check the API credentials."
+            case .httpStatus(let statusCode):
+                if statusCode == 401 || statusCode == 403 {
+                    return "OPNsense authentication failed. Check the API key and secret."
+                }
+                return "OPNsense request failed (HTTP \(statusCode))."
+            case .noWANInterface:
+                return "OPNsense responded, but no WAN interface could be identified."
+            case .parseError:
+                return "OPNsense returned an unexpected response."
+            case .requestFailed:
+                return usesAutoHost
+                    ? "Cannot reach OPNsense at \(host). \(autoHint)"
+                    : "Cannot reach OPNsense at \(host)."
+            }
+        }
+
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut:
+                return "OPNsense did not respond in time."
+            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .networkConnectionLost, .notConnectedToInternet:
+                return usesAutoHost
+                    ? "Cannot reach OPNsense at \(host). \(autoHint)"
+                    : "Cannot reach OPNsense at \(host)."
+            default:
+                break
+            }
+        }
+
+        let message = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !message.isEmpty {
+            return message
+        }
+        return usesAutoHost
+            ? "Cannot reach OPNsense. \(autoHint)"
+            : "Cannot reach OPNsense."
     }
 }
 
