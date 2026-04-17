@@ -383,6 +383,192 @@ struct EditRouterCredentialsPanelView: View {
     }
 }
 
+// MARK: - OPNsense Credentials Editor
+
+@MainActor
+final class EditOPNsenseCredentialsController {
+    static let shared = EditOPNsenseCredentialsController()
+    private var panel: NSPanel?
+
+    func show(host: String, onSave: @escaping () -> Void = {}) {
+        if let panel {
+            panel.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let view = EditOPNsenseCredentialsPanelView(host: host) { [weak self] apiKey, apiSecret in
+            OPNsenseMonitor.saveCredentials(host: host, apiKey: apiKey, apiSecret: apiSecret)
+            onSave()
+            self?.close()
+        } onCancel: { [weak self] in
+            self?.close()
+        }
+        let hosting = NSHostingController(rootView: view)
+
+        let panel = NSPanel(contentViewController: hosting)
+        panel.title = "OPNsense API Credentials"
+        panel.styleMask = [.titled, .closable, .nonactivatingPanel]
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.setContentSize(NSSize(width: 340, height: 280))
+        panel.isReleasedWhenClosed = false
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKey()
+
+        self.panel = panel
+    }
+
+    private func close() {
+        panel?.close()
+        panel = nil
+        reactivatePreferencesWindow()
+    }
+}
+
+struct EditOPNsenseCredentialsPanelView: View {
+    let host: String
+    let onSave: (String, String) -> Void
+    let onCancel: () -> Void
+
+    @State private var apiKey: String = ""
+    @State private var apiSecret: String = ""
+    @State private var isTesting = false
+    @State private var testPassed = false
+    @State private var testError: String?
+
+    private var canTest: Bool {
+        !apiKey.trimmingCharacters(in: .whitespaces).isEmpty && !apiSecret.isEmpty
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("OPNsense API Credentials")
+                .font(.headline)
+            Text("for \(host)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            TextField("API Key", text: $apiKey)
+                .textFieldStyle(.roundedBorder)
+                .disabled(isTesting)
+            SecureField("API Secret", text: $apiSecret)
+                .textFieldStyle(.roundedBorder)
+                .disabled(isTesting)
+                .onSubmit { testConnection() }
+            Text("Generate these in OPNsense: System → User Management → API")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            // Test connection status
+            if let error = testError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.system(size: 12))
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if testPassed {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.system(size: 12))
+                    Text("Connection successful")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(isTesting)
+                Spacer()
+                Button(isTesting ? "Testing…" : "Test Connection") {
+                    testConnection()
+                }
+                .disabled(isTesting || !canTest)
+                Button("Save") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isTesting || !testPassed)
+            }
+        }
+        .padding(24)
+        .onAppear {
+            if let creds = OPNsenseMonitor.loadCredentials(host: host) {
+                apiKey = creds.apiKey
+                apiSecret = creds.apiSecret
+            }
+        }
+    }
+
+    private func testConnection() {
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespaces)
+        guard !trimmedKey.isEmpty, !apiSecret.isEmpty else { return }
+
+        isTesting = true
+        testError = nil
+        testPassed = false
+
+        Task {
+            do {
+                try await OPNsenseMonitor.login(host: host, apiKey: trimmedKey, apiSecret: apiSecret)
+                await MainActor.run {
+                    testPassed = true
+                    testError = nil
+                    isTesting = false
+                }
+            } catch {
+                let errorMsg: String
+                if let opnsenseError = error as? OPNsenseError {
+                    switch opnsenseError {
+                    case .authFailed:
+                        errorMsg = "API key or secret is incorrect (HTTP 401/403)"
+                    case .invalidURL:
+                        errorMsg = "Invalid router address or URL format"
+                    case .httpStatus(let code):
+                        errorMsg = "HTTP error \(code) — check the router address and verify the API is enabled"
+                    case .parseError:
+                        errorMsg = "Router returned unexpected format — verify the API endpoint or check the OPNsense logs (console output has details)"
+                    case .requestFailed:
+                        errorMsg = "Could not reach router — verify address and network connectivity"
+                    case .noWANInterface:
+                        errorMsg = "Router responded but WAN interface not found"
+                    }
+                } else if let urlError = error as? URLError {
+                    switch urlError.code {
+                    case .timedOut:
+                        errorMsg = "Router did not respond in time"
+                    case .cannotFindHost:
+                        errorMsg = "Could not resolve host — check the address"
+                    case .cannotConnectToHost:
+                        errorMsg = "Could not connect to router — verify address and network"
+                    default:
+                        errorMsg = "Network error: \((error as NSError).localizedDescription)"
+                    }
+                } else {
+                    errorMsg = "Error: \((error as NSError).localizedDescription)"
+                }
+                await MainActor.run {
+                    testPassed = false
+                    testError = errorMsg
+                    isTesting = false
+                }
+            }
+        }
+    }
+
+    private func save() {
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespaces)
+        guard !trimmedKey.isEmpty, !apiSecret.isEmpty, testPassed else { return }
+        onSave(trimmedKey, apiSecret)
+    }
+}
+
 struct AddDNSPanelView: View {
     let editingPreset: DNSPreset?
     let onSave: (DNSPreset) -> Void
