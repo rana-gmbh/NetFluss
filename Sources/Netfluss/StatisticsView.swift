@@ -78,9 +78,9 @@ struct StatisticsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Statistics")
+                    LText("Statistics")
                         .font(.system(size: 26, weight: .bold, design: .rounded))
-                    Text(headerSubtitle)
+                    Text(localizedHeaderSubtitle)
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
@@ -97,7 +97,7 @@ struct StatisticsView: View {
                             }
                         } label: {
                             Label(
-                                statisticsManager.isShowingSampleData ? "Live Data" : "Load Sample Data",
+                                L10n.text(statisticsManager.isShowingSampleData ? "Live Data" : "Load Sample Data"),
                                 systemImage: statisticsManager.isShowingSampleData ? "dot.radiowaves.left.and.right" : "sparkles"
                             )
                             .font(.system(size: 12, weight: .semibold))
@@ -108,7 +108,7 @@ struct StatisticsView: View {
                     Button {
                         statisticsManager.refreshCurrentReport()
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label(L10n.text("Refresh"), systemImage: "arrow.clockwise")
                             .labelStyle(.iconOnly)
                             .font(.system(size: 13, weight: .semibold))
                     }
@@ -133,7 +133,7 @@ struct StatisticsView: View {
 
     private var rangePickerRow: some View {
         HStack(spacing: statisticsRangeControlsGap) {
-            Text("Range")
+            LText("Range")
                 .frame(width: statisticsRangeLabelColumnWidth, height: statisticsRangeControlHeight, alignment: .trailing)
 
             Picker("", selection: $range) {
@@ -168,7 +168,7 @@ struct StatisticsView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "calendar")
                             .font(.system(size: 13, weight: .medium))
-                        Text("Custom date range")
+                        LText("Custom date range")
                             .font(.system(size: 13, weight: .medium))
                         Spacer()
                     }
@@ -202,8 +202,10 @@ struct StatisticsView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Clear custom date range")
-            Button("Change") {
+            Button {
                 openCustomRangePopover()
+            } label: {
+                LText("Change")
             }
             .buttonStyle(.borderless)
             .font(.system(size: 12, weight: .semibold))
@@ -215,12 +217,12 @@ struct StatisticsView: View {
 
     private var customRangePopover: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Custom Date Range")
+            LText("Custom Date Range")
                 .font(.headline)
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 12) {
-                    Text("From")
+                    LText("From")
                         .frame(width: 42, alignment: .leading)
                     DatePicker("", selection: $customDraftStart, in: ...customDraftEnd, displayedComponents: [.date])
                         .labelsHidden()
@@ -228,7 +230,7 @@ struct StatisticsView: View {
                         .frame(width: 150, alignment: .leading)
                 }
                 HStack(spacing: 12) {
-                    Text("To")
+                    LText("To")
                         .frame(width: 42, alignment: .leading)
                     DatePicker("", selection: $customDraftEnd, in: customDraftStart...Date(), displayedComponents: [.date])
                         .labelsHidden()
@@ -239,12 +241,16 @@ struct StatisticsView: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") {
+                Button {
                     showingCustomRangePopover = false
+                } label: {
+                    LText("Cancel")
                 }
                 .keyboardShortcut(.cancelAction)
-                Button("Apply") {
+                Button {
                     applyCustomRange()
+                } label: {
+                    LText("Apply")
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -259,7 +265,7 @@ struct StatisticsView: View {
         if statisticsManager.isLoading && statisticsManager.report == nil {
             VStack {
                 Spacer()
-                ProgressView("Loading statistics…")
+                ProgressView(L10n.text("Loading statistics…"))
                 Spacer()
             }
         } else if let report = statisticsManager.report, report.hasAdapterData || report.hasAppData {
@@ -304,16 +310,18 @@ struct StatisticsView: View {
                 Image(systemName: collectStatistics ? "chart.bar.xaxis" : "bolt.slash")
                     .font(.system(size: 34))
                     .foregroundStyle(.secondary)
-                Text(collectStatistics ? "Not enough statistics yet" : "Statistics collection is off")
+                Text(L10n.text(collectStatistics ? "Not enough statistics yet" : "Statistics collection is off"))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                Text(emptyStateMessage)
+                Text(localizedEmptyStateMessage)
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
                 if !collectStatistics {
-                    Button("Open Preferences") {
+                    Button {
                         PreferencesWindowController.shared.show(monitor: monitor)
+                    } label: {
+                        LText("Open Preferences")
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -324,24 +332,32 @@ struct StatisticsView: View {
     }
 
     private var headerSubtitle: String {
+        localizedHeaderSubtitle
+    }
+
+    private var localizedHeaderSubtitle: String {
         if statisticsManager.isShowingSampleData {
-            return "Previewing generated sample statistics for the last year. Live collection continues with your current preferences."
+            return L10n.text("Previewing generated sample statistics for the last year. Live collection continues with your current preferences.")
         }
         if collectStatistics {
             if collectAppStatistics {
                 let interval = StatisticsManager.appSamplingIntervalDescription
-                return "Adapter statistics are collected continuously while NetFluss runs. App statistics are sampled every \(interval)."
+                return L10n.format("Adapter statistics are collected continuously while NetFluss runs. App statistics are sampled every %@.", interval)
             }
-            return "Adapter statistics are being collected. App statistics are currently disabled."
+            return L10n.text("Adapter statistics are being collected. App statistics are currently disabled.")
         }
-        return "Statistics collection is disabled in Preferences."
+        return L10n.text("Statistics collection is disabled in Preferences.")
     }
 
     private var emptyStateMessage: String {
+        localizedEmptyStateMessage
+    }
+
+    private var localizedEmptyStateMessage: String {
         if collectStatistics {
-            return "Keep NetFluss running for a while and this view will fill in with adapter and app history."
+            return L10n.text("Keep NetFluss running for a while and this view will fill in with adapter and app history.")
         }
-        return "Enable statistics in Preferences to start collecting preset and custom date range network history."
+        return L10n.text("Enable statistics in Preferences to start collecting preset and custom date range network history.")
     }
 
     private var sampleDataBanner: some View {
@@ -350,9 +366,9 @@ struct StatisticsView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Sample history loaded")
+                LText("Sample history loaded")
                     .font(.system(size: 14, weight: .semibold))
-                Text("This is generated demo traffic so you can review the charts, adapter ranking, and top-app lists across all ranges.")
+                LText("This is generated demo traffic so you can review the charts, adapter ranking, and top-app lists across all ranges.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -376,15 +392,17 @@ struct StatisticsView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text("App statistics are disabled")
+                LText("App statistics are disabled")
                     .font(.system(size: 14, weight: .semibold))
-                Text("Turn them on in Preferences if you want top download and upload apps in this view.")
+                LText("Turn them on in Preferences if you want top download and upload apps in this view.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button("Preferences") {
+            Button {
                 PreferencesWindowController.shared.show(monitor: monitor)
+            } label: {
+                LText("Preferences")
             }
             .buttonStyle(.borderless)
         }
@@ -400,11 +418,11 @@ struct StatisticsView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(report.displayTitle.uppercased())
+                    Text(localizedReportTitle(report).uppercased())
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .tracking(0.8)
-                    Text("Download and upload history for the selected range.")
+                    LText("Download and upload history for the selected range.")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
@@ -412,21 +430,21 @@ struct StatisticsView: View {
                 Spacer()
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(report.displayBucketTitle)
+                    Text(localizedReportBucketTitle(report))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.secondary)
                     if let coverageStart = report.coverageStart {
-                        Text("Collecting since \(coverageStart.formatted(date: .abbreviated, time: .omitted))")
+                        Text(L10n.format("Collecting since %@", coverageStart.formatted(date: .abbreviated, time: .omitted)))
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
                     if let lastAdapterSampleAt = report.lastAdapterSampleAt {
-                        Text("Last adapter update \(lastAdapterSampleAt.formatted(date: .omitted, time: .shortened))")
+                        Text(L10n.format("Last adapter update %@", lastAdapterSampleAt.formatted(date: .omitted, time: .shortened)))
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
                     if collectAppStatistics, let lastAppSampleAt = report.lastAppSampleAt {
-                        Text("Last app update \(lastAppSampleAt.formatted(date: .omitted, time: .shortened))")
+                        Text(L10n.format("Last app update %@", lastAppSampleAt.formatted(date: .omitted, time: .shortened)))
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
@@ -482,7 +500,7 @@ struct StatisticsView: View {
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label(title, systemImage: systemImage)
+                    Label(L10n.text(title), systemImage: systemImage)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(color)
 
@@ -558,7 +576,7 @@ struct StatisticsView: View {
 
     private func metricPill(title: String, value: String, color: Color) -> some View {
         VStack(alignment: .trailing, spacing: 2) {
-            Text(title.uppercased())
+            Text(L10n.text(title).uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
             Text(value)
@@ -576,14 +594,14 @@ struct StatisticsView: View {
 
     private func adaptersCard(_ report: StatisticsReport) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Adapters")
+            LText("Adapters")
                 .font(.system(size: 22, weight: .bold, design: .rounded))
-            Text("Top adapters by transferred data for the selected range.")
+            LText("Top adapters by transferred data for the selected range.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
 
             if report.adapters.isEmpty {
-                Text("No adapter history yet.")
+                LText("No adapter history yet.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)
@@ -637,14 +655,14 @@ struct StatisticsView: View {
 
     private func appCard(title: String, subtitle: String, rows: [StatisticsAppRow], color: Color) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
+            Text(L10n.text(title))
                 .font(.system(size: 22, weight: .bold, design: .rounded))
-            Text(subtitle)
+            Text(L10n.text(subtitle))
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
 
             if rows.isEmpty {
-                Text(collectAppStatistics ? "No app history yet." : "Turn app statistics on in Preferences to populate this list.")
+                Text(L10n.text(collectAppStatistics ? "No app history yet." : "Turn app statistics on in Preferences to populate this list."))
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)
@@ -692,6 +710,14 @@ struct StatisticsView: View {
 
     private func formattedBytes(_ bytes: UInt64) -> String {
         byteFormatter.string(fromByteCount: Int64(bytes))
+    }
+
+    private func localizedReportTitle(_ report: StatisticsReport) -> String {
+        L10n.text(report.displayTitle)
+    }
+
+    private func localizedReportBucketTitle(_ report: StatisticsReport) -> String {
+        L10n.text(report.displayBucketTitle)
     }
 
     private func mbValue(_ bytes: UInt64) -> Double {

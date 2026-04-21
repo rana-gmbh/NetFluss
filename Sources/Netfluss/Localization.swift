@@ -52,15 +52,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 
     var bundle: Bundle {
-        switch self {
-        case .system:
-            return .main
-        case .english, .german, .simplifiedChinese, .traditionalChinese:
-            guard let path = Bundle.main.path(forResource: rawValue, ofType: "lproj"),
-                  let bundle = Bundle(path: path)
-            else { return .main }
-            return bundle
-        }
+        AppLanguage.bundle(for: self)
     }
 
     static func current(from rawValue: String) -> AppLanguage {
@@ -70,11 +62,58 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     static var selected: AppLanguage {
         current(from: UserDefaults.standard.string(forKey: "appLanguage") ?? AppLanguage.system.rawValue)
     }
+
+    private static func bundle(for language: AppLanguage) -> Bundle {
+        if language == .system {
+            if Bundle.main.path(forResource: "Localizable", ofType: "strings") != nil {
+                return .main
+            }
+            return .module
+        }
+
+        let codes = [language.rawValue, language.rawValue.lowercased()]
+        for code in codes {
+            if let bundle = localizedBundle(for: code, in: .main) {
+                return bundle
+            }
+        }
+
+        for code in codes {
+            if let bundle = localizedBundle(for: code, in: .module) {
+                return bundle
+            }
+        }
+
+        return .main
+    }
+
+    private static func localizedBundle(for code: String, in bundle: Bundle) -> Bundle? {
+        guard let path = bundle.path(forResource: code, ofType: "lproj") else { return nil }
+        return Bundle(path: path)
+    }
 }
 
 enum L10n {
     static func text(_ key: String) -> String {
-        NSLocalizedString(key, bundle: AppLanguage.selected.bundle, comment: "")
+        NSLocalizedString(key, bundle: AppLanguage.selected.bundle, value: key, comment: "")
+    }
+
+    static func format(_ key: String, _ arguments: CVarArg...) -> String {
+        String(format: text(key), locale: AppLanguage.selected.locale, arguments: arguments)
+    }
+}
+
+struct LText: View {
+    @AppStorage("appLanguage") private var appLanguage: String = AppLanguage.system.rawValue
+    private let key: String
+
+    init(_ key: String) {
+        self.key = key
+    }
+
+    var body: some View {
+        let language = AppLanguage.current(from: appLanguage)
+        Text(NSLocalizedString(key, bundle: language.bundle, value: key, comment: ""))
     }
 }
 

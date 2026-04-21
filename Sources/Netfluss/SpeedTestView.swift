@@ -109,9 +109,9 @@ struct SpeedTestView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Speed Test")
+                LText("Speed Test")
                     .font(.system(size: 26, weight: .bold, design: .rounded))
-                Text(displayedProvider.runtimeDescription)
+                Text(L10n.text(displayedProvider.runtimeDescription))
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 420, alignment: .leading)
@@ -120,11 +120,13 @@ struct SpeedTestView: View {
             Spacer()
 
             HStack(alignment: .top, spacing: 12) {
-                Picker("Provider", selection: $speedTestProviderRaw) {
+                Picker(selection: $speedTestProviderRaw) {
                     ForEach(SpeedTestProvider.allCases) { provider in
-                        Text(provider.preferenceLabel)
+                        Text(L10n.text(provider.preferenceLabel))
                             .tag(provider.rawValue)
                     }
+                } label: {
+                    LText("Provider")
                 }
                 .pickerStyle(.menu)
                 .frame(width: 210)
@@ -132,20 +134,26 @@ struct SpeedTestView: View {
 
                 VStack(alignment: .trailing, spacing: 8) {
                     if manager.phase.isRunning {
-                        Button("Cancel") {
+                        Button {
                             manager.cancel()
+                        } label: {
+                            LText("Cancel")
                         }
                         .buttonStyle(.bordered)
                     } else {
-                        Button(runButtonTitle) {
+                        Button {
                             manager.startWithSelectedProvider()
+                        } label: {
+                            Text(L10n.text(runButtonTitle))
                         }
                         .buttonStyle(.borderedProminent)
                         .frame(width: Self.headerActionButtonWidth)
                     }
 
-                    Button("History") {
+                    Button {
                         manager.presentHistory()
+                    } label: {
+                        LText("History")
                     }
                     .buttonStyle(.bordered)
                     .frame(width: Self.headerActionButtonWidth)
@@ -160,9 +168,9 @@ struct SpeedTestView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(manager.phase.title)
+                    Text(L10n.text(manager.phase.title))
                         .font(.system(size: 28, weight: .bold, design: .rounded))
-                    Text(manager.phaseDetail)
+                    Text(L10n.text(manager.phaseDetail))
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -177,11 +185,11 @@ struct SpeedTestView: View {
                             .foregroundStyle(.secondary)
                     }
                     if let finishedAt = manager.finishedAt {
-                        Text("Finished \(timestamp(finishedAt))")
+                        Text(L10n.format("Finished %@", timestamp(finishedAt)))
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     } else if let startedAt = manager.startedAt {
-                        Text("Started \(timestamp(startedAt))")
+                        Text(L10n.format("Started %@", timestamp(startedAt)))
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
@@ -212,7 +220,7 @@ struct SpeedTestView: View {
                 HStack {
                     providerBadge(displayedProvider)
                     Spacer()
-                    Text(displayedProvider.shortDescription)
+                    Text(L10n.text(displayedProvider.shortDescription))
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
@@ -249,14 +257,14 @@ struct SpeedTestView: View {
                     fixedHeight: uniformInfoCardHeight
                 ) {
                     VStack(alignment: .leading, spacing: 10) {
-                        detailRow("Provider", displayedProvider.displayName)
+                            detailRow("Provider", displayedProvider.displayName)
                         if let serverLine {
                             detailRow("Server", serverLine)
                         } else {
-                            detailRow("Server", "Waiting for a server selection")
+                            detailRow("Server", L10n.text("Waiting for a server selection"))
                         }
-                        detailRow("Started", manager.startedAt.map(timestamp) ?? "Not started")
-                        detailRow("Finished", manager.finishedAt.map(timestamp) ?? "In progress")
+                        detailRow("Started", manager.startedAt.map(timestamp) ?? L10n.text("Not started"))
+                        detailRow("Finished", manager.finishedAt.map(timestamp) ?? L10n.text("In progress"))
                     }
                 }
 
@@ -267,15 +275,15 @@ struct SpeedTestView: View {
                     fixedHeight: uniformInfoCardHeight
                 ) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(displayedProvider.runtimeDescription)
+                        Text(L10n.text(displayedProvider.runtimeDescription))
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                         if displayedProvider == .mlab {
-                            Text("M-Lab keeps results public, so NetFluss stores your consent once before the first test.")
+                            LText("M-Lab keeps results public, so NetFluss stores your consent once before the first test.")
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text("Cloudflare measures against nearby Cloudflare edge locations, so results can differ from broader Internet-path tests.")
+                            LText("Cloudflare measures against nearby Cloudflare edge locations, so results can differ from broader Internet-path tests.")
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         }
@@ -293,8 +301,10 @@ struct SpeedTestView: View {
                         Text(error)
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
-                        Button("Try Again") {
+                        Button {
                             manager.startWithSelectedProvider()
+                        } label: {
+                            LText("Try Again")
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -322,7 +332,7 @@ struct SpeedTestView: View {
                         fixedHeight: uniformInfoCardHeight
                     ) {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Add a short note so you can remember exactly where you took this measurement later.")
+                            LText("Add a short note so you can remember exactly where you took this measurement later.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
                             if let note = noteSummary(for: result), !note.isEmpty {
@@ -331,8 +341,10 @@ struct SpeedTestView: View {
                                     .foregroundStyle(.primary)
                                     .lineLimit(3)
                             }
-                            Button(result.note?.isEmpty == false ? "Edit Note" : "Add Note") {
+                            Button {
                                 editingNoteResult = result
+                            } label: {
+                                Text(L10n.text(result.note?.isEmpty == false ? "Edit Note" : "Add Note"))
                             }
                             .buttonStyle(.bordered)
                         }
@@ -352,16 +364,18 @@ struct SpeedTestView: View {
             tint: .orange
         ) {
             VStack(alignment: .leading, spacing: 14) {
-                Text("M-Lab publishes measurement data publicly, including your public IP address. NetFluss needs your consent before running the first M-Lab speed test.")
+                LText("M-Lab publishes measurement data publicly, including your public IP address. NetFluss needs your consent before running the first M-Lab speed test.")
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                 HStack(spacing: 10) {
-                    Button("Continue with M-Lab") {
+                    Button {
                         manager.acceptMLabPolicyAndStart()
+                    } label: {
+                        LText("Continue with M-Lab")
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Link("Review M-Lab privacy policy", destination: URL(string: "https://www.measurementlab.net/privacy/")!)
+                    Link(L10n.text("Review M-Lab privacy policy"), destination: URL(string: "https://www.measurementlab.net/privacy/")!)
                         .font(.system(size: 12, weight: .semibold))
                 }
             }
@@ -369,7 +383,7 @@ struct SpeedTestView: View {
     }
 
     private func providerBadge(_ provider: SpeedTestProvider) -> some View {
-        Text(provider.displayName)
+        Text(L10n.text(provider.displayName))
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(.primary)
             .padding(.horizontal, 10)
@@ -382,7 +396,7 @@ struct SpeedTestView: View {
 
     private func liveMetricCard(title: String, value: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title.uppercased())
+            Text(L10n.text(title).uppercased())
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
             Text(value)
@@ -424,7 +438,7 @@ struct SpeedTestView: View {
     private func cardShell<Content: View>(title: String, icon: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Label {
-                Text(title)
+                Text(L10n.text(title))
                     .font(.system(size: 15, weight: .semibold))
             } icon: {
                 Image(systemName: icon)
@@ -448,7 +462,7 @@ struct SpeedTestView: View {
 
     private func detailRow(_ label: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label)
+            Text(L10n.text(label))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .frame(width: 70, alignment: .leading)
@@ -629,17 +643,19 @@ private struct SpeedTestHistorySheet: View {
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Speed Test History")
+                    LText("Speed Test History")
                         .font(.system(size: 22, weight: .bold, design: .rounded))
-                    Text("Recent results saved on this Mac. Add notes to remember the exact place.")
+                    LText("Recent results saved on this Mac. Add notes to remember the exact place.")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
-                Button("Done") {
+                Button {
                     dismiss()
+                } label: {
+                    LText("Done")
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -653,9 +669,9 @@ private struct SpeedTestHistorySheet: View {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 28))
                         .foregroundStyle(.secondary)
-                    Text("No speed tests yet")
+                    LText("No speed tests yet")
                         .font(.system(size: 18, weight: .semibold))
-                    Text("Run a speed test when you want and NetFluss will keep the recent results here.")
+                    LText("Run a speed test when you want and NetFluss will keep the recent results here.")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
@@ -697,17 +713,17 @@ private struct SpeedTestHistorySheet: View {
 
     private var historyHeader: some View {
         HStack(spacing: 12) {
-            Text("When")
+            LText("When")
                 .frame(width: 150, alignment: .leading)
-            Text("Provider")
+            LText("Provider")
                 .frame(width: 96, alignment: .leading)
-            Text("Download")
+            LText("Download")
                 .frame(width: 110, alignment: .trailing)
-            Text("Upload")
+            LText("Upload")
                 .frame(width: 110, alignment: .trailing)
-            Text("Latency")
+            LText("Latency")
                 .frame(width: 78, alignment: .trailing)
-            Text("Note")
+            LText("Note")
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.system(size: 12, weight: .semibold))
@@ -728,7 +744,7 @@ private struct SpeedTestNoteEditorSheet: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Text("Speed Test Note")
+            LText("Speed Test Note")
                 .font(.system(size: 20, weight: .bold, design: .rounded))
             Text(contextLine)
                 .font(.system(size: 12))
@@ -741,15 +757,21 @@ private struct SpeedTestNoteEditorSheet: View {
                     onSave(noteText)
                 }
             HStack(spacing: 12) {
-                Button("Clear") {
+                Button {
                     onSave("")
+                } label: {
+                    LText("Clear")
                 }
                 .disabled(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 Spacer()
-                Button("Cancel", action: onCancel)
+                Button(action: onCancel) {
+                    LText("Cancel")
+                }
                     .keyboardShortcut(.cancelAction)
-                Button("Save") {
+                Button {
                     onSave(noteText)
+                } label: {
+                    LText("Save")
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
@@ -782,7 +804,7 @@ private struct SpeedTestHistoryRow: View {
             Text(compactTimestamp(result.finishedAt))
                 .font(.system(size: 13, design: .monospaced))
                 .frame(width: 150, alignment: .leading)
-            Text(result.provider.displayName)
+            Text(L10n.text(result.provider.displayName))
                 .font(.system(size: 13))
                 .frame(width: 96, alignment: .leading)
             Text(RateFormatter.formatMbps(result.downloadMbps))
@@ -800,7 +822,7 @@ private struct SpeedTestHistoryRow: View {
                 HStack(spacing: 8) {
                     Image(systemName: "square.and.pencil")
                         .foregroundStyle(.secondary)
-                    Text(noteSummary ?? "Add note")
+                    Text(noteSummary ?? L10n.text("Add note"))
                         .font(.system(size: 13))
                         .foregroundStyle(noteSummary == nil ? .secondary : .primary)
                         .lineLimit(2)

@@ -286,19 +286,23 @@ struct PreferencesView: View {
             Divider()
             Form {
                 if selectedPane == .general {
-                    Section("Language") {
-                Picker("Language", selection: $appLanguage) {
+                    Section {
+                Picker(selection: $appLanguage) {
                     ForEach(AppLanguage.allCases) { language in
                         Text(language.displayName).tag(language.rawValue)
                     }
+                } label: {
+                    LText("Language")
                 }
-                Text("System Default follows the language selected in macOS.")
+                LText("System Default follows the language selected in macOS.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } header: {
+                LText("Language")
             }
 
-                    Section("Update") {
-                LabeledContent("Refresh interval") {
+                    Section {
+                LabeledContent {
                     HStack(spacing: 8) {
                         Slider(value: $refreshInterval, in: 0.5...5.0, step: 0.5)
                             .frame(minWidth: 100)
@@ -306,19 +310,29 @@ struct PreferencesView: View {
                             .monospacedDigit()
                             .frame(width: 42, alignment: .trailing)
                     }
+                } label: {
+                    LText("Refresh interval")
                 }
-                Toggle("Check GitHub for updates automatically", isOn: $automaticUpdateChecksEnabled)
-                Text("When enabled, NetFluss checks once per day in the background. The manual Check for Updates button in About stays available.")
+                Toggle(isOn: $automaticUpdateChecksEnabled) {
+                    LText("Check GitHub for updates automatically")
+                }
+                LText("When enabled, NetFluss checks once per day in the background. The manual Check for Updates button in About stays available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } header: {
+                LText("Update")
             }
 
-                    Section("Units") {
-                Toggle("Display rates in bits per second", isOn: $useBits)
+                    Section {
+                Toggle(isOn: $useBits) {
+                    LText("Display rates in bits per second")
+                }
+            } header: {
+                LText("Units")
             }
 
-                    Section("Launch") {
-                Toggle("Launch at login", isOn: Binding(
+                    Section {
+                Toggle(isOn: Binding(
                     get: { launchAtLogin },
                     set: { enable in
                         do {
@@ -332,17 +346,27 @@ struct PreferencesView: View {
                         }
                         launchAtLogin = SMAppService.mainApp.status == .enabled
                     }
-                ))
+                )) {
+                    LText("Launch at login")
+                }
+            } header: {
+                LText("Launch")
             }
                 }
 
                 if selectedPane == .adapters {
-                    Section("Adapter Visibility") {
-                Toggle("Show inactive adapters", isOn: $showInactive)
-                Toggle("Show other adapters (VPN, virtual)", isOn: $showOtherAdapters)
-                Toggle("Hide adapters after inactivity", isOn: $adapterGracePeriodEnabled)
+                    Section {
+                Toggle(isOn: $showInactive) {
+                    LText("Show inactive adapters")
+                }
+                Toggle(isOn: $showOtherAdapters) {
+                    LText("Show other adapters (VPN, virtual)")
+                }
+                Toggle(isOn: $adapterGracePeriodEnabled) {
+                    LText("Hide adapters after inactivity")
+                }
                 if adapterGracePeriodEnabled {
-                    LabeledContent("Hide after") {
+                    LabeledContent {
                         Picker("", selection: $adapterGracePeriodSeconds) {
                             Text("3 s").tag(3.0)
                             Text("5 s").tag(5.0)
@@ -350,13 +374,17 @@ struct PreferencesView: View {
                         }
                         .pickerStyle(.segmented)
                         .frame(maxWidth: 160)
+                    } label: {
+                        LText("Hide after")
                     }
                 }
+            } header: {
+                LText("Adapter Visibility")
             }
 
-                    Section("Adapters") {
+                    Section {
                 if sortedAdapterRows.isEmpty {
-                    Text("No adapters match current filters.")
+                    LText("No adapters match current filters.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(sortedAdapterRows, id: \.id) { adapter in
@@ -408,70 +436,90 @@ struct PreferencesView: View {
                     }
                 }
 
-                Toggle("Only include visible adapters in totals", isOn: $totalsOnlyVisibleAdapters)
-                Toggle("Exclude VPN/tunnel adapters from totals", isOn: $excludeTunnelAdaptersFromTotals)
-                Text("When enabled, the Download/Upload summary and menu bar use only adapters that are visible here.")
+                Toggle(isOn: $totalsOnlyVisibleAdapters) {
+                    LText("Only include visible adapters in totals")
+                }
+                Toggle(isOn: $excludeTunnelAdaptersFromTotals) {
+                    LText("Exclude VPN/tunnel adapters from totals")
+                }
+                LText("When enabled, the Download/Upload summary and menu bar use only adapters that are visible here.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("Tunnel adapters such as utun, tun, tap, ipsec, and ppp are excluded from totals but remain visible in the adapter list.")
+                LText("Tunnel adapters such as utun, tun, tap, ipsec, and ppp are excluded from totals but remain visible in the adapter list.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } header: {
+                LText("Adapters")
             }
                 }
 
                 if selectedPane == .statistics {
-                    Section("Statistics") {
-                Toggle("Collect historical statistics", isOn: $collectStatistics)
-                Text("Disabled by default to avoid extra background work and energy use. When enabled, NetFluss keeps hourly and daily rollups for adapters and optional app traffic analysis.")
+                    Section {
+                Toggle(isOn: $collectStatistics) {
+                    LText("Collect historical statistics")
+                }
+                LText("Disabled by default to avoid extra background work and energy use. When enabled, NetFluss keeps hourly and daily rollups for adapters and optional app traffic analysis.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 if collectStatistics {
-                    Toggle("Collect app statistics", isOn: $collectAppStatistics)
-                    Text("App statistics are on by default and may increase energy consumption because NetFluss periodically samples per-app network usage in the background.")
+                    Toggle(isOn: $collectAppStatistics) {
+                        LText("Collect app statistics")
+                    }
+                    LText("App statistics are on by default and may increase energy consumption because NetFluss periodically samples per-app network usage in the background.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            } header: {
+                LText("Statistics")
             }
                 }
 
                 if selectedPane == .appearance {
-                    Section("Appearance") {
-                LabeledContent("Upload arrow ↑") {
+                    Section {
+                LabeledContent {
                     TrailingPreferenceControl(width: appearanceControlWidth) {
                         ColorSwatchPicker(selection: $uploadColor, customHex: $uploadColorHex)
                     }
+                } label: {
+                    LText("Upload arrow ↑")
                 }
-                LabeledContent("Download arrow ↓") {
+                LabeledContent {
                     TrailingPreferenceControl(width: appearanceControlWidth) {
                         ColorSwatchPicker(selection: $downloadColor, customHex: $downloadColorHex)
                     }
+                } label: {
+                    LText("Download arrow ↓")
                 }
-                LabeledContent("Upload number ↑") {
+                LabeledContent {
                     TrailingPreferenceControl(width: appearanceControlWidth) {
                         ColorSwatchPicker(selection: $menuBarUploadTextColor, customHex: $menuBarUploadTextColorHex)
                     }
+                } label: {
+                    LText("Upload number ↑")
                 }
-                LabeledContent("Download number ↓") {
+                LabeledContent {
                     TrailingPreferenceControl(width: appearanceControlWidth) {
                         ColorSwatchPicker(selection: $menuBarDownloadTextColor, customHex: $menuBarDownloadTextColorHex)
                     }
+                } label: {
+                    LText("Download number ↓")
                 }
                 LabeledContent {
                     TrailingPreferenceControl(width: appearanceControlWidth) {
                         Picker("", selection: $menuBarMode) {
-                            Text("Standard").tag("rates")
-                            Text("Unified pill").tag("unified")
-                            Text("Dashboard").tag("dashboard")
-                            Text("Icon").tag("icon")
+                            LText("Standard").tag("rates")
+                            LText("Unified pill").tag("unified")
+                            LText("Dashboard").tag("dashboard")
+                            LText("Icon").tag("icon")
                         }
                         .frame(width: 180)
                     }
                 } label: {
-                    Text("Menu bar icon style")
+                    LText("Menu bar icon style")
                 }
                 if menuBarMode == "icon" {
-                    LabeledContent("Menu bar icon") {
+                    LabeledContent {
                         TrailingPreferenceControl(width: appearanceControlWidth) {
                             Picker("", selection: $menuBarIconSymbol) {
                                 ForEach(MenuBarIconLibrary.options) { option in
@@ -487,9 +535,11 @@ struct PreferencesView: View {
                             }
                             .frame(width: 180)
                         }
+                    } label: {
+                        LText("Menu bar icon")
                     }
                 } else {
-                    LabeledContent("Menu bar size") {
+                    LabeledContent {
                         TrailingPreferenceControl(width: appearanceControlWidth) {
                             HStack(spacing: 8) {
                                 Text("\(Int(menuBarFontSize)) pt")
@@ -499,22 +549,26 @@ struct PreferencesView: View {
                                     .labelsHidden()
                             }
                         }
+                    } label: {
+                        LText("Menu bar size")
                     }
-                    LabeledContent("Menu bar font") {
+                    LabeledContent {
                         TrailingPreferenceControl(width: appearanceControlWidth) {
                             Picker("", selection: $menuBarFontDesign) {
-                                Text("Monospaced").tag("monospaced")
-                                Text("System").tag("default")
-                                Text("Rounded").tag("rounded")
+                                LText("Monospaced").tag("monospaced")
+                                LText("System").tag("default")
+                                LText("Rounded").tag("rounded")
                             }
                             .pickerStyle(.segmented)
                             .frame(width: 200)
                         }
+                    } label: {
+                        LText("Menu bar font")
                     }
-                    LabeledContent("Menu bar unit") {
+                    LabeledContent {
                         TrailingPreferenceControl(width: appearanceControlWidth) {
                             Picker("", selection: $menuBarPinnedUnit) {
-                                Text("Auto").tag("auto")
+                                LText("Auto").tag("auto")
                                 Text(useBits ? "Kb/s" : "KB/s").tag("K")
                                 Text(useBits ? "Mb/s" : "MB/s").tag("M")
                                 Text(useBits ? "Gb/s" : "GB/s").tag("G")
@@ -522,11 +576,13 @@ struct PreferencesView: View {
                             .pickerStyle(.segmented)
                             .frame(width: 250)
                         }
+                    } label: {
+                        LText("Menu bar unit")
                     }
-                    LabeledContent("Decimals") {
+                    LabeledContent {
                         TrailingPreferenceControl(width: appearanceControlWidth) {
                             Picker("", selection: $menuBarDecimals) {
-                                Text("Auto").tag(0)
+                                LText("Auto").tag(0)
                                 Text("0").tag(10)
                                 Text("1").tag(1)
                                 Text("2").tag(2)
@@ -535,25 +591,31 @@ struct PreferencesView: View {
                             .pickerStyle(.segmented)
                             .frame(width: 220)
                         }
+                    } label: {
+                        LText("Decimals")
                     }
                 }
-                Text("Dashboard uses router-wide traffic when Fritz!Box, UniFi, OpenWRT, or OPNsense bandwidth is enabled and available.")
+                LText("Dashboard uses router-wide traffic when Fritz!Box, UniFi, OpenWRT, or OPNsense bandwidth is enabled and available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } header: {
+                LText("Appearance")
             }
 
-                    Section("IP addresses") {
-                LabeledContent("IP display") {
+                    Section {
+                LabeledContent {
                     TrailingPreferenceControl(width: appearanceControlWidth) {
                         Picker("", selection: $connectionStatusMode) {
-                            Text("List").tag("list")
-                            Text("Flow").tag("flow")
+                            LText("List").tag("list")
+                            LText("Flow").tag("flow")
                         }
                         .pickerStyle(.segmented)
                         .frame(width: 160)
                     }
+                } label: {
+                    LText("IP display")
                 }
-                LabeledContent("External IP") {
+                LabeledContent {
                     TrailingPreferenceControl(width: appearanceControlWidth) {
                         Picker("", selection: $externalIPv6) {
                             Text("IPv4").tag(false)
@@ -562,20 +624,28 @@ struct PreferencesView: View {
                         .pickerStyle(.segmented)
                         .frame(width: 160)
                     }
+                } label: {
+                    LText("External IP")
                 }
+            } header: {
+                LText("IP addresses")
             }
                 }
 
                 if selectedPane == .topApps {
-                    Section("Top Apps") {
-                Toggle("Show top apps by network usage", isOn: $showTopApps)
+                    Section {
+                Toggle(isOn: $showTopApps) {
+                    LText("Show top apps by network usage")
+                }
                 if showTopApps {
-                    Text("Shows the top 5 processes ranked by current network traffic.")
+                    LText("Shows the top 5 processes ranked by current network traffic.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
-                    Toggle("Keep apps visible after traffic stops", isOn: $topAppsGracePeriodEnabled)
+                    Toggle(isOn: $topAppsGracePeriodEnabled) {
+                        LText("Keep apps visible after traffic stops")
+                    }
                     if topAppsGracePeriodEnabled {
-                        LabeledContent("Visible for") {
+                        LabeledContent {
                             Picker("", selection: $topAppsGracePeriodSeconds) {
                                 Text("3 s").tag(3.0)
                                 Text("5 s").tag(5.0)
@@ -583,6 +653,8 @@ struct PreferencesView: View {
                             }
                             .pickerStyle(.segmented)
                             .frame(maxWidth: 160)
+                        } label: {
+                            LText("Visible for")
                         }
                     }
                     HStack {
@@ -591,14 +663,18 @@ struct PreferencesView: View {
                         }
                     }
                 }
+            } header: {
+                LText("Top Apps")
             }
                 }
 
                 if selectedPane == .dns {
-                    Section("DNS Switcher") {
-                Toggle("Show DNS switcher in popover", isOn: $showDNSSwitcher)
+                    Section {
+                Toggle(isOn: $showDNSSwitcher) {
+                    LText("Show DNS switcher in popover")
+                }
                 if showDNSSwitcher {
-                    Text("DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.")
+                    LText("DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
 
@@ -686,20 +762,24 @@ struct PreferencesView: View {
                         }
                     }
                 }
+            } header: {
+                LText("DNS Switcher")
             }
                 }
 
                 if selectedPane == .router {
                     Section {
-                Toggle("Show Fritz!Box bandwidth in popover", isOn: $fritzBoxEnabled)
+                Toggle(isOn: $fritzBoxEnabled) {
+                    LText("Show Fritz!Box bandwidth in popover")
+                }
                 if fritzBoxEnabled {
-                    LabeledContent("Router address") {
+                    LabeledContent {
                         HStack(spacing: 6) {
                             if fritzBoxHost.isEmpty {
                                 Text(monitor.gatewayIP)
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
-                                Text("(auto)")
+                                LText("(auto)")
                                     .font(.system(size: 10))
                                     .foregroundStyle(.tertiary)
                             } else {
@@ -713,8 +793,10 @@ struct PreferencesView: View {
                                 }
                             }
                         }
+                    } label: {
+                        LText("Router address")
                     }
-                    Text("Queries your Fritz!Box via TR-064 (no authentication needed for bandwidth data). Auto uses the current default gateway. Set a fixed address if your Fritz!Box is reachable at a different IP. Port 49000 must be reachable.")
+                    LText("Queries your Fritz!Box via TR-064 (no authentication needed for bandwidth data). Auto uses the current default gateway. Set a fixed address if your Fritz!Box is reachable at a different IP. Port 49000 must be reachable.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                     if let error = monitor.fritzBoxError {
@@ -729,21 +811,23 @@ struct PreferencesView: View {
                     }
                 }
             } header: {
-                Text("Fritz!Box Bandwidth")
+                LText("Fritz!Box Bandwidth")
             }
                 }
 
                 if selectedPane == .router {
                     Section {
-                Toggle("Show UniFi bandwidth in popover", isOn: $unifiEnabled)
+                Toggle(isOn: $unifiEnabled) {
+                    LText("Show UniFi bandwidth in popover")
+                }
                 if unifiEnabled {
-                    LabeledContent("Router address") {
+                    LabeledContent {
                         HStack(spacing: 6) {
                             if unifiHost.isEmpty {
                                 Text(monitor.gatewayIP)
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
-                                Text("(auto)")
+                                LText("(auto)")
                                     .font(.system(size: 10))
                                     .foregroundStyle(.tertiary)
                             } else {
@@ -761,16 +845,18 @@ struct PreferencesView: View {
                                 }
                             }
                         }
+                    } label: {
+                        LText("Router address")
                     }
-                    LabeledContent("Credentials") {
+                    LabeledContent {
                         HStack(spacing: 6) {
                             let host = unifiHost.isEmpty ? monitor.gatewayIP : unifiHost
                             if UniFiMonitor.loadCredentials(host: host) != nil {
-                                Text("Configured")
+                                LText("Configured")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
                             } else {
-                                Text("Not set")
+                                LText("Not set")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.orange)
                             }
@@ -783,8 +869,10 @@ struct PreferencesView: View {
                                 }
                             }
                         }
+                    } label: {
+                        LText("Credentials")
                     }
-                    Text("Queries your UniFi gateway via its local API (HTTPS). Requires a local admin account on the UniFi controller.")
+                    LText("Queries your UniFi gateway via its local API (HTTPS). Requires a local admin account on the UniFi controller.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                     if let error = monitor.unifiError {
@@ -799,21 +887,23 @@ struct PreferencesView: View {
                     }
                 }
             } header: {
-                Text("UniFi Bandwidth")
+                LText("UniFi Bandwidth")
             }
                 }
 
                 if selectedPane == .router {
                     Section {
-                Toggle("Show OpenWRT bandwidth in popover", isOn: $openWRTEnabled)
+                Toggle(isOn: $openWRTEnabled) {
+                    LText("Show OpenWRT bandwidth in popover")
+                }
                 if openWRTEnabled {
-                    LabeledContent("Router address") {
+                    LabeledContent {
                         HStack(spacing: 6) {
                             if openWRTHost.isEmpty {
                                 Text(monitor.gatewayIP)
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
-                                Text("(auto)")
+                                LText("(auto)")
                                     .font(.system(size: 10))
                                     .foregroundStyle(.tertiary)
                             } else {
@@ -831,16 +921,18 @@ struct PreferencesView: View {
                                 }
                             }
                         }
+                    } label: {
+                        LText("Router address")
                     }
-                    LabeledContent("Credentials") {
+                    LabeledContent {
                         HStack(spacing: 6) {
                             let host = openWRTHost.isEmpty ? monitor.gatewayIP : openWRTHost
                             if OpenWRTMonitor.loadCredentials(host: host) != nil {
-                                Text("Configured")
+                                LText("Configured")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
                             } else {
-                                Text("Not set")
+                                LText("Not set")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.orange)
                             }
@@ -853,8 +945,10 @@ struct PreferencesView: View {
                                 }
                             }
                         }
+                    } label: {
+                        LText("Credentials")
                     }
-                    Text("Queries your OpenWRT router via ubus JSON-RPC over HTTPS or HTTP. Auto uses the current default gateway, which may be the wrong router on dual-router setups. Set a fixed OpenWRT IP or URL if needed. Requires the router's admin credentials and the uhttpd-mod-ubus package.")
+                    LText("Queries your OpenWRT router via ubus JSON-RPC over HTTPS or HTTP. Auto uses the current default gateway, which may be the wrong router on dual-router setups. Set a fixed OpenWRT IP or URL if needed. Requires the router's admin credentials and the uhttpd-mod-ubus package.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                     if let error = monitor.openWRTError {
@@ -869,21 +963,23 @@ struct PreferencesView: View {
                     }
                 }
             } header: {
-                Text("OpenWRT Bandwidth")
+                LText("OpenWRT Bandwidth")
             }
                 }
 
                 if selectedPane == .router {
                     Section {
-                Toggle("Show OPNsense bandwidth in popover", isOn: $opnsenseEnabled)
+                Toggle(isOn: $opnsenseEnabled) {
+                    LText("Show OPNsense bandwidth in popover")
+                }
                 if opnsenseEnabled {
-                    LabeledContent("Router address") {
+                    LabeledContent {
                         HStack(spacing: 6) {
                             if opnsenseHost.isEmpty {
                                 Text(monitor.gatewayIP)
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
-                                Text("(auto)")
+                                LText("(auto)")
                                     .font(.system(size: 10))
                                     .foregroundStyle(.tertiary)
                             } else {
@@ -901,16 +997,18 @@ struct PreferencesView: View {
                                 }
                             }
                         }
+                    } label: {
+                        LText("Router address")
                     }
-                    LabeledContent("API Credentials") {
+                    LabeledContent {
                         HStack(spacing: 6) {
                             let host = opnsenseHost.isEmpty ? monitor.gatewayIP : opnsenseHost
                             if OPNsenseMonitor.loadCredentials(host: host) != nil {
-                                Text("Configured")
+                                LText("Configured")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
                             } else {
-                                Text("Not set")
+                                LText("Not set")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.orange)
                             }
@@ -918,8 +1016,10 @@ struct PreferencesView: View {
                                 EditOPNsenseCredentialsController.shared.show(host: host)
                             }
                         }
+                    } label: {
+                        LText("API Credentials")
                     }
-                    Text("Queries your OPNsense router via REST API over HTTPS or HTTP. Auto uses the current default gateway. Requires API key and secret configured in OPNsense.")
+                    LText("Queries your OPNsense router via REST API over HTTPS or HTTP. Auto uses the current default gateway. Requires API key and secret configured in OPNsense.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                     if let error = monitor.opnsenseError {
@@ -934,7 +1034,7 @@ struct PreferencesView: View {
                     }
                 }
             } header: {
-                Text("OPNsense Bandwidth")
+                LText("OPNsense Bandwidth")
             }
                 }
 
@@ -988,7 +1088,7 @@ struct PreferencesView: View {
 
     private var preferencesToolbar: some View {
         VStack(spacing: 8) {
-            Text("Preferences")
+            LText("Preferences")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .padding(.top, 10)
@@ -1003,7 +1103,7 @@ struct PreferencesView: View {
                                 Image(systemName: pane.systemImage)
                                     .font(.system(size: 24, weight: .medium))
                                     .symbolRenderingMode(.hierarchical)
-                                Text(pane.title)
+                                LText(pane.title)
                                     .font(.system(size: 11, weight: .medium))
                                     .lineLimit(1)
                             }
@@ -1016,7 +1116,7 @@ struct PreferencesView: View {
                             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
                         .buttonStyle(.plain)
-                        .help(pane.title)
+                        .help(L10n.text(pane.title))
                     }
                 }
                 .padding(.horizontal, 18)
