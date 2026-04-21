@@ -22,7 +22,7 @@ struct AboutView: View {
     @StateObject private var checker = UpdateChecker()
 
     private var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.1.1"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.2"
     }
 
     private var releaseNotesURL: URL {

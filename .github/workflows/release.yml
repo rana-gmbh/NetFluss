@@ -31,6 +31,7 @@ jobs:
           cp Packaging/Resources/AppIcon.icns NetFluss.app/Contents/Resources/AppIcon.icns
           cp Packaging/Resources/AppIconDark.icns NetFluss.app/Contents/Resources/AppIconDark.icns
           cp -R Packaging/Resources/SpeedTest NetFluss.app/Contents/Resources/SpeedTest
+          cp -R Packaging/Resources/*.lproj NetFluss.app/Contents/Resources/
           VERSION="${GITHUB_REF_NAME#v}"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" NetFluss.app/Contents/Info.plist
           BUILD=$(git rev-list --count HEAD)

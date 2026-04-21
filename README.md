@@ -6,7 +6,7 @@
 
 A native macOS menubar app showing real-time upload and download rates, router-wide bandwidth, historical traffic statistics, and built-in speed testing.
 
-Latest release: **NetFluss 2.1.1**
+Latest release: **NetFluss 2.2**
 
 <p align="center">
   <img src="screenshot.png" width="420" alt="NetFluss screenshot">
@@ -46,6 +46,7 @@ Latest release: **NetFluss 2.1.1**
   - **Fritz!Box** via TR-064 API
   - **UniFi** via the UniFi OS / controller REST API
   - **OpenWRT** via the ubus JSON-RPC API
+  - **OPNsense** via the OPNsense REST API
 - **Top Apps** — optional section listing the top 5 processes by current network traffic, with a relative usage bar per app (enable in Preferences)
   - **Live updates while visible** — app traffic refreshes live while the popup or pinned window is open
   - **App filtering** — hide noisy background processes (e.g. mDNSResponder) from the list via Preferences or hover to hide directly
@@ -94,31 +95,25 @@ Latest release: **NetFluss 2.1.1**
 
 ### Preferences
 
-- Refresh interval (0.5 – 5 seconds)
-- Optional automatic GitHub update checks once per day, with the manual About check still available
-- Show/hide inactive adapters
-- Show/hide other adapters (VPN, virtual interfaces)
-- **Adapter grace period** — keep adapters visible for 3 s, 5 s, or 10 s after they go idle, so brief inactivity doesn't make cards flicker
-- Per-adapter visibility toggles, custom names (pencil button), and drag-to-reorder (≡ handle) — order and names are reflected in the popover
-- Adapter list scrolls when more than 6 interfaces are shown
+- Clear pane-based Preferences window with sections for General, Adapters, Statistics, Appearance, Top Apps, DNS, and Router settings
+- **Language selector** — choose English, German, Simplified Chinese, Traditional Chinese, or follow the macOS system language
+- **General** — launch at login, refresh interval (0.5 – 5 seconds), display rates in bits or bytes, and optional automatic GitHub update checks once per day
+- **Adapters** — show/hide inactive adapters, show/hide other adapters (VPN, virtual interfaces), adapter grace period, per-adapter visibility toggles, custom names, and drag-to-reorder
+- **Statistics** — toggle historical adapter statistics and app statistics separately
+- **Appearance** — upload/download arrow colours, upload/download number colours, menu bar style, menu bar size, font style, pinned unit, decimal places, and IP address display options
+- **IP addresses** — choose List, Flow, or None for the popover IP section, plus IPv4/IPv6 external IP preference
+- **Top Apps** — show/hide the section, configure the grace period, and filter noisy background apps from the live Top Apps list
+- **DNS Switcher** — toggle the DNS picker in the popover; includes built-in presets plus editable custom presets with up to four server fields, visibility toggles, drag-to-reorder, and delete for each preset
+- **Router** — configure Fritz!Box, UniFi, OpenWRT, and OPNsense bandwidth monitoring in one place, with credentials stored securely in macOS Keychain where needed
 - Options to calculate total bandwidth from only visible adapters and to exclude VPN/tunnel adapters from totals while still showing them in the adapter list
-- Display rates in bits or bytes
-- Upload / Download arrow colours plus separate upload / download number colours
-- **Menu bar style** — Standard, Unified pill, Dashboard, or Icon
-- Menu bar font size (8–16 pt stepper) and font style (Monospaced / System / Rounded)
-- **Pinned unit** — lock menu bar rates to KB/s, MB/s, or GB/s instead of auto-scaling
-- **Decimal places** — choose 0, 1, 2, or 3 fixed decimals for menu bar rates
-- **Connection status mode** — choose between the classic IP list or the connection flow view
-- **Bandwidth Statistics** — toggle historical adapter statistics and app statistics separately
-- **Top Apps** toggle
-- **Top Apps grace period** — keep apps visible for 3 s, 5 s, or 10 s after their traffic stops, preventing the list from constantly reshuffling
-- **App filtering** — hide specific apps from the Top Apps list; "Apps to Hide" shows all recently active processes for easy selection
-- **DNS Switcher** — toggle to show the DNS picker in the popover; includes built-in presets plus editable custom presets with up to four server fields, visibility toggles, drag-to-reorder, and delete for each preset
-- **Fritz!Box Bandwidth** — toggle to show total WAN bandwidth from your Fritz!Box router; configurable router address (auto-detected from gateway, fallback: fritz.box); queries TR-064 API on port 49000 (no authentication required)
-- **UniFi Bandwidth** — toggle to show WAN bandwidth from UniFi gateways; configurable host; credentials stored securely in macOS Keychain; supports UniFi OS (UDM) and legacy controller
-- **OpenWRT Bandwidth** — toggle to show WAN bandwidth from OpenWRT routers; configurable host; credentials stored securely in macOS Keychain; uses ubus JSON-RPC API with automatic session management
-- **Router address overrides** — manually set the Fritz!Box, UniFi, or OpenWRT host when auto-detection is not the right gateway
-- **Launch at login** toggle
+
+<p align="center">
+  <img src="Screenshots/FileFluss%20New%20preferences.webp" width="820" alt="NetFluss preferences window">
+</p>
+
+<p align="center">
+  <img src="Screenshots/FileFluss%20New%20languages.webp" width="820" alt="NetFluss language preferences">
+</p>
 
 ### About
 
@@ -139,7 +134,7 @@ Latest release: **NetFluss 2.1.1**
 
 ## Install
 
-Download `NetFluss-2.1.1.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
+Download `NetFluss-2.2.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
 
 NetFluss is notarized and signed with a Developer ID certificate, so Gatekeeper should clear it automatically on first launch.
 
@@ -165,6 +160,7 @@ Or open `Package.swift` in Xcode and run the executable scheme.
 - Popup Top Apps uses live per-process sampling while visible; historical app statistics can be enabled separately in Preferences.
 - DNS changes and Ethernet resets in the packaged app use the bundled NetFluss helper and may require one-time system approval.
 - OpenWRT monitoring expects ubus access to be available on the router; a manual host can help when auto-detection resolves to a different gateway.
+- OPNsense monitoring requires API credentials created in OPNsense and can use a manually configured host when auto-detection points to another router.
 - Speed test adapter pinning is not implemented yet; tests currently follow the default active route.
 
 ## Buy me a coffee

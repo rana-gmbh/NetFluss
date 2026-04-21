@@ -24,7 +24,7 @@ private let colorOptions: [(id: String, label: String)] = [
     ("teal", "Teal"), ("purple", "Purple"), ("pink", "Pink"), ("white", "White"), ("black", "Black")
 ]
 
-private let appearanceControlWidth: CGFloat = 260
+private let appearanceControlWidth: CGFloat = 340
 
 private func swatchColor(_ name: String) -> Color {
     switch name {
@@ -302,28 +302,6 @@ struct PreferencesView: View {
             }
 
                     Section {
-                LabeledContent {
-                    HStack(spacing: 8) {
-                        Slider(value: $refreshInterval, in: 0.5...5.0, step: 0.5)
-                            .frame(minWidth: 100)
-                        Text("\(refreshInterval, specifier: "%.1f") s")
-                            .monospacedDigit()
-                            .frame(width: 42, alignment: .trailing)
-                    }
-                } label: {
-                    LText("Refresh interval")
-                }
-                Toggle(isOn: $automaticUpdateChecksEnabled) {
-                    LText("Check GitHub for updates automatically")
-                }
-                LText("When enabled, NetFluss checks once per day in the background. The manual Check for Updates button in About stays available.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                LText("Update")
-            }
-
-                    Section {
                 Toggle(isOn: $useBits) {
                     LText("Display rates in bits per second")
                 }
@@ -351,6 +329,33 @@ struct PreferencesView: View {
                 }
             } header: {
                 LText("Launch")
+            }
+
+                    Section {
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Slider(value: $refreshInterval, in: 0.5...5.0, step: 0.5)
+                            .frame(minWidth: 100)
+                        Text("\(refreshInterval, specifier: "%.1f") s")
+                            .monospacedDigit()
+                            .frame(width: 42, alignment: .trailing)
+                    }
+                } label: {
+                    LText("Refresh interval")
+                }
+            } header: {
+                LText("Refresh")
+            }
+
+                    Section {
+                Toggle(isOn: $automaticUpdateChecksEnabled) {
+                    LText("Check GitHub for updates automatically")
+                }
+                LText("When enabled, NetFluss checks once per day in the background. The manual Check for Updates button in About stays available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                LText("Update")
             }
                 }
 
@@ -560,7 +565,7 @@ struct PreferencesView: View {
                                 LText("Rounded").tag("rounded")
                             }
                             .pickerStyle(.segmented)
-                            .frame(width: 200)
+                            .frame(width: 300)
                         }
                     } label: {
                         LText("Menu bar font")
@@ -574,7 +579,7 @@ struct PreferencesView: View {
                                 Text(useBits ? "Gb/s" : "GB/s").tag("G")
                             }
                             .pickerStyle(.segmented)
-                            .frame(width: 250)
+                            .frame(width: 280)
                         }
                     } label: {
                         LText("Menu bar unit")
@@ -589,7 +594,7 @@ struct PreferencesView: View {
                                 Text("3").tag(3)
                             }
                             .pickerStyle(.segmented)
-                            .frame(width: 220)
+                            .frame(width: 260)
                         }
                     } label: {
                         LText("Decimals")
