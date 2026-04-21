@@ -36,9 +36,9 @@ final class AboutWindowController: NSObject, NSWindowDelegate {
         // and create a fresh one so UpdateChecker resets to idle.
         window = nil
 
-        let hosting = NSHostingController(rootView: AboutView())
+        let hosting = NSHostingController(rootView: LocalizedRoot { AboutView() })
         let win = NSWindow(contentViewController: hosting)
-        win.title = "About NetFluss"
+        win.title = L10n.text("About NetFluss")
         win.styleMask = [.titled, .closable]
         win.isReleasedWhenClosed = false
         win.animationBehavior = .none

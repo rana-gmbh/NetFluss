@@ -172,29 +172,22 @@ struct ThemeChip: View {
 }
 
 private enum PreferencePane: String, CaseIterable, Identifiable {
-    case update
+    case general
     case adapters
-    case units
     case statistics
     case appearance
     case topApps
     case dns
-    case fritzBox
-    case unifi
-    case openWRT
-    case opnsense
-    case launch
+    case router
 
     var id: Self { self }
 
     var title: String {
         switch self {
-        case .update:
-            return "Update"
+        case .general:
+            return "General"
         case .adapters:
             return "Adapters"
-        case .units:
-            return "Units"
         case .statistics:
             return "Statistics"
         case .appearance:
@@ -203,27 +196,17 @@ private enum PreferencePane: String, CaseIterable, Identifiable {
             return "Top Apps"
         case .dns:
             return "DNS"
-        case .fritzBox:
-            return "Fritz!Box"
-        case .unifi:
-            return "UniFi"
-        case .openWRT:
-            return "OpenWRT"
-        case .opnsense:
-            return "OPNsense"
-        case .launch:
-            return "Launch"
+        case .router:
+            return "Router"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .update:
-            return "arrow.clockwise"
+        case .general:
+            return "gearshape"
         case .adapters:
             return "network"
-        case .units:
-            return "speedometer"
         case .statistics:
             return "chart.bar.xaxis"
         case .appearance:
@@ -232,16 +215,8 @@ private enum PreferencePane: String, CaseIterable, Identifiable {
             return "list.number"
         case .dns:
             return "server.rack"
-        case .fritzBox:
-            return "dot.radiowaves.left.and.right"
-        case .unifi:
+        case .router:
             return "wifi.router"
-        case .openWRT:
-            return "globe"
-        case .opnsense:
-            return "lock.shield"
-        case .launch:
-            return "power"
         }
     }
 }
@@ -286,6 +261,7 @@ struct PreferencesView: View {
     @AppStorage("opnsenseEnabled") private var opnsenseEnabled: Bool = false
     @AppStorage("opnsenseHost") private var opnsenseHost: String = ""
     @AppStorage("automaticUpdateChecksEnabled") private var automaticUpdateChecksEnabled: Bool = true
+    @AppStorage("appLanguage") private var appLanguage: String = AppLanguage.system.rawValue
     @State private var hiddenAdapters: Set<String> = []
     @State private var adapterNames: [String: String] = [:]
     @State private var adapterOrder: [String] = []
@@ -300,7 +276,7 @@ struct PreferencesView: View {
     @State private var dnsPresetOrder: [String] = []
     @State private var dnsDraggingID: String? = nil
     @State private var dnsDragBaseOrder: [String] = []
-    @State private var selectedPane: PreferencePane = .update
+    @State private var selectedPane: PreferencePane = .general
 
     @EnvironmentObject private var monitor: NetworkMonitor
 
@@ -309,7 +285,18 @@ struct PreferencesView: View {
             preferencesToolbar
             Divider()
             Form {
-                if selectedPane == .update {
+                if selectedPane == .general {
+                    Section("Language") {
+                Picker("Language", selection: $appLanguage) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.displayName).tag(language.rawValue)
+                    }
+                }
+                Text("System Default follows the language selected in macOS.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
                     Section("Update") {
                 LabeledContent("Refresh interval") {
                     HStack(spacing: 8) {
@@ -324,6 +311,33 @@ struct PreferencesView: View {
                 Text("When enabled, NetFluss checks once per day in the background. The manual Check for Updates button in About stays available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+                    Section("Units") {
+                Toggle("Display rates in bits per second", isOn: $useBits)
+            }
+
+                    Section("Launch") {
+                Toggle("Launch at login", isOn: Binding(
+                    get: { launchAtLogin },
+                    set: { enable in
+                        do {
+                            if enable {
+                                try SMAppService.mainApp.register()
+                            } else {
+                                try SMAppService.mainApp.unregister()
+                            }
+                        } catch {
+                            // Silently ignore — expected in dev builds outside /Applications
+                        }
+                        launchAtLogin = SMAppService.mainApp.status == .enabled
+                    }
+                ))
+            }
+                }
+
+                if selectedPane == .adapters {
+                    Section("Adapter Visibility") {
                 Toggle("Show inactive adapters", isOn: $showInactive)
                 Toggle("Show other adapters (VPN, virtual)", isOn: $showOtherAdapters)
                 Toggle("Hide adapters after inactivity", isOn: $adapterGracePeriodEnabled)
@@ -339,9 +353,7 @@ struct PreferencesView: View {
                     }
                 }
             }
-                }
 
-                if selectedPane == .adapters {
                     Section("Adapters") {
                 if sortedAdapterRows.isEmpty {
                     Text("No adapters match current filters.")
@@ -404,12 +416,6 @@ struct PreferencesView: View {
                 Text("Tunnel adapters such as utun, tun, tap, ipsec, and ppp are excluded from totals but remain visible in the adapter list.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-                }
-
-                if selectedPane == .units {
-                    Section("Units") {
-                Toggle("Display rates in bits per second", isOn: $useBits)
             }
                 }
 
@@ -531,6 +537,12 @@ struct PreferencesView: View {
                         }
                     }
                 }
+                Text("Dashboard uses router-wide traffic when Fritz!Box, UniFi, OpenWRT, or OPNsense bandwidth is enabled and available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+                    Section("IP addresses") {
                 LabeledContent("IP display") {
                     TrailingPreferenceControl(width: appearanceControlWidth) {
                         Picker("", selection: $connectionStatusMode) {
@@ -551,9 +563,6 @@ struct PreferencesView: View {
                         .frame(width: 160)
                     }
                 }
-                Text("Dashboard uses router-wide traffic when Fritz!Box, UniFi, OpenWRT, or OPNsense bandwidth is enabled and available.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
                 }
 
@@ -680,7 +689,7 @@ struct PreferencesView: View {
             }
                 }
 
-                if selectedPane == .fritzBox {
+                if selectedPane == .router {
                     Section {
                 Toggle("Show Fritz!Box bandwidth in popover", isOn: $fritzBoxEnabled)
                 if fritzBoxEnabled {
@@ -724,7 +733,7 @@ struct PreferencesView: View {
             }
                 }
 
-                if selectedPane == .unifi {
+                if selectedPane == .router {
                     Section {
                 Toggle("Show UniFi bandwidth in popover", isOn: $unifiEnabled)
                 if unifiEnabled {
@@ -794,7 +803,7 @@ struct PreferencesView: View {
             }
                 }
 
-                if selectedPane == .openWRT {
+                if selectedPane == .router {
                     Section {
                 Toggle("Show OpenWRT bandwidth in popover", isOn: $openWRTEnabled)
                 if openWRTEnabled {
@@ -864,7 +873,7 @@ struct PreferencesView: View {
             }
                 }
 
-                if selectedPane == .opnsense {
+                if selectedPane == .router {
                     Section {
                 Toggle("Show OPNsense bandwidth in popover", isOn: $opnsenseEnabled)
                 if opnsenseEnabled {
@@ -929,25 +938,6 @@ struct PreferencesView: View {
             }
                 }
 
-                if selectedPane == .launch {
-                    Section("Launch") {
-                Toggle("Launch at login", isOn: Binding(
-                    get: { launchAtLogin },
-                    set: { enable in
-                        do {
-                            if enable {
-                                try SMAppService.mainApp.register()
-                            } else {
-                                try SMAppService.mainApp.unregister()
-                            }
-                        } catch {
-                            // Silently ignore — expected in dev builds outside /Applications
-                        }
-                        launchAtLogin = SMAppService.mainApp.status == .enabled
-                    }
-                ))
-            }
-                }
             }
             .formStyle(.grouped)
         }

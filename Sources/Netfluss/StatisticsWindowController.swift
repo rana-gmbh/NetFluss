@@ -36,15 +36,17 @@ final class StatisticsWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let view = StatisticsView()
-            .environmentObject(manager)
-            .environmentObject(manager.monitoredNetwork)
-            .environment(\.appTheme, .system)
+        let view = LocalizedRoot {
+            StatisticsView()
+                .environmentObject(manager)
+                .environmentObject(manager.monitoredNetwork)
+                .environment(\.appTheme, .system)
+        }
         let hosting = NSHostingController(rootView: view)
         hosting.sizingOptions = []
 
         let window = NSWindow(contentViewController: hosting)
-        window.title = "Statistics"
+        window.title = L10n.text("Statistics")
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.setContentSize(NSSize(width: 960, height: 720))
         window.minSize = NSSize(width: 860, height: 620)

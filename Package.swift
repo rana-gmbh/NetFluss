@@ -5,6 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "NetFluss",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v13)
     ],
@@ -23,7 +24,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "Netfluss",
-            dependencies: ["PrivilegedExecution", "NetflussHelperShared"]
+            dependencies: ["PrivilegedExecution", "NetflussHelperShared"],
+            resources: [
+                .process("Resources")
+            ]
         ),
     ]
 )

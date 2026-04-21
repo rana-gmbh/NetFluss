@@ -77,6 +77,7 @@ final class AppState {
             "opnsenseEnabled": false,
             "opnsenseHost": "",
             "automaticUpdateChecksEnabled": true,
+            "appLanguage": AppLanguage.system.rawValue,
             "backgroundUpdateLastNotifiedVersion": ""
         ])
         let monitor = NetworkMonitor()

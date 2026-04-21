@@ -46,14 +46,16 @@ final class SpeedTestWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let view = SpeedTestView()
-            .environmentObject(manager)
-            .environment(\.appTheme, .system)
+        let view = LocalizedRoot {
+            SpeedTestView()
+                .environmentObject(manager)
+                .environment(\.appTheme, .system)
+        }
         let hosting = NSHostingController(rootView: view)
         hosting.sizingOptions = []
 
         let window = NSWindow(contentViewController: hosting)
-        window.title = "Speed Test"
+        window.title = L10n.text("Speed Test")
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         let screenFrame = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         let availableFrame = screenFrame.insetBy(dx: 40, dy: 40)

@@ -559,33 +559,33 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private func configureContextMenu() {
         contextMenu.removeAllItems()
 
-        let preferencesItem = NSMenuItem(title: "Preferences", action: #selector(showPreferencesFromContextMenu(_:)), keyEquivalent: ",")
+        let preferencesItem = NSMenuItem(title: L10n.text("Preferences"), action: #selector(showPreferencesFromContextMenu(_:)), keyEquivalent: ",")
         preferencesItem.target = self
         contextMenu.addItem(preferencesItem)
 
-        let statisticsItem = NSMenuItem(title: "Bandwidth Statistics", action: #selector(showStatisticsFromContextMenu(_:)), keyEquivalent: "")
+        let statisticsItem = NSMenuItem(title: L10n.text("Bandwidth Statistics"), action: #selector(showStatisticsFromContextMenu(_:)), keyEquivalent: "")
         statisticsItem.target = self
         contextMenu.addItem(statisticsItem)
 
-        let speedTestItem = NSMenuItem(title: "Speed Test…", action: #selector(showSpeedTestFromContextMenu(_:)), keyEquivalent: "")
+        let speedTestItem = NSMenuItem(title: L10n.text("Speed Test…"), action: #selector(showSpeedTestFromContextMenu(_:)), keyEquivalent: "")
         speedTestItem.target = self
         contextMenu.addItem(speedTestItem)
 
-        let aboutItem = NSMenuItem(title: "About NetFluss", action: #selector(showAboutFromContextMenu(_:)), keyEquivalent: "")
+        let aboutItem = NSMenuItem(title: L10n.text("About NetFluss"), action: #selector(showAboutFromContextMenu(_:)), keyEquivalent: "")
         aboutItem.target = self
         contextMenu.addItem(aboutItem)
 
-        let fileFlussItem = NSMenuItem(title: "Try FileFluss", action: #selector(openFileFlussFromContextMenu(_:)), keyEquivalent: "")
+        let fileFlussItem = NSMenuItem(title: L10n.text("Try FileFluss"), action: #selector(openFileFlussFromContextMenu(_:)), keyEquivalent: "")
         fileFlussItem.target = self
         contextMenu.addItem(fileFlussItem)
 
-        let supportItem = NSMenuItem(title: "Support NetFluss project", action: #selector(openSupportFromContextMenu(_:)), keyEquivalent: "")
+        let supportItem = NSMenuItem(title: L10n.text("Support NetFluss project"), action: #selector(openSupportFromContextMenu(_:)), keyEquivalent: "")
         supportItem.target = self
         contextMenu.addItem(supportItem)
 
         contextMenu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit NetFluss", action: #selector(quitFromContextMenu(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L10n.text("Quit NetFluss"), action: #selector(quitFromContextMenu(_:)), keyEquivalent: "q")
         quitItem.target = self
         contextMenu.addItem(quitItem)
     }
@@ -662,6 +662,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         )
         .environmentObject(monitor)
         .environmentObject(statisticsManager)
+        .environment(\.locale, AppLanguage.current(from: UserDefaults.standard.string(forKey: "appLanguage") ?? AppLanguage.system.rawValue).locale)
     }
 
     private func updateDetailMonitoring() {
@@ -731,6 +732,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         monitor.start(interval: effectiveInterval)
 
         popover.appearance = nil
+        configureContextMenu()
         updateLabel()
     }
 

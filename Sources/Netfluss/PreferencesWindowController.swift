@@ -35,13 +35,15 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let view = PreferencesView()
-            .environmentObject(monitor)
+        let view = LocalizedRoot {
+            PreferencesView()
+                .environmentObject(monitor)
+        }
         let hosting = NSHostingController(rootView: view)
         hosting.sizingOptions = []
 
         let window = NSWindow(contentViewController: hosting)
-        window.title = "Preferences"
+        window.title = L10n.text("Preferences")
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.setContentSize(NSSize(width: 840, height: 680))
         window.minSize = NSSize(width: 720, height: 520)
