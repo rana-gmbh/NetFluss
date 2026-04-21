@@ -171,6 +171,81 @@ struct ThemeChip: View {
     }
 }
 
+private enum PreferencePane: String, CaseIterable, Identifiable {
+    case update
+    case adapters
+    case units
+    case statistics
+    case appearance
+    case topApps
+    case dns
+    case fritzBox
+    case unifi
+    case openWRT
+    case opnsense
+    case launch
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .update:
+            return "Update"
+        case .adapters:
+            return "Adapters"
+        case .units:
+            return "Units"
+        case .statistics:
+            return "Statistics"
+        case .appearance:
+            return "Appearance"
+        case .topApps:
+            return "Top Apps"
+        case .dns:
+            return "DNS"
+        case .fritzBox:
+            return "Fritz!Box"
+        case .unifi:
+            return "UniFi"
+        case .openWRT:
+            return "OpenWRT"
+        case .opnsense:
+            return "OPNsense"
+        case .launch:
+            return "Launch"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .update:
+            return "arrow.clockwise"
+        case .adapters:
+            return "network"
+        case .units:
+            return "speedometer"
+        case .statistics:
+            return "chart.bar.xaxis"
+        case .appearance:
+            return "paintpalette"
+        case .topApps:
+            return "list.number"
+        case .dns:
+            return "server.rack"
+        case .fritzBox:
+            return "dot.radiowaves.left.and.right"
+        case .unifi:
+            return "wifi.router"
+        case .openWRT:
+            return "globe"
+        case .opnsense:
+            return "lock.shield"
+        case .launch:
+            return "power"
+        }
+    }
+}
+
 struct PreferencesView: View {
     @AppStorage("refreshInterval") private var refreshInterval: Double = 1.0
     @AppStorage("showInactive") private var showInactive: Bool = false
@@ -225,12 +300,17 @@ struct PreferencesView: View {
     @State private var dnsPresetOrder: [String] = []
     @State private var dnsDraggingID: String? = nil
     @State private var dnsDragBaseOrder: [String] = []
+    @State private var selectedPane: PreferencePane = .update
 
     @EnvironmentObject private var monitor: NetworkMonitor
 
     var body: some View {
-        Form {
-            Section("Update") {
+        VStack(spacing: 0) {
+            preferencesToolbar
+            Divider()
+            Form {
+                if selectedPane == .update {
+                    Section("Update") {
                 LabeledContent("Refresh interval") {
                     HStack(spacing: 8) {
                         Slider(value: $refreshInterval, in: 0.5...5.0, step: 0.5)
@@ -259,8 +339,10 @@ struct PreferencesView: View {
                     }
                 }
             }
+                }
 
-            Section("Adapters") {
+                if selectedPane == .adapters {
+                    Section("Adapters") {
                 if sortedAdapterRows.isEmpty {
                     Text("No adapters match current filters.")
                         .foregroundStyle(.secondary)
@@ -323,12 +405,16 @@ struct PreferencesView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+                }
 
-            Section("Units") {
+                if selectedPane == .units {
+                    Section("Units") {
                 Toggle("Display rates in bits per second", isOn: $useBits)
             }
+                }
 
-            Section("Statistics") {
+                if selectedPane == .statistics {
+                    Section("Statistics") {
                 Toggle("Collect historical statistics", isOn: $collectStatistics)
                 Text("Disabled by default to avoid extra background work and energy use. When enabled, NetFluss keeps hourly and daily rollups for adapters and optional app traffic analysis.")
                     .font(.caption)
@@ -341,8 +427,10 @@ struct PreferencesView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+                }
 
-            Section("Appearance") {
+                if selectedPane == .appearance {
+                    Section("Appearance") {
                 LabeledContent("Upload arrow ↑") {
                     TrailingPreferenceControl(width: appearanceControlWidth) {
                         ColorSwatchPicker(selection: $uploadColor, customHex: $uploadColorHex)
@@ -467,8 +555,10 @@ struct PreferencesView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+                }
 
-            Section("Top Apps") {
+                if selectedPane == .topApps {
+                    Section("Top Apps") {
                 Toggle("Show top apps by network usage", isOn: $showTopApps)
                 if showTopApps {
                     Text("Shows the top 5 processes ranked by current network traffic.")
@@ -493,8 +583,10 @@ struct PreferencesView: View {
                     }
                 }
             }
+                }
 
-            Section("DNS Switcher") {
+                if selectedPane == .dns {
+                    Section("DNS Switcher") {
                 Toggle("Show DNS switcher in popover", isOn: $showDNSSwitcher)
                 if showDNSSwitcher {
                     Text("DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.")
@@ -586,8 +678,10 @@ struct PreferencesView: View {
                     }
                 }
             }
+                }
 
-            Section {
+                if selectedPane == .fritzBox {
+                    Section {
                 Toggle("Show Fritz!Box bandwidth in popover", isOn: $fritzBoxEnabled)
                 if fritzBoxEnabled {
                     LabeledContent("Router address") {
@@ -628,8 +722,10 @@ struct PreferencesView: View {
             } header: {
                 Text("Fritz!Box Bandwidth")
             }
+                }
 
-            Section {
+                if selectedPane == .unifi {
+                    Section {
                 Toggle("Show UniFi bandwidth in popover", isOn: $unifiEnabled)
                 if unifiEnabled {
                     LabeledContent("Router address") {
@@ -696,8 +792,10 @@ struct PreferencesView: View {
             } header: {
                 Text("UniFi Bandwidth")
             }
+                }
 
-            Section {
+                if selectedPane == .openWRT {
+                    Section {
                 Toggle("Show OpenWRT bandwidth in popover", isOn: $openWRTEnabled)
                 if openWRTEnabled {
                     LabeledContent("Router address") {
@@ -764,8 +862,10 @@ struct PreferencesView: View {
             } header: {
                 Text("OpenWRT Bandwidth")
             }
+                }
 
-            Section {
+                if selectedPane == .opnsense {
+                    Section {
                 Toggle("Show OPNsense bandwidth in popover", isOn: $opnsenseEnabled)
                 if opnsenseEnabled {
                     LabeledContent("Router address") {
@@ -827,8 +927,10 @@ struct PreferencesView: View {
             } header: {
                 Text("OPNsense Bandwidth")
             }
+                }
 
-            Section("Launch") {
+                if selectedPane == .launch {
+                    Section("Launch") {
                 Toggle("Launch at login", isOn: Binding(
                     get: { launchAtLogin },
                     set: { enable in
@@ -845,8 +947,10 @@ struct PreferencesView: View {
                     }
                 ))
             }
+                }
+            }
+            .formStyle(.grouped)
         }
-        .formStyle(.grouped)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             hiddenAdapters = Set(UserDefaults.standard.stringArray(forKey: "hiddenAdapters") ?? [])
@@ -890,6 +994,46 @@ struct PreferencesView: View {
                 menuBarIconSymbol = "netfluss"
             }
         }
+    }
+
+    private var preferencesToolbar: some View {
+        VStack(spacing: 8) {
+            Text("Preferences")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.top, 10)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 6) {
+                    ForEach(PreferencePane.allCases) { pane in
+                        Button {
+                            selectedPane = pane
+                        } label: {
+                            VStack(spacing: 5) {
+                                Image(systemName: pane.systemImage)
+                                    .font(.system(size: 24, weight: .medium))
+                                    .symbolRenderingMode(.hierarchical)
+                                Text(pane.title)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .lineLimit(1)
+                            }
+                            .foregroundColor(selectedPane == pane ? .accentColor : .secondary)
+                            .frame(width: 72, height: 62)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(selectedPane == pane ? Color.accentColor.opacity(0.11) : Color.clear)
+                            )
+                            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .help(pane.title)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 10)
+            }
+        }
+        .background(.regularMaterial)
     }
 
     private var adapterRows: [AdapterStatus] {

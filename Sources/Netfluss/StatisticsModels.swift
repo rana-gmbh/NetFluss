@@ -160,6 +160,13 @@ enum StatisticsRange: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum StatisticsTimelineGranularity: Sendable {
+    case minute
+    case hour
+    case day
+    case month
+}
+
 struct StatisticsTimelinePoint: Identifiable, Sendable {
     let id: String
     let date: Date
@@ -184,6 +191,11 @@ struct StatisticsAppRow: Identifiable, Sendable {
 
 struct StatisticsReport: Sendable {
     let range: StatisticsRange
+    let displayTitle: String
+    let displayBucketTitle: String
+    let timelineGranularity: StatisticsTimelineGranularity
+    let timelineStart: Date
+    let timelineEnd: Date
     let createdAt: Date
     let coverageStart: Date?
     let lastAdapterSampleAt: Date?

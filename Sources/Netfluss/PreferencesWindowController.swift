@@ -43,9 +43,9 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         let window = NSWindow(contentViewController: hosting)
         window.title = "Preferences"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.setContentSize(NSSize(width: 420, height: 820))
-        window.minSize = NSSize(width: 420, height: 400)
-        window.maxSize = NSSize(width: 600, height: 10000)
+        window.setContentSize(NSSize(width: 840, height: 680))
+        window.minSize = NSSize(width: 720, height: 520)
+        window.maxSize = NSSize(width: 1100, height: 10000)
         window.isReleasedWhenClosed = false
         window.animationBehavior = .none
         window.delegate = self

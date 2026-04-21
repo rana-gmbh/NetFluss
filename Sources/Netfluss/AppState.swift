@@ -124,4 +124,8 @@ final class AppState {
     func flushStatistics() {
         statisticsManager.flushSynchronously()
     }
+
+    func showPreferences() {
+        PreferencesWindowController.shared.show(monitor: monitor)
+    }
 }

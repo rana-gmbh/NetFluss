@@ -30,19 +30,41 @@ struct NetFlussApp: App {
         // PreferencesWindowController manages its own NSWindow; this scene
         // is required by SwiftUI but produces no visible UI.
         Settings { EmptyView() }
+            .commands {
+                CommandGroup(replacing: .appSettings) {
+                    Button("Preferences…") {
+                        NotificationCenter.default.post(name: .showPreferences, object: nil)
+                    }
+                    .keyboardShortcut(",", modifiers: .command)
+                }
+            }
     }
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appState: AppState?
+    private var preferencesObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppIconController.shared.start()
         appState = AppState()
+        preferencesObserver = NotificationCenter.default.addObserver(
+            forName: .showPreferences,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.appState?.showPreferences()
+            }
+        }
+
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         appState?.flushStatistics()
+        if let preferencesObserver {
+            NotificationCenter.default.removeObserver(preferencesObserver)
+        }
     }
 }

@@ -130,37 +130,128 @@ actor StatisticsStore {
         customAdapterNames: [String: String],
         hiddenApps: Set<String>
     ) -> StatisticsReport {
-        let coverageStart = earliestCoverageDate()
         let adapterSource: [String: [String: StatisticsTrafficAmounts]]
         let appSource: [String: [String: StatisticsTrafficAmounts]]
         let relevantKeys: [String]
+        let timelineGranularity: StatisticsTimelineGranularity
+        let timelineStart: Date
 
         switch range {
         case .lastHour:
             adapterSource = archive.adapterMinute
             appSource = archive.appMinute
             relevantKeys = Self.minuteKeys(endingAt: now, count: 60, calendar: calendar)
+            timelineGranularity = .minute
+            timelineStart = calendar.date(byAdding: .minute, value: -59, to: now) ?? now
         case .last24Hours:
             adapterSource = archive.adapterHourly
             appSource = archive.appHourly
             relevantKeys = Self.hourKeys(endingAt: now, count: 24, calendar: calendar)
+            timelineGranularity = .hour
+            timelineStart = calendar.date(byAdding: .hour, value: -23, to: now) ?? now
         case .last7Days:
             adapterSource = archive.adapterDaily
             appSource = archive.appDaily
             relevantKeys = Self.dayKeys(endingAt: now, count: 7, calendar: calendar)
+            timelineGranularity = .day
+            timelineStart = calendar.date(byAdding: .day, value: -6, to: now) ?? now
         case .last30Days:
             adapterSource = archive.adapterDaily
             appSource = archive.appDaily
             relevantKeys = Self.dayKeys(endingAt: now, count: 30, calendar: calendar)
+            timelineGranularity = .day
+            timelineStart = calendar.date(byAdding: .day, value: -29, to: now) ?? now
         case .lastYear:
             adapterSource = archive.adapterDaily
             appSource = archive.appDaily
             relevantKeys = Self.dayKeys(endingAt: now, count: 365, calendar: calendar)
+            timelineGranularity = .month
+            timelineStart = calendar.date(byAdding: .day, value: -364, to: now) ?? now
         }
 
+        return makeReport(
+            range: range,
+            displayTitle: range.title,
+            displayBucketTitle: range.bucketTitle,
+            timelineGranularity: timelineGranularity,
+            timelineStart: timelineStart,
+            timelineEnd: now,
+            adapterSource: adapterSource,
+            appSource: appSource,
+            relevantKeys: relevantKeys,
+            customAdapterNames: customAdapterNames,
+            hiddenApps: hiddenApps
+        )
+    }
+
+    func report(
+        customStart: Date,
+        customEnd: Date,
+        now: Date,
+        customAdapterNames: [String: String],
+        hiddenApps: Set<String>
+    ) -> StatisticsReport {
+        let boundedEnd = min(max(customStart, customEnd), now)
+        let boundedStart = min(customStart, boundedEnd)
+        let span = boundedEnd.timeIntervalSince(boundedStart)
+
+        let adapterSource: [String: [String: StatisticsTrafficAmounts]]
+        let appSource: [String: [String: StatisticsTrafficAmounts]]
+        let relevantKeys: [String]
+        let timelineGranularity: StatisticsTimelineGranularity
+
+        let minuteCutoff = calendar.date(byAdding: .minute, value: -Constants.minuteRetentionMinutes, to: now) ?? now
+        let hourlyCutoff = calendar.date(byAdding: .hour, value: -Constants.hourlyRetentionHours, to: now) ?? now
+
+        if span <= 3 * 60 * 60, boundedStart >= minuteCutoff {
+            adapterSource = archive.adapterMinute
+            appSource = archive.appMinute
+            relevantKeys = Self.minuteKeys(from: boundedStart, to: boundedEnd, calendar: calendar)
+            timelineGranularity = .minute
+        } else if span <= 72 * 60 * 60, boundedStart >= hourlyCutoff {
+            adapterSource = archive.adapterHourly
+            appSource = archive.appHourly
+            relevantKeys = Self.hourKeys(from: boundedStart, to: boundedEnd, calendar: calendar)
+            timelineGranularity = .hour
+        } else {
+            adapterSource = archive.adapterDaily
+            appSource = archive.appDaily
+            relevantKeys = Self.dayKeys(from: boundedStart, to: boundedEnd, calendar: calendar)
+            timelineGranularity = span > 90 * 24 * 60 * 60 ? .month : .day
+        }
+
+        return makeReport(
+            range: .last30Days,
+            displayTitle: Self.customRangeTitle(from: boundedStart, to: boundedEnd),
+            displayBucketTitle: Self.bucketTitle(for: timelineGranularity),
+            timelineGranularity: timelineGranularity,
+            timelineStart: boundedStart,
+            timelineEnd: boundedEnd,
+            adapterSource: adapterSource,
+            appSource: appSource,
+            relevantKeys: relevantKeys,
+            customAdapterNames: customAdapterNames,
+            hiddenApps: hiddenApps
+        )
+    }
+
+    private func makeReport(
+        range: StatisticsRange,
+        displayTitle: String,
+        displayBucketTitle: String,
+        timelineGranularity: StatisticsTimelineGranularity,
+        timelineStart: Date,
+        timelineEnd: Date,
+        adapterSource: [String: [String: StatisticsTrafficAmounts]],
+        appSource: [String: [String: StatisticsTrafficAmounts]],
+        relevantKeys: [String],
+        customAdapterNames: [String: String],
+        hiddenApps: Set<String>
+    ) -> StatisticsReport {
+        let coverageStart = earliestCoverageDate()
         let adapterTotals = aggregate(items: adapterSource, keys: relevantKeys)
         let appTotals = aggregate(items: appSource, keys: relevantKeys)
-        let timeline = timelinePoints(for: range, source: adapterSource, keys: relevantKeys)
+        let timeline = timelinePoints(granularity: timelineGranularity, source: adapterSource, keys: relevantKeys)
 
         let adapters = topAdapters(from: adapterTotals, customAdapterNames: customAdapterNames)
         let topDownloadApps = appRows(
@@ -176,6 +267,11 @@ actor StatisticsStore {
 
         return StatisticsReport(
             range: range,
+            displayTitle: displayTitle,
+            displayBucketTitle: displayBucketTitle,
+            timelineGranularity: timelineGranularity,
+            timelineStart: timelineStart,
+            timelineEnd: timelineEnd,
             createdAt: archive.createdAt,
             coverageStart: coverageStart,
             lastAdapterSampleAt: archive.lastAdapterSampleAt,
@@ -206,12 +302,12 @@ actor StatisticsStore {
     }
 
     private func timelinePoints(
-        for range: StatisticsRange,
+        granularity: StatisticsTimelineGranularity,
         source: [String: [String: StatisticsTrafficAmounts]],
         keys: [String]
     ) -> [StatisticsTimelinePoint] {
-        switch range {
-        case .lastYear:
+        switch granularity {
+        case .month:
             var monthlyTotals: [String: StatisticsTrafficAmounts] = [:]
             for key in keys {
                 guard let bucketDate = Self.date(fromDayKey: key, calendar: calendar),
@@ -235,17 +331,17 @@ actor StatisticsStore {
                     uploadBytes: totals.uploadBytes
                 )
             }
-        case .lastHour, .last24Hours, .last7Days, .last30Days:
+        case .minute, .hour, .day:
             return keys.compactMap { key in
                 let date: Date?
-                switch range {
-                case .lastHour:
+                switch granularity {
+                case .minute:
                     date = Self.date(fromMinuteKey: key, calendar: calendar)
-                case .last24Hours:
+                case .hour:
                     date = Self.date(fromHourKey: key, calendar: calendar)
-                case .last7Days, .last30Days:
+                case .day:
                     date = Self.date(fromDayKey: key, calendar: calendar)
-                case .lastYear:
+                case .month:
                     date = nil
                 }
                 guard let date, let bucket = source[key] else { return nil }
@@ -446,6 +542,25 @@ actor StatisticsStore {
         return try decoder.decode(StatisticsArchive.self, from: data)
     }
 
+    private static func customRangeTitle(from start: Date, to end: Date) -> String {
+        let startText = start.formatted(date: .abbreviated, time: .shortened)
+        let endText = end.formatted(date: .abbreviated, time: .shortened)
+        return "\(startText) – \(endText)"
+    }
+
+    private static func bucketTitle(for granularity: StatisticsTimelineGranularity) -> String {
+        switch granularity {
+        case .minute:
+            return "Minute Traffic"
+        case .hour:
+            return "Hourly Traffic"
+        case .day:
+            return "Daily Traffic"
+        case .month:
+            return "Monthly Traffic"
+        }
+    }
+
     private static func hourKeys(endingAt date: Date, count: Int, calendar: Calendar) -> [String] {
         let end = calendar.dateInterval(of: .hour, for: date)?.start ?? date
         return (0..<count).compactMap { offset in
@@ -468,6 +583,52 @@ actor StatisticsStore {
             let bucketDate = calendar.date(byAdding: .day, value: -(count - 1 - offset), to: end)
             return bucketDate.map { dayKey(for: $0, calendar: calendar) }
         }
+    }
+
+    private static func hourKeys(from start: Date, to end: Date, calendar: Calendar) -> [String] {
+        let startHour = calendar.dateInterval(of: .hour, for: start)?.start ?? start
+        let endHour = calendar.dateInterval(of: .hour, for: end)?.start ?? end
+        var keys: [String] = []
+        var current = startHour
+        let includeEndHour = end != endHour
+
+        while includeEndHour ? current <= endHour : current < endHour {
+            keys.append(hourKey(for: current, calendar: calendar))
+            guard let next = calendar.date(byAdding: .hour, value: 1, to: current) else { break }
+            current = next
+        }
+
+        return keys
+    }
+
+    private static func minuteKeys(from start: Date, to end: Date, calendar: Calendar) -> [String] {
+        let startMinute = calendar.dateInterval(of: .minute, for: start)?.start ?? start
+        let endMinute = calendar.dateInterval(of: .minute, for: end)?.start ?? end
+        var keys: [String] = []
+        var current = startMinute
+
+        while current <= endMinute {
+            keys.append(minuteKey(for: current, calendar: calendar))
+            guard let next = calendar.date(byAdding: .minute, value: 1, to: current) else { break }
+            current = next
+        }
+
+        return keys
+    }
+
+    private static func dayKeys(from start: Date, to end: Date, calendar: Calendar) -> [String] {
+        let startDay = calendar.startOfDay(for: start)
+        let endDay = calendar.startOfDay(for: end)
+        var keys: [String] = []
+        var current = startDay
+
+        while current <= endDay {
+            keys.append(dayKey(for: current, calendar: calendar))
+            guard let next = calendar.date(byAdding: .day, value: 1, to: current) else { break }
+            current = next
+        }
+
+        return keys
     }
 
     private static func hourKey(for date: Date, calendar: Calendar) -> String {

@@ -40,6 +40,8 @@ final class StatisticsManager: ObservableObject {
     private var appSamplingTimer: DispatchSourceTimer?
     private var appSamplingInFlight = false
     private var currentRange: StatisticsRange = .last24Hours
+    private var currentCustomStart: Date?
+    private var currentCustomEnd: Date?
 
     init(monitor: NetworkMonitor) {
         self.monitor = monitor
@@ -80,6 +82,8 @@ final class StatisticsManager: ObservableObject {
 
     func loadReport(for range: StatisticsRange) {
         currentRange = range
+        currentCustomStart = nil
+        currentCustomEnd = nil
         isLoading = true
 
         let customAdapterNames = Self.loadAdapterNames()
@@ -100,20 +104,48 @@ final class StatisticsManager: ObservableObject {
         }
     }
 
+    func loadReport(customStart: Date, customEnd: Date) {
+        currentCustomStart = customStart
+        currentCustomEnd = customEnd
+        isLoading = true
+
+        let customAdapterNames = Self.loadAdapterNames()
+        let hiddenApps = Set(UserDefaults.standard.stringArray(forKey: "hiddenApps") ?? [])
+        let activeStore = isShowingSampleData ? (sampleStore ?? store) : store
+
+        Task { [activeStore] in
+            let report = await activeStore.report(
+                customStart: customStart,
+                customEnd: customEnd,
+                now: Date(),
+                customAdapterNames: customAdapterNames,
+                hiddenApps: hiddenApps
+            )
+            await MainActor.run {
+                self.report = report
+                self.isLoading = false
+            }
+        }
+    }
+
     func refreshCurrentReport() {
-        loadReport(for: currentRange)
+        if let currentCustomStart, let currentCustomEnd {
+            loadReport(customStart: currentCustomStart, customEnd: currentCustomEnd)
+        } else {
+            loadReport(for: currentRange)
+        }
     }
 
     func enableSampleData() {
         sampleStore = StatisticsStore(archive: StatisticsDemoData.makeArchive(now: Date()))
         isShowingSampleData = true
-        loadReport(for: currentRange)
+        refreshCurrentReport()
     }
 
     func disableSampleData() {
         sampleStore = nil
         isShowingSampleData = false
-        loadReport(for: currentRange)
+        refreshCurrentReport()
     }
 
     func flushSynchronously() {

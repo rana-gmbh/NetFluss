@@ -21,6 +21,7 @@ import SwiftUI
 
 extension Notification.Name {
     static let closePopover = Notification.Name("com.local.netfluss.closePopover")
+    static let showPreferences = Notification.Name("com.local.netfluss.showPreferences")
 }
 
 private enum MenuBarDisplayStyle: String {

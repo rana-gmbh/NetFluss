@@ -18,6 +18,11 @@
 import Charts
 import SwiftUI
 
+private let statisticsRangePickerWidth: CGFloat = 336
+private let statisticsRangeControlHeight: CGFloat = 32
+private let statisticsRangeControlsGap: CGFloat = 6
+private let statisticsRangeLabelColumnWidth: CGFloat = 62
+
 struct StatisticsView: View {
     @EnvironmentObject private var statisticsManager: StatisticsManager
     @EnvironmentObject private var monitor: NetworkMonitor
@@ -25,6 +30,12 @@ struct StatisticsView: View {
     @AppStorage("collectAppStatistics") private var collectAppStatistics: Bool = true
 
     @State private var range: StatisticsRange = .last24Hours
+    @State private var customRangeActive = false
+    @State private var customStart: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+    @State private var customEnd: Date = Date()
+    @State private var customDraftStart: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+    @State private var customDraftEnd: Date = Date()
+    @State private var showingCustomRangePopover = false
     private let refreshTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     private let byteFormatter: ByteCountFormatter = {
@@ -46,9 +57,10 @@ struct StatisticsView: View {
         .background(AppTheme.system.backgroundColor ?? Color(NSColor.windowBackgroundColor))
         .frame(minWidth: 860, minHeight: 620)
         .onAppear {
-            statisticsManager.loadReport(for: range)
+            loadSelectedReport()
         }
         .onChange(of: range) { newValue in
+            customRangeActive = false
             statisticsManager.loadReport(for: newValue)
         }
         .onChange(of: collectStatistics) { _ in
@@ -63,56 +75,183 @@ struct StatisticsView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Statistics")
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
-                Text(headerSubtitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Statistics")
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                    Text(headerSubtitle)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
 
-            Spacer()
+                Spacer()
 
-            HStack(spacing: 12) {
-                if statisticsManager.sampleDataControlsEnabled {
-                    Button {
-                        if statisticsManager.isShowingSampleData {
-                            statisticsManager.disableSampleData()
-                        } else {
-                            statisticsManager.enableSampleData()
+                HStack(spacing: 12) {
+                    if statisticsManager.sampleDataControlsEnabled {
+                        Button {
+                            if statisticsManager.isShowingSampleData {
+                                statisticsManager.disableSampleData()
+                            } else {
+                                statisticsManager.enableSampleData()
+                            }
+                        } label: {
+                            Label(
+                                statisticsManager.isShowingSampleData ? "Live Data" : "Load Sample Data",
+                                systemImage: statisticsManager.isShowingSampleData ? "dot.radiowaves.left.and.right" : "sparkles"
+                            )
+                            .font(.system(size: 12, weight: .semibold))
                         }
+                        .buttonStyle(.bordered)
+                    }
+
+                    Button {
+                        statisticsManager.refreshCurrentReport()
                     } label: {
-                        Label(
-                            statisticsManager.isShowingSampleData ? "Live Data" : "Load Sample Data",
-                            systemImage: statisticsManager.isShowingSampleData ? "dot.radiowaves.left.and.right" : "sparkles"
-                        )
-                        .font(.system(size: 12, weight: .semibold))
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                            .labelStyle(.iconOnly)
+                            .font(.system(size: 13, weight: .semibold))
                     }
-                    .buttonStyle(.bordered)
-                }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .frame(height: statisticsRangeControlHeight)
 
-                Button {
-                    statisticsManager.refreshCurrentReport()
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 13, weight: .semibold))
+                    rangeControls
                 }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-
-                Picker("Range", selection: $range) {
-                    ForEach(StatisticsRange.allCases) { range in
-                        Text(range.rawValue).tag(range)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 336)
             }
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 18)
+    }
+
+    private var rangeControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            rangePickerRow
+            customRangeRow
+        }
+    }
+
+    private var rangePickerRow: some View {
+        HStack(spacing: statisticsRangeControlsGap) {
+            Text("Range")
+                .frame(width: statisticsRangeLabelColumnWidth, height: statisticsRangeControlHeight, alignment: .trailing)
+
+            Picker("", selection: $range) {
+                ForEach(StatisticsRange.allCases) { range in
+                    Text(range.rawValue).tag(range)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(height: statisticsRangeControlHeight)
+        }
+    }
+
+    private var customRangeRow: some View {
+        HStack(spacing: statisticsRangeControlsGap) {
+            Color.clear
+                .frame(width: statisticsRangeLabelColumnWidth, height: statisticsRangeControlHeight)
+            customRangeControl
+                .frame(width: statisticsRangePickerWidth, height: statisticsRangeControlHeight, alignment: .leading)
+        }
+    }
+
+    private var customRangeControl: some View {
+        Group {
+            if customRangeActive {
+                activeCustomRangeControl
+            } else {
+                Button {
+                    openCustomRangePopover()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 13, weight: .medium))
+                        Text("Custom date range")
+                            .font(.system(size: 13, weight: .medium))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(width: statisticsRangePickerWidth, height: statisticsRangeControlHeight)
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .popover(isPresented: $showingCustomRangePopover, arrowEdge: .top) {
+            customRangePopover
+        }
+    }
+
+    private var activeCustomRangeControl: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "calendar")
+                .font(.system(size: 13, weight: .medium))
+            Text(customRangeSummary)
+                .font(.system(size: 13, weight: .medium))
+                .monospacedDigit()
+                .lineLimit(1)
+            Spacer()
+            Button {
+                clearCustomRange()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Clear custom date range")
+            Button("Change") {
+                openCustomRangePopover()
+            }
+            .buttonStyle(.borderless)
+            .font(.system(size: 12, weight: .semibold))
+        }
+        .padding(.horizontal, 12)
+        .frame(width: statisticsRangePickerWidth, height: statisticsRangeControlHeight)
+        .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    private var customRangePopover: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Custom Date Range")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    Text("From")
+                        .frame(width: 42, alignment: .leading)
+                    DatePicker("", selection: $customDraftStart, in: ...customDraftEnd, displayedComponents: [.date])
+                        .labelsHidden()
+                        .datePickerStyle(.field)
+                        .frame(width: 150, alignment: .leading)
+                }
+                HStack(spacing: 12) {
+                    Text("To")
+                        .frame(width: 42, alignment: .leading)
+                    DatePicker("", selection: $customDraftEnd, in: customDraftStart...Date(), displayedComponents: [.date])
+                        .labelsHidden()
+                        .datePickerStyle(.field)
+                        .frame(width: 150, alignment: .leading)
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    showingCustomRangePopover = false
+                }
+                .keyboardShortcut(.cancelAction)
+                Button("Apply") {
+                    applyCustomRange()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(18)
+        .frame(width: 300)
     }
 
     @ViewBuilder
@@ -202,7 +341,7 @@ struct StatisticsView: View {
         if collectStatistics {
             return "Keep NetFluss running for a while and this view will fill in with adapter and app history."
         }
-        return "Enable statistics in Preferences to start collecting 24-hour, 7-day, 30-day, and yearly network history."
+        return "Enable statistics in Preferences to start collecting preset and custom date range network history."
     }
 
     private var sampleDataBanner: some View {
@@ -261,7 +400,7 @@ struct StatisticsView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(report.range.title.uppercased())
+                    Text(report.displayTitle.uppercased())
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .tracking(0.8)
@@ -273,7 +412,7 @@ struct StatisticsView: View {
                 Spacer()
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(report.range.bucketTitle)
+                    Text(report.displayBucketTitle)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.secondary)
                     if let coverageStart = report.coverageStart {
@@ -301,7 +440,8 @@ struct StatisticsView: View {
                     points: report.timeline,
                     keyPath: \.downloadBytes,
                     color: statisticsDownloadColor,
-                    systemImage: "arrow.down"
+                    systemImage: "arrow.down",
+                    report: report
                 )
 
                 Rectangle()
@@ -314,7 +454,8 @@ struct StatisticsView: View {
                     points: report.timeline,
                     keyPath: \.uploadBytes,
                     color: statisticsUploadColor,
-                    systemImage: "arrow.up"
+                    systemImage: "arrow.up",
+                    report: report
                 )
             }
         }
@@ -331,7 +472,8 @@ struct StatisticsView: View {
         points: [StatisticsTimelinePoint],
         keyPath: KeyPath<StatisticsTimelinePoint, UInt64>,
         color: Color,
-        systemImage: String
+        systemImage: String,
+        report: StatisticsReport
     ) -> some View {
         let peakBytes = max(points.map { $0[keyPath: keyPath] }.max() ?? 0, 1)
         let averageBytes = points.isEmpty ? 0 : points.reduce(0) { $0 + $1[keyPath: keyPath] } / UInt64(points.count)
@@ -387,10 +529,10 @@ struct StatisticsView: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
             }
             .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: xAxisTickCount(for: range))) { value in
+                AxisMarks(values: .automatic(desiredCount: xAxisTickCount(for: report))) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6, dash: [3, 4]))
                         .foregroundStyle(.secondary.opacity(0.16))
-                    AxisValueLabel(format: axisDateFormat(for: range))
+                    AxisValueLabel(format: axisDateFormat(for: report))
                 }
             }
             .chartYAxis {
@@ -594,30 +736,71 @@ struct StatisticsView: View {
         return Color(nsColor: rgb)
     }
 
-    private func axisDateFormat(for range: StatisticsRange) -> Date.FormatStyle {
-        switch range {
-        case .lastHour:
+    private func loadSelectedReport() {
+        if customRangeActive {
+            statisticsManager.loadReport(customStart: customStart, customEnd: customEnd)
+        } else {
+            statisticsManager.loadReport(for: range)
+        }
+    }
+
+    private var customRangeSummary: String {
+        let startText = customStart.formatted(date: .numeric, time: .omitted)
+        let endText = customEnd.formatted(date: .numeric, time: .omitted)
+        return "\(startText) - \(endText)"
+    }
+
+    private func openCustomRangePopover() {
+        customDraftStart = customStart
+        customDraftEnd = min(customEnd, Date())
+        showingCustomRangePopover = true
+    }
+
+    private func clearCustomRange() {
+        customRangeActive = false
+        showingCustomRangePopover = false
+        statisticsManager.loadReport(for: range)
+    }
+
+    private func applyCustomRange() {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: min(customDraftStart, customDraftEnd))
+        let selectedEndDay = calendar.startOfDay(for: max(customDraftStart, customDraftEnd))
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: selectedEndDay) ?? selectedEndDay
+        let end = min(Date(), nextDay.addingTimeInterval(-1))
+
+        customStart = start
+        customEnd = end
+        customRangeActive = true
+        showingCustomRangePopover = false
+        statisticsManager.loadReport(customStart: start, customEnd: end)
+    }
+
+    private func axisDateFormat(for report: StatisticsReport) -> Date.FormatStyle {
+        switch report.timelineGranularity {
+        case .minute:
             return .dateTime.hour().minute()
-        case .last24Hours:
+        case .hour:
             return .dateTime.hour()
-        case .last7Days, .last30Days:
+        case .day:
             return .dateTime.month(.abbreviated).day()
-        case .lastYear:
+        case .month:
             return .dateTime.month(.abbreviated)
         }
     }
 
-    private func xAxisTickCount(for range: StatisticsRange) -> Int {
-        switch range {
-        case .lastHour:
+    private func xAxisTickCount(for report: StatisticsReport) -> Int {
+        switch report.timelineGranularity {
+        case .minute:
             return 6
-        case .last24Hours:
+        case .hour:
             return 6
-        case .last7Days:
-            return 7
-        case .last30Days:
-            return 5
-        case .lastYear:
+        case .day:
+            let days = max(Int(report.timelineEnd.timeIntervalSince(report.timelineStart) / 86_400), 1)
+            if days <= 7 { return days }
+            if days <= 31 { return 5 }
+            return 6
+        case .month:
             return 6
         }
     }
