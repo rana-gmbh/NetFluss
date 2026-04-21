@@ -241,7 +241,7 @@ struct PreferencesView: View {
     @AppStorage("menuBarIconSymbol") private var menuBarIconSymbol: String = "network"
     @AppStorage("menuBarPinnedUnit") private var menuBarPinnedUnit: String = "auto"
     @AppStorage("menuBarDecimals") private var menuBarDecimals: Int = 0
-    @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "list"
+    @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "flow"
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
     @AppStorage("excludeTunnelAdaptersFromTotals") private var excludeTunnelAdaptersFromTotals: Bool = false
     @AppStorage("adapterGracePeriodEnabled") private var adapterGracePeriodEnabled: Bool = false
@@ -608,9 +608,10 @@ struct PreferencesView: View {
                         Picker("", selection: $connectionStatusMode) {
                             LText("List").tag("list")
                             LText("Flow").tag("flow")
+                            LText("None").tag("none")
                         }
                         .pickerStyle(.segmented)
-                        .frame(width: 160)
+                        .frame(width: 230)
                     }
                 } label: {
                     LText("IP display")

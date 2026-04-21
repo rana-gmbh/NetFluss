@@ -36,7 +36,7 @@ struct MenuBarView: View {
     @AppStorage("downloadColorHex") private var downloadColorHex: String = ""
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
     @AppStorage("excludeTunnelAdaptersFromTotals") private var excludeTunnelAdaptersFromTotals: Bool = false
-    @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "list"
+    @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "flow"
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
     @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
@@ -158,21 +158,23 @@ struct MenuBarView: View {
                     .padding(.vertical, 10)
                 }
 
-                Divider()
-                if connectionStatusMode == "flow" {
-                    ConnectionStatusSection(
-                        externalIP: monitor.externalIP,
-                        internalIP: monitor.internalIP,
-                        gatewayIP: monitor.gatewayIP,
-                        adapters: monitor.adapters,
-                        countryCode: monitor.externalIPCountryCode
-                    )
-                } else {
-                    IPAddressSection(
-                        externalIP: monitor.externalIP,
-                        internalIP: monitor.internalIP,
-                        gatewayIP: monitor.gatewayIP
-                    )
+                if connectionStatusMode != "none" {
+                    Divider()
+                    if connectionStatusMode == "flow" {
+                        ConnectionStatusSection(
+                            externalIP: monitor.externalIP,
+                            internalIP: monitor.internalIP,
+                            gatewayIP: monitor.gatewayIP,
+                            adapters: monitor.adapters,
+                            countryCode: monitor.externalIPCountryCode
+                        )
+                    } else {
+                        IPAddressSection(
+                            externalIP: monitor.externalIP,
+                            internalIP: monitor.internalIP,
+                            gatewayIP: monitor.gatewayIP
+                        )
+                    }
                 }
 
                 if fritzBoxEnabled {

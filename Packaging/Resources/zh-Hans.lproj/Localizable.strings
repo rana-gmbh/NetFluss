@@ -52,6 +52,7 @@
 "External IP" = "外部 IP";
 "List" = "列表";
 "Flow" = "流向";
+"None" = "无";
 "Dashboard uses router-wide traffic when Fritz!Box, UniFi, OpenWRT, or OPNsense bandwidth is enabled and available." = "当 Fritz!Box、UniFi、OpenWRT 或 OPNsense 带宽功能已启用且可用时，仪表盘会使用路由器整体流量。";
 "Top Apps" = "热门 App";
 "Show top apps by network usage" = "按网络使用量显示热门 App";

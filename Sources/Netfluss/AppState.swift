@@ -61,7 +61,7 @@ final class AppState {
             "collectAppStatistics": true,
             "speedTestProvider": "mlab",
             "speedTestMLabConsentAccepted": false,
-            "connectionStatusMode": "list",
+            "connectionStatusMode": "flow",
             "hiddenApps": [],
             "externalIPv6": false,
             "showDNSSwitcher": false,
