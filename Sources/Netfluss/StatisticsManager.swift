@@ -296,7 +296,12 @@ final class StatisticsManager: ObservableObject {
 
     private func delta(current: UInt64, previous: UInt64?) -> UInt64 {
         guard let previous else { return 0 }
-        return current >= previous ? current - previous : current
+        // Interface counters can reset when macOS recreates an adapter after
+        // sleep, reboot, dock reconnects, or link changes. Treat that as a new
+        // baseline; adding `current` here would duplicate traffic and inflate
+        // adapter history.
+        guard current >= previous else { return 0 }
+        return current - previous
     }
 
     private static func storageURL() -> URL {
