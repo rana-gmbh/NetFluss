@@ -168,27 +168,27 @@ private final class MenuBarRatesView: NSView {
     }
 
     private func drawStack(_ model: MenuBarDisplayModel) {
+        let metrics = Self.fittedStackMetrics(for: model.font, availableHeight: bounds.height)
         let upRuns = Self.stackRuns(
             text: model.fullUpText,
-            font: model.font,
+            font: metrics.font,
             textColor: model.upTextColor,
             arrow: "↑",
             arrowColor: model.upColor
         )
         let downRuns = Self.stackRuns(
             text: model.fullDownText,
-            font: model.font,
+            font: metrics.font,
             textColor: model.downTextColor,
             arrow: "↓",
             arrowColor: model.downColor
         )
 
-        let lineHeight = Self.lineHeight(for: model.font)
-        let totalHeight = (lineHeight * 2) + Self.stackSpacing
-        let originY = floor((bounds.height - totalHeight) / 2)
+        let totalHeight = (metrics.lineHeight * 2) + metrics.spacing
+        let originY = max(0, floor((bounds.height - totalHeight) / 2))
 
         draw(runs: upRuns, at: NSPoint(x: Self.horizontalPadding, y: originY))
-        draw(runs: downRuns, at: NSPoint(x: Self.horizontalPadding, y: originY + lineHeight + Self.stackSpacing))
+        draw(runs: downRuns, at: NSPoint(x: Self.horizontalPadding, y: originY + metrics.lineHeight + metrics.spacing))
     }
 
     private func drawUnified(_ model: MenuBarDisplayModel) {
@@ -366,6 +366,34 @@ private final class MenuBarRatesView: NSView {
 
     private static func lineHeight(for font: NSFont) -> CGFloat {
         ceil(font.boundingRectForFont.height)
+    }
+
+    private static func fittedStackMetrics(
+        for font: NSFont,
+        availableHeight: CGFloat
+    ) -> (font: NSFont, lineHeight: CGFloat, spacing: CGFloat) {
+        let availableHeight = max(floor(availableHeight), 1)
+        let preferredLineHeight = lineHeight(for: font)
+        if (preferredLineHeight * 2) + stackSpacing <= availableHeight {
+            return (font, preferredLineHeight, stackSpacing)
+        }
+
+        let spacing: CGFloat = (preferredLineHeight * 2) <= availableHeight ? stackSpacing : 0
+        let targetLineHeight = max(floor((availableHeight - spacing) / 2), 1)
+        var fittedFont = resizedFont(font, to: max(6, floor(font.pointSize * (targetLineHeight / preferredLineHeight))))
+        var fittedLineHeight = lineHeight(for: fittedFont)
+
+        while (fittedLineHeight * 2) + spacing > availableHeight, fittedFont.pointSize > 6 {
+            fittedFont = resizedFont(fittedFont, to: fittedFont.pointSize - 0.5)
+            fittedLineHeight = lineHeight(for: fittedFont)
+        }
+
+        return (fittedFont, fittedLineHeight, spacing)
+    }
+
+    private static func resizedFont(_ font: NSFont, to pointSize: CGFloat) -> NSFont {
+        NSFont(descriptor: font.fontDescriptor, size: pointSize) ??
+            NSFont.systemFont(ofSize: pointSize, weight: .medium)
     }
 
     private static func dashboardRingSize(for model: MenuBarDisplayModel) -> CGFloat {
