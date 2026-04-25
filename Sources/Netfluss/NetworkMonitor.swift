@@ -547,18 +547,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     // MARK: - DNS
 
     private func updateCurrentDNS() {
-        let service = Self.primaryNetworkService()
-        guard !service.isEmpty else { return }
-        let output = Self.runSyncOutput("/usr/sbin/networksetup", ["-getdnsservers", service])
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        let servers: [String]
-        if trimmed.contains("aren't any DNS") || trimmed.isEmpty {
-            servers = []
-        } else {
-            servers = trimmed.split(whereSeparator: \.isNewline)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-        }
+        guard let servers = Self.currentDNSServers() else { return }
         setIfChanged(\.currentDNSServers, to: servers)
         setIfChanged(\.activeDNSPresetID, to: matchPreset(servers: servers))
     }
@@ -623,8 +612,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         let servers = preset.servers
         Task.detached(priority: .userInitiated) { [weak self] in
-            let service = Self.primaryNetworkService()
-            guard !service.isEmpty else {
+            let services = Self.dnsTargetServices()
+            guard !services.isEmpty else {
                 _ = await MainActor.run { [weak self] in
                     self?.dnsChanging = false
                     self?.dnsError = "No active network service found."
@@ -632,15 +621,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 return
             }
 
-            let command: String
-            if servers.isEmpty {
-                command = "/usr/sbin/networksetup -setdnsservers '\(service)' empty"
-            } else {
-                let joined = servers.joined(separator: " ")
-                command = "/usr/sbin/networksetup -setdnsservers '\(service)' \(joined)"
-            }
-            let result = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers) ??
-                Self.executeWithAuth(command: command)
+            let result = await Self.setDNS(services: services, servers: servers)
 
             _ = await MainActor.run { [weak self] in
                 self?.dnsChanging = false
@@ -648,6 +629,110 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 self?.updateCurrentDNS()
             }
         }
+    }
+
+    private nonisolated static func currentDNSServers() -> [String]? {
+        for service in dnsTargetServices() {
+            let result = runSyncResult("/usr/sbin/networksetup", ["-getdnsservers", service])
+            guard result.success else { continue }
+            return parseDNSServers(from: result.stdout)
+        }
+
+        return nil
+    }
+
+    private nonisolated static func parseDNSServers(from output: String) -> [String] {
+        let validChars = CharacterSet(charactersIn: "0123456789abcdefABCDEF.:[]")
+
+        return output.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { server in
+                !server.isEmpty &&
+                server.unicodeScalars.allSatisfy { validChars.contains($0) } &&
+                server.unicodeScalars.contains(where: CharacterSet.decimalDigits.contains)
+            }
+    }
+
+    private nonisolated static func dnsTargetServices() -> [String] {
+        let enabledServices = enabledNetworkServices()
+        let primaryService = primaryNetworkService()
+
+        guard !enabledServices.isEmpty else {
+            return primaryService.isEmpty ? [] : [primaryService]
+        }
+
+        if primaryService.isEmpty {
+            return enabledServices
+        }
+
+        var targets = enabledServices
+        if let index = targets.firstIndex(of: primaryService) {
+            targets.remove(at: index)
+            targets.insert(primaryService, at: 0)
+        }
+        return targets
+    }
+
+    private nonisolated static func enabledNetworkServices() -> [String] {
+        let output = runSyncOutput("/usr/sbin/networksetup", ["-listallnetworkservices"])
+        return output.split(whereSeparator: \.isNewline)
+            .dropFirst()
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { line in
+                !line.isEmpty &&
+                !line.hasPrefix("*")
+            }
+    }
+
+    private nonisolated static func setDNS(services: [String], servers: [String]) async -> CommandResult {
+        let fallbackCommand = dnsShellCommand(services: services, servers: servers)
+        var failures: [String] = []
+
+        for service in services {
+            guard let result = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers) else {
+                return executeWithAuth(command: fallbackCommand)
+            }
+
+            guard result.success else {
+                if result.terminationStatus < 0 {
+                    return result
+                }
+
+                let message = firstCommandMessage(from: result) ?? "DNS change failed."
+                failures.append("\(service): \(message)")
+                continue
+            }
+        }
+
+        if failures.isEmpty {
+            return CommandResult(terminationStatus: 0, stdout: "", stderr: "")
+        }
+
+        return CommandResult(
+            terminationStatus: 1,
+            stdout: "",
+            stderr: failures.joined(separator: "\n")
+        )
+    }
+
+    private nonisolated static func dnsShellCommand(services: [String], servers: [String]) -> String {
+        services.map { service in
+            let serverArguments = servers.isEmpty ? "empty" : servers.joined(separator: " ")
+            return "/usr/sbin/networksetup -setdnsservers \(shellQuoted(service)) \(serverArguments)"
+        }
+        .joined(separator: " && ")
+    }
+
+    private nonisolated static func shellQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private nonisolated static func firstCommandMessage(from result: CommandResult) -> String? {
+        [result.stderr, result.stdout]
+            .joined(separator: "\n")
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty })
     }
 
     private nonisolated static func primaryNetworkService(store: SCDynamicStore? = nil) -> String {
