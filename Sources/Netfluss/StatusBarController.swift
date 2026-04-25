@@ -408,6 +408,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         static let horizontalScreenMargin: CGFloat = 12
         static let anchorScreenInset: CGFloat = 26
     }
+    private static let statusItemAutosaveName = NSStatusItem.AutosaveName("com.local.netfluss.statusItem")
 
     private struct PopoverPresentation {
         let contentWidth: CGFloat
@@ -463,6 +464,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.popover = NSPopover()
         super.init()
+
+        statusItem.autosaveName = Self.statusItemAutosaveName
 
         if let button = statusItem.button {
             button.target = self
