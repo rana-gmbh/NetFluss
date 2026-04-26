@@ -6,7 +6,7 @@
 
 A native macOS menubar app showing real-time upload and download rates, router-wide bandwidth, historical traffic statistics, and built-in speed testing.
 
-Latest release: **NetFluss 2.2**
+Latest release: **NetFluss 2.2.1**
 
 <p align="center">
   <img src="screenshot.png" width="420" alt="NetFluss screenshot">
@@ -134,7 +134,7 @@ Latest release: **NetFluss 2.2**
 
 ## Install
 
-Download `NetFluss-2.2.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
+Download `NetFluss-2.2.1.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
 
 NetFluss is notarized and signed with a Developer ID certificate, so Gatekeeper should clear it automatically on first launch.
 
