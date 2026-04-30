@@ -516,6 +516,7 @@ struct PreferencesView: View {
                             LText("Standard").tag("rates")
                             LText("Unified pill").tag("unified")
                             LText("Dashboard").tag("dashboard")
+                            LText("Dashboard (basic)").tag("dashboardBasic")
                             LText("Icon").tag("icon")
                         }
                         .frame(width: 180)

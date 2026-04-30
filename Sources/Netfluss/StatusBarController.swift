@@ -28,6 +28,7 @@ private enum MenuBarDisplayStyle: String {
     case stack = "rates"
     case unified = "unified"
     case dashboard = "dashboard"
+    case dashboardBasic = "dashboardBasic"
 }
 
 private struct MenuBarMetrics {
@@ -73,6 +74,7 @@ private struct MenuBarDisplayModel {
 
 private final class MenuBarRatesView: NSView {
     static let horizontalPadding: CGFloat = 5
+    private static let stackHorizontalPadding: CGFloat = 2
     private static let stackSpacing: CGFloat = 1
     private static let capsulePadding: CGFloat = 7
 
@@ -122,7 +124,7 @@ private final class MenuBarRatesView: NSView {
                 arrow: "↑",
                 arrowColor: model.upColor
             )
-            return ceil(max(width(of: downRuns), width(of: upRuns)) + (horizontalPadding * 2))
+            return ceil(max(width(of: downRuns), width(of: upRuns)) + (stackHorizontalPadding * 2))
         case .unified:
             let runs = unifiedRuns(
                 downText: model.referenceFullText,
@@ -135,7 +137,7 @@ private final class MenuBarRatesView: NSView {
                 upColor: model.upColor
             )
             return ceil(width(of: runs) + (capsulePadding * 2) + (horizontalPadding * 2))
-        case .dashboard:
+        case .dashboard, .dashboardBasic:
             let runs = dashboardRuns(
                 totalText: model.referenceTotalText,
                 downText: model.referenceCompactText,
@@ -147,10 +149,15 @@ private final class MenuBarRatesView: NSView {
                 upTextColor: model.upTextColor,
                 secondaryTextColor: model.secondaryTextColor,
                 downColor: model.downColor,
-                upColor: model.upColor
+                upColor: model.upColor,
+                includeTotal: model.style == .dashboard
             )
-            let ringSize = dashboardRingSize(for: model)
-            return ceil((horizontalPadding * 3) + ringSize + width(of: runs))
+            if model.style == .dashboard {
+                let ringSize = dashboardRingSize(for: model)
+                return ceil((horizontalPadding * 3) + ringSize + width(of: runs))
+            } else {
+                return ceil((horizontalPadding * 2) + (capsulePadding * 2) + width(of: runs))
+            }
         }
     }
 
@@ -162,33 +169,41 @@ private final class MenuBarRatesView: NSView {
             drawStack(model)
         case .unified:
             drawUnified(model)
-        case .dashboard:
+        case .dashboard, .dashboardBasic:
             drawDashboard(model)
         }
     }
 
     private func drawStack(_ model: MenuBarDisplayModel) {
-        let metrics = Self.fittedStackMetrics(for: model.font, availableHeight: bounds.height)
+        let lineHeight = Self.stackLineHeight(for: model.font)
         let upRuns = Self.stackRuns(
             text: model.fullUpText,
-            font: metrics.font,
+            font: model.font,
             textColor: model.upTextColor,
             arrow: "↑",
             arrowColor: model.upColor
         )
         let downRuns = Self.stackRuns(
             text: model.fullDownText,
-            font: metrics.font,
+            font: model.font,
             textColor: model.downTextColor,
             arrow: "↓",
             arrowColor: model.downColor
         )
 
-        let totalHeight = (metrics.lineHeight * 2) + metrics.spacing
-        let originY = max(0, floor((bounds.height - totalHeight) / 2))
+        let spacing: CGFloat = ((lineHeight * 2) + Self.stackSpacing) <= bounds.height
+            ? Self.stackSpacing
+            : 0
+        let totalHeight = (lineHeight * 2) + spacing
+        let originY = floor((bounds.height - totalHeight) / 2)
 
-        draw(runs: upRuns, at: NSPoint(x: Self.horizontalPadding, y: originY))
-        draw(runs: downRuns, at: NSPoint(x: Self.horizontalPadding, y: originY + metrics.lineHeight + metrics.spacing))
+        let upWidth = Self.width(of: upRuns)
+        let downWidth = Self.width(of: downRuns)
+        let upX = floor((bounds.width - upWidth) / 2)
+        let downX = floor((bounds.width - downWidth) / 2)
+
+        draw(runs: upRuns, at: NSPoint(x: upX, y: originY))
+        draw(runs: downRuns, at: NSPoint(x: downX, y: originY + lineHeight + spacing))
     }
 
     private func drawUnified(_ model: MenuBarDisplayModel) {
@@ -236,7 +251,8 @@ private final class MenuBarRatesView: NSView {
             upTextColor: model.upTextColor,
             secondaryTextColor: model.secondaryTextColor,
             downColor: model.downColor,
-            upColor: model.upColor
+            upColor: model.upColor,
+            includeTotal: model.style == .dashboard
         )
         let capsuleRect = NSRect(
             x: Self.horizontalPadding,
@@ -252,18 +268,24 @@ private final class MenuBarRatesView: NSView {
         path.lineWidth = 1
         path.stroke()
 
-        let ringSize = Self.dashboardRingSize(for: model)
-        let ringRect = NSRect(
-            x: floor(capsuleRect.midX - ((ringSize + 6 + Self.width(of: runs)) / 2)),
-            y: floor((bounds.height - ringSize) / 2),
-            width: ringSize,
-            height: ringSize
-        )
-        drawRing(in: ringRect, progress: model.ringProgress, color: model.ringColor, secondaryColor: model.secondaryTextColor)
-
         let lineHeight = Self.lineHeight(for: model.smallFont)
         let textY = floor((bounds.height - lineHeight) / 2)
-        draw(runs: runs, at: NSPoint(x: ringRect.maxX + 6, y: textY))
+        let runsWidth = Self.width(of: runs)
+
+        if model.style == .dashboard {
+            let ringSize = Self.dashboardRingSize(for: model)
+            let ringRect = NSRect(
+                x: floor(capsuleRect.midX - ((ringSize + 6 + runsWidth) / 2)),
+                y: floor((bounds.height - ringSize) / 2),
+                width: ringSize,
+                height: ringSize
+            )
+            drawRing(in: ringRect, progress: model.ringProgress, color: model.ringColor, secondaryColor: model.secondaryTextColor)
+            draw(runs: runs, at: NSPoint(x: ringRect.maxX + 6, y: textY))
+        } else {
+            let textX = floor(capsuleRect.midX - (runsWidth / 2))
+            draw(runs: runs, at: NSPoint(x: textX, y: textY))
+        }
     }
 
     @discardableResult
@@ -347,17 +369,22 @@ private final class MenuBarRatesView: NSView {
         upTextColor: NSColor,
         secondaryTextColor: NSColor,
         downColor: NSColor,
-        upColor: NSColor
+        upColor: NSColor,
+        includeTotal: Bool
     ) -> [TextRun] {
-        [
-            TextRun(text: "Σ \(totalText)", font: totalFont, color: textColor),
-            TextRun(text: "  |  ", font: detailFont, color: secondaryTextColor),
+        var runs: [TextRun] = []
+        if includeTotal {
+            runs.append(TextRun(text: "Σ \(totalText)", font: totalFont, color: textColor))
+            runs.append(TextRun(text: "  |  ", font: detailFont, color: secondaryTextColor))
+        }
+        runs.append(contentsOf: [
             TextRun(text: "↓", font: detailFont, color: downColor),
             TextRun(text: " \(downText)", font: detailFont, color: downTextColor),
             TextRun(text: "  |  ", font: detailFont, color: secondaryTextColor),
             TextRun(text: "↑", font: detailFont, color: upColor),
             TextRun(text: " \(upText)", font: detailFont, color: upTextColor)
-        ]
+        ])
+        return runs
     }
 
     private static func width(of runs: [TextRun]) -> CGFloat {
@@ -368,32 +395,8 @@ private final class MenuBarRatesView: NSView {
         ceil(font.boundingRectForFont.height)
     }
 
-    private static func fittedStackMetrics(
-        for font: NSFont,
-        availableHeight: CGFloat
-    ) -> (font: NSFont, lineHeight: CGFloat, spacing: CGFloat) {
-        let availableHeight = max(floor(availableHeight), 1)
-        let preferredLineHeight = lineHeight(for: font)
-        if (preferredLineHeight * 2) + stackSpacing <= availableHeight {
-            return (font, preferredLineHeight, stackSpacing)
-        }
-
-        let spacing: CGFloat = (preferredLineHeight * 2) <= availableHeight ? stackSpacing : 0
-        let targetLineHeight = max(floor((availableHeight - spacing) / 2), 1)
-        var fittedFont = resizedFont(font, to: max(6, floor(font.pointSize * (targetLineHeight / preferredLineHeight))))
-        var fittedLineHeight = lineHeight(for: fittedFont)
-
-        while (fittedLineHeight * 2) + spacing > availableHeight, fittedFont.pointSize > 6 {
-            fittedFont = resizedFont(fittedFont, to: fittedFont.pointSize - 0.5)
-            fittedLineHeight = lineHeight(for: fittedFont)
-        }
-
-        return (fittedFont, fittedLineHeight, spacing)
-    }
-
-    private static func resizedFont(_ font: NSFont, to pointSize: CGFloat) -> NSFont {
-        NSFont(descriptor: font.fontDescriptor, size: pointSize) ??
-            NSFont.systemFont(ofSize: pointSize, weight: .medium)
+    private static func stackLineHeight(for font: NSFont) -> CGFloat {
+        ceil(font.ascender + abs(font.descender))
     }
 
     private static func dashboardRingSize(for model: MenuBarDisplayModel) -> CGFloat {
@@ -425,6 +428,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let pinnedWindowController = PinnedMenuBarWindowController()
     private var cancellables: Set<AnyCancellable> = []
     private let ratesView = MenuBarRatesView()
+    private var highlightPlaceholderImage: NSImage?
     private var cachedFonts: [FontState: NSFont] = [:]
     private var lastRenderState: MenuBarRenderState?
     private var lastStatusItemLength: CGFloat?
@@ -572,11 +576,17 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         NSApplication.shared.terminate(nil)
     }
 
+    func popoverDidShow(_ notification: Notification) {
+        statusItem.button?.highlight(true)
+    }
+
     func popoverWillClose(_ notification: Notification) {
+        statusItem.button?.highlight(false)
         teardownPopover()
     }
 
     func popoverDidClose(_ notification: Notification) {
+        statusItem.button?.highlight(false)
         teardownPopover()
     }
 
@@ -639,6 +649,10 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         )
         popover.contentViewController = NSHostingController(rootView: contentView)
         popover.show(relativeTo: presentation.sourceRect, of: button, preferredEdge: .minY)
+        button.highlight(true)
+        DispatchQueue.main.async { [weak button] in
+            button?.highlight(true)
+        }
         updateDetailMonitoring()
         popover.contentViewController?.view.window?.makeKey()
         DispatchQueue.main.async { [weak self] in
@@ -879,7 +893,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
         let defaultTextColor: NSColor
         switch style {
-        case .dashboard:
+        case .dashboard, .dashboardBasic:
             defaultTextColor = .white
         case .stack, .unified:
             defaultTextColor = .labelColor
@@ -887,7 +901,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         let textColor = defaultTextColor
         let secondaryTextColor: NSColor = {
             switch style {
-            case .dashboard:
+            case .dashboard, .dashboardBasic:
                 return .white.withAlphaComponent(0.68)
             case .stack, .unified:
                 return .secondaryLabelColor
@@ -903,7 +917,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
                 return isDarkAppearance
                     ? NSColor(calibratedWhite: 1, alpha: 0.14)
                     : NSColor(calibratedWhite: 0, alpha: 0.10)
-            case .dashboard:
+            case .dashboard, .dashboardBasic:
                 return NSColor(calibratedWhite: 0, alpha: 0.78)
             }
         }()
@@ -911,7 +925,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             switch style {
             case .stack:
                 return .clear
-            case .dashboard:
+            case .dashboard, .dashboardBasic:
                 return NSColor.white.withAlphaComponent(0.10)
             case .unified:
                 return isDarkAppearance
@@ -984,6 +998,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             lastStatusItemLength = targetLength
         }
 
+        updateHighlightPlaceholder(width: targetLength, button: button)
         ratesView.update(model: model)
         layoutRatesView(in: button)
     }
@@ -1012,7 +1027,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
     private func metrics(for style: MenuBarDisplayStyle) -> MenuBarMetrics {
         switch style {
-        case .dashboard:
+        case .dashboard, .dashboardBasic:
             return routerAwareMetrics() ?? localMetrics()
         case .stack, .unified:
             return localMetrics()
@@ -1235,6 +1250,18 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         }
         if ratesView.frame != button.bounds {
             ratesView.frame = button.bounds
+        }
+    }
+
+    private func updateHighlightPlaceholder(width: CGFloat, button: NSStatusBarButton) {
+        let height = max(button.bounds.height, NSStatusBar.system.thickness)
+        let size = NSSize(width: max(width, 1), height: max(height, 1))
+        if highlightPlaceholderImage?.size != size {
+            highlightPlaceholderImage = NSImage(size: size)
+        }
+        if button.image !== highlightPlaceholderImage {
+            button.image = highlightPlaceholderImage
+            button.imagePosition = .imageOnly
         }
     }
 }
