@@ -470,6 +470,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         super.init()
 
         statusItem.autosaveName = Self.statusItemAutosaveName
+        // autosaveName persists isVisible across launches. Bartender (and similar) toggle
+        // isVisible=false to hide menu bar items; that hidden state was getting persisted
+        // under our autosaveName and the icon never reappeared. Force visible at startup —
+        // host apps can re-hide it during the session if the user has them configured to.
+        statusItem.isVisible = true
 
         if let button = statusItem.button {
             button.target = self
