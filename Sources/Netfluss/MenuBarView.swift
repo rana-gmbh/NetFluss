@@ -79,7 +79,10 @@ struct MenuBarView: View {
         )
         let customNames = cachedCustomNames
 
-        let screenMax = max(screenVisibleFrame.height - 30, 240)
+        // Subtract enough for the pin button header (~34pt), resize handle (~10pt),
+        // popover arrow + decoration (~18pt), plus safety margin so the popover
+        // window stays within the screen even with all sections enabled.
+        let screenMax = max(screenVisibleFrame.height - 80, 240)
         let savedHeight = UserDefaults.standard.double(forKey: "popoverHeight")
         let heightLimit = savedHeight > 0 ? min(savedHeight, screenMax) : screenMax
 
@@ -103,7 +106,7 @@ struct MenuBarView: View {
             .padding(.bottom, 2)
 
             popoverContent(adapters: adapters, customNames: customNames, headerTotals: headerTotals)
-                .frame(height: contentHeight > 0 ? scrollHeight : nil)
+                .frame(height: contentHeight > 0 ? scrollHeight : heightLimit)
 
             if !isPinned {
                 PopoverResizeHandle()
