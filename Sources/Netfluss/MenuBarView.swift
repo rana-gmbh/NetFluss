@@ -38,6 +38,7 @@ struct MenuBarView: View {
     @AppStorage("excludeTunnelAdaptersFromTotals") private var excludeTunnelAdaptersFromTotals: Bool = false
     @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "flow"
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
+    @AppStorage("showWifiSwitcher") private var showWifiSwitcher: Bool = false
     @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
     @AppStorage("openWRTEnabled") private var openWRTEnabled: Bool = false
@@ -203,6 +204,11 @@ struct MenuBarView: View {
                 if showDNSSwitcher {
                     Divider()
                     DNSSwitcherSection()
+                }
+
+                if showWifiSwitcher {
+                    Divider()
+                    WifiSwitcherSection()
                 }
 
                 if showTopApps {
@@ -1300,6 +1306,229 @@ struct DNSPresetRow: View {
         }
         .buttonStyle(.borderless)
         .disabled(isActive || isChanging)
+    }
+}
+
+// MARK: - Wi-Fi Switcher Section
+
+struct WifiSwitcherSection: View {
+    @EnvironmentObject private var wifi: WifiManager
+    @State private var detailNetworkID: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Wi-Fi Networks")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if wifi.connectingTo != nil {
+                    ProgressView().controlSize(.small).frame(width: 12, height: 12)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+
+            if !wifi.hasWifi {
+                Text("No Wi-Fi adapter found.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+            } else if wifi.locationStatus == .denied {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Location access is required to list nearby Wi-Fi networks. macOS uses the same restriction in System Settings → Wi-Fi.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open Location Settings…") { wifi.openLocationSettings() }
+                        .buttonStyle(.borderless)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .padding(.horizontal, 12)
+            } else if wifi.networks.isEmpty {
+                Text(wifi.locationStatus == .notDetermined ? "Waiting for Location permission…" : "Scanning for networks…")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+            } else {
+                VStack(spacing: 2) {
+                    ForEach(wifi.networks) { network in
+                        WifiNetworkRow(
+                            network: network,
+                            isConnecting: wifi.connectingTo == network.ssid,
+                            isAnyConnecting: wifi.connectingTo != nil,
+                            isDetailShown: detailNetworkID == network.id,
+                            onSelect: { wifi.connect(to: network) },
+                            onToggleDetail: {
+                                detailNetworkID = detailNetworkID == network.id ? nil : network.id
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal, 8)
+            }
+
+            if let err = wifi.lastError, !err.isEmpty {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                    Text(err)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button {
+                        wifi.clearError()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+            }
+        }
+        .padding(.bottom, 8)
+    }
+}
+
+struct WifiNetworkRow: View {
+    let network: WifiNetwork
+    let isConnecting: Bool
+    let isAnyConnecting: Bool
+    let isDetailShown: Bool
+    let onSelect: () -> Void
+    let onToggleDetail: () -> Void
+
+    private var signalIcon: String {
+        // RSSI is roughly -30 (excellent) to -90 (unusable).
+        switch network.rssi {
+        case ..<(-80): return "wifi.exclamationmark"
+        case -80 ..< -70: return "wifi"
+        default: return "wifi"
+        }
+    }
+
+    private var signalOpacity: Double {
+        switch network.rssi {
+        case ..<(-80): return 0.45
+        case -80 ..< -70: return 0.65
+        case -70 ..< -60: return 0.85
+        default: return 1.0
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(action: onSelect) {
+                HStack(spacing: 8) {
+                    Image(systemName: network.isCurrent ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(network.isCurrent ? .green : .secondary)
+                        .frame(width: 16)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 4) {
+                            Text(network.ssid)
+                                .font(.system(size: 11, weight: network.isCurrent ? .semibold : .regular))
+                                .lineLimit(1)
+                            if network.isSecured {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                            }
+                            if network.isSaved, !network.isCurrent {
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(.yellow.opacity(0.8))
+                            }
+                        }
+                        HStack(spacing: 6) {
+                            if let band = network.band {
+                                Text(band)
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text("\(network.rssi) dBm")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: signalIcon)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary.opacity(signalOpacity))
+                    if isConnecting {
+                        ProgressView().controlSize(.small).frame(width: 14, height: 14)
+                    }
+                }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(network.isCurrent ? Color.accentColor.opacity(0.1) : Color.clear)
+                )
+            }
+            .buttonStyle(.borderless)
+            .disabled(network.isCurrent || isAnyConnecting)
+
+            Button(action: onToggleDetail) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .popover(isPresented: Binding(
+                get: { isDetailShown },
+                set: { if !$0 { onToggleDetail() } }
+            )) {
+                WifiScanDetailPopover(network: network)
+            }
+        }
+    }
+}
+
+struct WifiScanDetailPopover: View {
+    let network: WifiNetwork
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            detailRow("ESSID", network.ssid)
+            if let security = network.security {
+                detailRow("Security", security)
+            }
+            if let band = network.band {
+                detailRow("Band", band)
+            }
+            if let chNum = network.channelNumber {
+                let width = network.channelWidth ?? ""
+                let channelStr = width.isEmpty ? "Ch \(chNum)" : "Ch \(chNum) (\(width))"
+                detailRow("Channel", channelStr)
+            }
+            detailRow("RSSI", "\(network.rssi) dBm")
+            if let bssid = network.bssid {
+                detailRow("BSSID", bssid)
+            }
+        }
+        .padding(12)
+        .frame(width: 260)
+    }
+
+    @ViewBuilder
+    private func detailRow(_ key: String, _ value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(key)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .frame(width: 60, alignment: .leading)
+            Text(value)
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(1)
+            Spacer()
+        }
     }
 }
 

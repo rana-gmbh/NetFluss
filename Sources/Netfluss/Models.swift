@@ -176,6 +176,20 @@ struct InterfaceSample: Equatable, Sendable {
     let baudrate: UInt64
 }
 
+struct WifiNetwork: Identifiable, Equatable, Sendable {
+    let id: String           // Stable per-network key (BSSID if present, else SSID)
+    let ssid: String
+    let bssid: String?
+    let rssi: Int
+    let isSecured: Bool
+    let security: String?    // Localised label ("WPA2 Personal", "Open", ...)
+    let channelNumber: Int?
+    let channelWidth: String?
+    let band: String?        // "2.4 GHz" / "5 GHz" / "6 GHz"
+    let isCurrent: Bool
+    let isSaved: Bool        // Known to macOS via stored network profiles
+}
+
 struct DNSPreset: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let name: String

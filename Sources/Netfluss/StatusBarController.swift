@@ -424,6 +424,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     private let monitor: NetworkMonitor
     private let statisticsManager: StatisticsManager
     private let speedTestManager: SpeedTestManager
+    private let wifiManager: WifiManager
     private let contextMenu = NSMenu()
     private let pinnedWindowController = PinnedMenuBarWindowController()
     private var cancellables: Set<AnyCancellable> = []
@@ -461,10 +462,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         let weight: Double
     }
 
-    init(monitor: NetworkMonitor, statisticsManager: StatisticsManager, speedTestManager: SpeedTestManager) {
+    init(monitor: NetworkMonitor, statisticsManager: StatisticsManager, speedTestManager: SpeedTestManager, wifiManager: WifiManager) {
         self.monitor = monitor
         self.statisticsManager = statisticsManager
         self.speedTestManager = speedTestManager
+        self.wifiManager = wifiManager
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.popover = NSPopover()
         super.init()
@@ -785,11 +787,14 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         )
         .environmentObject(monitor)
         .environmentObject(statisticsManager)
+        .environmentObject(wifiManager)
         .environment(\.locale, AppLanguage.current(from: UserDefaults.standard.string(forKey: "appLanguage") ?? AppLanguage.system.rawValue).locale)
     }
 
     private func updateDetailMonitoring() {
-        monitor.setDetailMonitoringEnabled(popover.isShown || pinnedWindowController.isVisible)
+        let isVisible = popover.isShown || pinnedWindowController.isVisible
+        monitor.setDetailMonitoringEnabled(isVisible)
+        wifiManager.setActive(isVisible && UserDefaults.standard.bool(forKey: "showWifiSwitcher"))
     }
 
     private func popoverPresentation(for button: NSStatusBarButton) -> PopoverPresentation {

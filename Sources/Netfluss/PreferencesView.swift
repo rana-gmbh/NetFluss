@@ -178,6 +178,7 @@ private enum PreferencePane: String, CaseIterable, Identifiable {
     case appearance
     case topApps
     case dns
+    case wifi
     case router
 
     var id: Self { self }
@@ -196,6 +197,8 @@ private enum PreferencePane: String, CaseIterable, Identifiable {
             return "Top Apps"
         case .dns:
             return "DNS"
+        case .wifi:
+            return "Wi-Fi"
         case .router:
             return "Router"
         }
@@ -215,6 +218,8 @@ private enum PreferencePane: String, CaseIterable, Identifiable {
             return "list.number"
         case .dns:
             return "server.rack"
+        case .wifi:
+            return "wifi"
         case .router:
             return "wifi.router"
         }
@@ -252,6 +257,7 @@ struct PreferencesView: View {
     @AppStorage("collectAppStatistics") private var collectAppStatistics: Bool = true
     @AppStorage("externalIPv6") private var externalIPv6: Bool = false
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
+    @AppStorage("showWifiSwitcher") private var showWifiSwitcher: Bool = false
     @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
     @AppStorage("fritzBoxHost") private var fritzBoxHost: String = ""
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
@@ -771,6 +777,21 @@ struct PreferencesView: View {
                 }
             } header: {
                 LText("DNS Switcher")
+            }
+                }
+
+                if selectedPane == .wifi {
+                    Section {
+                Toggle(isOn: $showWifiSwitcher) {
+                    LText("Show Wi-Fi networks in popover")
+                }
+                if showWifiSwitcher {
+                    LText("Lists nearby Wi-Fi networks from the system's cached scan. Tap a row to join — saved networks reconnect immediately, new secured networks prompt for a password.")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                }
+            } header: {
+                LText("Wi-Fi Switcher")
             }
                 }
 

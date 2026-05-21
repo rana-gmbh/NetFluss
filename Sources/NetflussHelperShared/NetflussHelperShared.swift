@@ -13,4 +13,11 @@ public enum NetflussHelperConstants {
 @objc public protocol NetflussPrivilegedHelperProtocol {
     func setDNS(service: String, servers: [String], withReply reply: @escaping (Bool, String?) -> Void)
     func reconnectEthernet(interfaceName: String, withReply reply: @escaping (Bool, String?) -> Void)
+    func savePreferredWifiNetwork(
+        interfaceName: String,
+        ssid: String,
+        networksetupSecurityType: String,
+        password: String?,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
 }

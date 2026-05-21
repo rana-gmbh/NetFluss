@@ -31,5 +31,9 @@
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSLocationUsageDescription</key>
+	<string>NetFluss reads the list of nearby Wi-Fi networks to let you switch networks from the menu bar. Your location is never recorded or sent anywhere.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>NetFluss reads the list of nearby Wi-Fi networks to let you switch networks from the menu bar. Your location is never recorded or sent anywhere.</string>
 </dict>
 </plist>
