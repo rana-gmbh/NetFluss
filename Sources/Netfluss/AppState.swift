@@ -22,6 +22,7 @@ final class AppState {
     let monitor: NetworkMonitor
     let statisticsManager: StatisticsManager
     let speedTestManager: SpeedTestManager
+    let wifiManager: WifiManager
     let statusBar: StatusBarController
     let updateNotifier: UpdateNotifier
     private var defaultsObserver: NSObjectProtocol?
@@ -65,6 +66,7 @@ final class AppState {
             "hiddenApps": [],
             "externalIPv6": false,
             "showDNSSwitcher": false,
+            "showWifiSwitcher": false,
             "customDNSPresets": Data(),
             "hiddenDNSPresets": [],
             "dnsPresetOrder": [],
@@ -86,10 +88,13 @@ final class AppState {
         self.statisticsManager = statisticsManager
         let speedTestManager = SpeedTestManager(monitor: monitor)
         self.speedTestManager = speedTestManager
+        let wifiManager = WifiManager()
+        self.wifiManager = wifiManager
         self.statusBar = StatusBarController(
             monitor: monitor,
             statisticsManager: statisticsManager,
-            speedTestManager: speedTestManager
+            speedTestManager: speedTestManager,
+            wifiManager: wifiManager
         )
         let updateNotifier = UpdateNotifier()
         self.updateNotifier = updateNotifier

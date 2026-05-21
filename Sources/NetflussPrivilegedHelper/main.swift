@@ -30,6 +30,35 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         }
     }
 
+    func savePreferredWifiNetwork(
+        interfaceName: String,
+        ssid: String,
+        networksetupSecurityType: String,
+        password: String?,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            // networksetup -addpreferredwirelessnetworkatindex <iface> <ssid> <index> <security> [password]
+            // — appends the SSID to the device's Known Networks list and (for
+            // secured networks) stores the password as an "AirPort network
+            // password" item in the system keychain, exactly like a join from
+            // the system Wi-Fi menu.
+            var args = [
+                "/usr/sbin/networksetup",
+                "-addpreferredwirelessnetworkatindex",
+                interfaceName,
+                ssid,
+                "0",
+                networksetupSecurityType
+            ]
+            if let password, !password.isEmpty {
+                args.append(password)
+            }
+            let result = Self.runCommand(arguments: args)
+            reply(result.success, result.message)
+        }
+    }
+
     private static func runCommand(arguments: [String]) -> HelperCommandResult {
         guard let executable = arguments.first else {
             return HelperCommandResult(success: false, message: "Missing command.")
