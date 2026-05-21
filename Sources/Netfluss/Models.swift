@@ -48,7 +48,7 @@ struct AdapterStatus: Identifiable, Equatable, Sendable {
     let rxRateBps: Double
     let txRateBps: Double
 
-    func with(rxRateBps newRxRate: Double) -> AdapterStatus {
+    func with(rxRateBps newRxRate: Double? = nil, rxBytes newRxBytes: UInt64? = nil) -> AdapterStatus {
         AdapterStatus(
             id: id,
             displayName: displayName,
@@ -60,9 +60,9 @@ struct AdapterStatus: Identifiable, Equatable, Sendable {
             wifiTxRateMbps: wifiTxRateMbps,
             wifiSSID: wifiSSID,
             wifiDetail: wifiDetail,
-            rxBytes: rxBytes,
+            rxBytes: newRxBytes ?? rxBytes,
             txBytes: txBytes,
-            rxRateBps: newRxRate,
+            rxRateBps: newRxRate ?? rxRateBps,
             txRateBps: txRateBps
         )
     }
