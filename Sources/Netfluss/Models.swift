@@ -47,6 +47,25 @@ struct AdapterStatus: Identifiable, Equatable, Sendable {
     let txBytes: UInt64
     let rxRateBps: Double
     let txRateBps: Double
+
+    func with(rxRateBps newRxRate: Double) -> AdapterStatus {
+        AdapterStatus(
+            id: id,
+            displayName: displayName,
+            type: type,
+            isTunnelInterface: isTunnelInterface,
+            isUp: isUp,
+            linkSpeedBps: linkSpeedBps,
+            wifiMode: wifiMode,
+            wifiTxRateMbps: wifiTxRateMbps,
+            wifiSSID: wifiSSID,
+            wifiDetail: wifiDetail,
+            rxBytes: rxBytes,
+            txBytes: txBytes,
+            rxRateBps: newRxRate,
+            txRateBps: txRateBps
+        )
+    }
 }
 
 struct RateTotals: Equatable, Sendable {

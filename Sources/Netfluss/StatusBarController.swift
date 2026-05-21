@@ -405,7 +405,7 @@ private final class MenuBarRatesView: NSView {
 }
 
 @MainActor
-final class StatusBarController: NSObject, NSPopoverDelegate {
+final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     private enum PopoverLayout {
         static let preferredWidth: CGFloat = 340
         static let horizontalScreenMargin: CGFloat = 12
@@ -565,6 +565,50 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         AboutWindowController.shared.show()
     }
 
+    @objc private func copyNetworkDiagnosticsFromContextMenu(_ sender: Any?) {
+        closePopover()
+        startNetworkDiagnosticsCapture()
+    }
+
+    private func startNetworkDiagnosticsCapture() {
+        let duration = NetworkDiagnostics.defaultCaptureDuration
+
+        let intro = NSAlert()
+        intro.messageText = L10n.text("Record network diagnostics?")
+        intro.informativeText = String(
+            format: L10n.text("NetFluss will record per-interface byte counters for %.0f seconds. After you click Start, begin a large download (for example a Speed Test) and let it run until the capture finishes. The diagnostics will then be copied to your clipboard so you can paste them into a GitHub issue.\n\nNo network traffic is sent — only local counters from your machine are recorded."),
+            duration
+        )
+        intro.addButton(withTitle: L10n.text("Start"))
+        intro.addButton(withTitle: L10n.text("Cancel"))
+        intro.alertStyle = .informational
+
+        NSApp.activate(ignoringOtherApps: true)
+        guard intro.runModal() == .alertFirstButtonReturn else { return }
+
+        _ = monitor.diagnostics.beginCapture(duration: duration)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.25) { [weak self] in
+            guard let self else { return }
+            let result = self.monitor.diagnostics.finishCapture()
+
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(result.dump, forType: .string)
+
+            let done = NSAlert()
+            done.messageText = L10n.text("Diagnostics copied to clipboard")
+            done.informativeText = String(
+                format: L10n.text("%d snapshots were captured. Paste them into the GitHub issue (issue #31) so the developer can identify which interface accumulates download bytes on your Mac."),
+                result.snapshotCount
+            )
+            done.addButton(withTitle: L10n.text("OK"))
+            done.alertStyle = .informational
+            NSApp.activate(ignoringOtherApps: true)
+            done.runModal()
+        }
+    }
+
     @objc private func openFileFlussFromContextMenu(_ sender: Any?) {
         closePopover()
         guard let url = URL(string: "https://github.com/rana-gmbh/FileFluss") else { return }
@@ -595,6 +639,14 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         teardownPopover()
     }
 
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === contextMenu else { return }
+        let optionHeld = NSEvent.modifierFlags.contains(.option)
+        if let item = menu.items.first(where: { $0.identifier?.rawValue == "netfluss.diagnostics" }) {
+            item.isHidden = !optionHeld
+        }
+    }
+
     private func teardownPopover() {
         if popover.contentViewController != nil {
             popover.contentViewController = nil
@@ -620,6 +672,18 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         let aboutItem = NSMenuItem(title: L10n.text("About NetFluss"), action: #selector(showAboutFromContextMenu(_:)), keyEquivalent: "")
         aboutItem.target = self
         contextMenu.addItem(aboutItem)
+
+        let diagnosticsItem = NSMenuItem(title: L10n.text("Copy Network Diagnostics…"), action: #selector(copyNetworkDiagnosticsFromContextMenu(_:)), keyEquivalent: "")
+        diagnosticsItem.target = self
+        // Only visible when the user holds the Option key while opening the
+        // context menu. Surfacing this via NSMenuDelegate keeps the normal
+        // menu uncluttered for end users while leaving the diagnostic action
+        // accessible when we need another dump.
+        diagnosticsItem.isHidden = true
+        diagnosticsItem.identifier = NSUserInterfaceItemIdentifier("netfluss.diagnostics")
+        contextMenu.addItem(diagnosticsItem)
+
+        contextMenu.delegate = self
 
         let fileFlussItem = NSMenuItem(title: L10n.text("Try FileFluss"), action: #selector(openFileFlussFromContextMenu(_:)), keyEquivalent: "")
         fileFlussItem.target = self
@@ -652,7 +716,16 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             visibleFrame: presentation.visibleFrame,
             isPinned: false
         )
-        popover.contentViewController = NSHostingController(rootView: contentView)
+        let hosting = NSHostingController(rootView: contentView)
+        hosting.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = hosting
+
+        // Cap contentSize so the popover window never opens taller than the
+        // current screen even if a transient SwiftUI layout pass reports a
+        // larger preferredContentSize.
+        let cap = max(presentation.visibleFrame.height - 18, 240)
+        popover.contentSize = NSSize(width: presentation.contentWidth, height: cap)
+
         popover.show(relativeTo: presentation.sourceRect, of: button, preferredEdge: .minY)
         button.highlight(true)
         DispatchQueue.main.async { [weak button] in

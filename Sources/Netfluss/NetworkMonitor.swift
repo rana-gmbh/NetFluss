@@ -74,6 +74,20 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var topAppLastActiveTime: [String: (lastSeen: Date, rxRate: Double, txRate: Double)] = [:]
     private var allAppLastSeen: [String: Date] = [:]
     private let liveTopAppsCollector = LiveNettopCollector()
+    let diagnostics = NetworkDiagnostics()
+
+    // Per-process rx fallback for the macOS 26.5 ifi_ibytes-frozen bug.
+    // Detection latches per adapter for the session; once `kernelRxBroken` is non-empty
+    // we keep nettop running and substitute its summed rx for the default-route adapter.
+    private var rxLastBytes: [String: UInt64] = [:]
+    private var rxLastChange: [String: Date] = [:]
+    private var txLastBytes: [String: UInt64] = [:]
+    private var txLastChange: [String: Date] = [:]
+    private var kernelRxBroken: Set<String> = []
+    private var nettopTotalRxRate: Double = 0
+    private var nettopLastSampleAt: Date?
+    private static let rxStuckThreshold: TimeInterval = 20
+    private static let nettopFreshness: TimeInterval = 3
     private var refreshInFlight = false
     private var detailMonitoringEnabled = false
     private var forceDetailRefresh = false
@@ -114,7 +128,14 @@ final class NetworkMonitor: NSObject, ObservableObject {
         super.init()
         wifiClient.delegate = self
         liveTopAppsCollector.onSample = { [weak self] apps, sampleTime in
-            self?.applyTopAppsSample(apps, sampledAt: sampleTime)
+            guard let self else { return }
+            // Capture system-wide rx rate from nettop regardless of whether the
+            // popover/Top Apps gating is currently active — the fallback path
+            // for the macOS 26.5 ifi_ibytes bug needs this even when Top Apps
+            // is disabled.
+            self.nettopTotalRxRate = apps.reduce(0) { $0 + $1.rxRateBps }
+            self.nettopLastSampleAt = sampleTime
+            self.applyTopAppsSample(apps, sampledAt: sampleTime)
         }
         startListeningForWiFiEvents()
     }
@@ -150,7 +171,11 @@ final class NetworkMonitor: NSObject, ObservableObject {
             refresh()
         } else {
             forceDetailRefresh = false
-            liveTopAppsCollector.stop()
+            // Keep the nettop subprocess alive if the rx fallback needs it
+            // (kernel ifi_ibytes is broken on this Mac). Otherwise stop it.
+            if kernelRxBroken.isEmpty {
+                liveTopAppsCollector.stop()
+            }
             processSnapshot = [:]
             processSnapshotTime = nil
             topAppLastActiveTime.removeAll()
@@ -291,12 +316,20 @@ final class NetworkMonitor: NSObject, ObservableObject {
             lastWiFiDetailsRefresh = now
         }
 
-        setIfChanged(\.adapters, to: result.adapters)
-        setIfChanged(\.totals, to: result.totals)
+        let (adjustedAdapters, adjustedTotals) = applyRxFallbackIfNeeded(
+            adapters: result.adapters,
+            totals: result.totals,
+            now: now
+        )
+
+        setIfChanged(\.adapters, to: adjustedAdapters)
+        setIfChanged(\.totals, to: adjustedTotals)
         lastSample = result.samplesByName
         lastUpdate = now
 
-        let updatedAdapters = result.adapters
+        diagnostics.record(adapters: adjustedAdapters, at: now)
+
+        let updatedAdapters = adjustedAdapters
 
         // Adapter grace period tracking
         let graceEnabled = UserDefaults.standard.bool(forKey: "adapterGracePeriodEnabled")
@@ -374,11 +407,130 @@ final class NetworkMonitor: NSObject, ObservableObject {
         return now.timeIntervalSince(lastRefresh) >= interval
     }
 
+    // MARK: - Rx fallback (macOS 26.5 ifi_ibytes-frozen workaround)
+
+    /// Detects adapters whose kernel `ifi_ibytes` counter is stuck (see issue #31),
+    /// activates the `LiveNettopCollector` when needed, and substitutes the
+    /// per-process rx sum for the default-route adapter when interface counters
+    /// are unreliable.
+    private func applyRxFallbackIfNeeded(
+        adapters: [AdapterStatus],
+        totals: RateTotals,
+        now: Date
+    ) -> (adapters: [AdapterStatus], totals: RateTotals) {
+        let forceFallback = UserDefaults.standard.bool(forKey: "NetfluseForceRxFallback")
+        var newlyBroken = false
+
+        for adapter in adapters {
+            guard adapter.type == .wifi || adapter.type == .ethernet else { continue }
+            guard adapter.isUp else { continue }
+
+            // Track byte-counter movement timestamps. Treat first observation as
+            // movement so the threshold clock starts from "now" rather than zero.
+            let prevRx = rxLastBytes[adapter.id]
+            if prevRx == nil || adapter.rxBytes != prevRx {
+                rxLastChange[adapter.id] = now
+                rxLastBytes[adapter.id] = adapter.rxBytes
+            }
+            let prevTx = txLastBytes[adapter.id]
+            if prevTx == nil || adapter.txBytes != prevTx {
+                txLastChange[adapter.id] = now
+                txLastBytes[adapter.id] = adapter.txBytes
+            }
+
+            if kernelRxBroken.contains(adapter.id) { continue }
+
+            if forceFallback {
+                kernelRxBroken.insert(adapter.id)
+                newlyBroken = true
+                continue
+            }
+
+            // Only flag if rx hasn't moved for ≥ rxStuckThreshold seconds AND tx
+            // *has* moved within that window (proving the link is actively used).
+            if let rxChanged = rxLastChange[adapter.id],
+               let txChanged = txLastChange[adapter.id],
+               now.timeIntervalSince(rxChanged) >= Self.rxStuckThreshold,
+               now.timeIntervalSince(txChanged) < Self.rxStuckThreshold {
+                kernelRxBroken.insert(adapter.id)
+                newlyBroken = true
+            }
+        }
+
+        if newlyBroken {
+            updateTopAppsCollectionState()
+        }
+
+        guard !kernelRxBroken.isEmpty else {
+            return (adapters, totals)
+        }
+
+        // Only substitute when nettop data is fresh — its first sample is a
+        // baseline, so there's a ~1–2 s warm-up after the collector starts.
+        guard let nettopAt = nettopLastSampleAt,
+              now.timeIntervalSince(nettopAt) <= Self.nettopFreshness else {
+            return (adapters, totals)
+        }
+
+        // Pick the substitution target: prefer the default-route adapter; fall
+        // back to the first broken adapter we encounter.
+        let primaryBSDName = Self.primaryInterfaceName(store: dynamicStore)
+        let targetID: String? = {
+            if let primaryBSDName, kernelRxBroken.contains(primaryBSDName) {
+                return primaryBSDName
+            }
+            return adapters.first { kernelRxBroken.contains($0.id) }?.id
+        }()
+        guard let targetID else { return (adapters, totals) }
+
+        let substitutedRx = nettopTotalRxRate
+
+        var adjusted = adapters
+        var newTotalRx: Double = 0
+        var newTotalTx: Double = 0
+        for index in adjusted.indices {
+            let adapter = adjusted[index]
+            if adapter.id == targetID {
+                adjusted[index] = adapter.with(rxRateBps: substitutedRx)
+                newTotalRx += substitutedRx
+                newTotalTx += adapter.txRateBps
+            } else if kernelRxBroken.contains(adapter.id) {
+                // Avoid double-counting: zero the rx on other broken adapters
+                // (we have no per-interface attribution from nettop).
+                adjusted[index] = adapter.with(rxRateBps: 0)
+                newTotalTx += adapter.txRateBps
+            } else {
+                newTotalRx += adapter.rxRateBps
+                newTotalTx += adapter.txRateBps
+            }
+        }
+        _ = totals
+        return (adjusted, RateTotals(rxRateBps: newTotalRx, txRateBps: newTotalTx))
+    }
+
+    private static func primaryInterfaceName(store: SCDynamicStore?) -> String? {
+        let s = store ?? SCDynamicStoreCreate(nil, "NetFluss" as CFString, nil, nil)
+        guard let s else { return nil }
+        let key = SCDynamicStoreKeyCreateNetworkGlobalEntity(
+            nil,
+            kSCDynamicStoreDomainState,
+            kSCEntNetIPv4
+        )
+        guard let dict = SCDynamicStoreCopyValue(s, key) as? [String: Any],
+              let name = dict[kSCDynamicStorePropNetPrimaryInterface as String] as? String,
+              !name.isEmpty else {
+            return nil
+        }
+        return name
+    }
+
     // MARK: - Top Apps
 
     private func updateTopAppsCollectionState() {
-        let shouldRunLiveCollector = detailMonitoringEnabled &&
+        let topAppsEnabled = detailMonitoringEnabled &&
             UserDefaults.standard.bool(forKey: "showTopApps")
+        let needForFallback = !kernelRxBroken.isEmpty
+        let shouldRunLiveCollector = topAppsEnabled || needForFallback
 
         if shouldRunLiveCollector {
             liveTopAppsCollector.start()
