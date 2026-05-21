@@ -33,6 +33,9 @@ final class WifiManager: NSObject, ObservableObject {
     @Published private(set) var connectingTo: String?    // SSID being joined
     @Published private(set) var lastError: String?
     @Published private(set) var locationStatus: WifiLocationStatus = .notDetermined
+    @Published private(set) var pinnedSSIDs: [String] = []   // last pinned first
+
+    private static let pinnedDefaultsKey = "pinnedWifiSSIDs"
 
     private let interface: CWInterface?
     private let locationManager = CLLocationManager()
@@ -47,6 +50,7 @@ final class WifiManager: NSObject, ObservableObject {
         super.init()
         locationManager.delegate = self
         updateLocationStatus(from: locationManager.authorizationStatus)
+        pinnedSSIDs = UserDefaults.standard.stringArray(forKey: Self.pinnedDefaultsKey) ?? []
     }
 
     deinit {
@@ -142,7 +146,7 @@ final class WifiManager: NSObject, ObservableObject {
                 let thisIsActive = net.bssid != nil && net.bssid == activeBSSID
                 let existingIsActive = existing.net.bssid != nil && existing.net.bssid == activeBSSID
                 if existingIsActive { continue }
-                if !thisIsActive, rssi <= existing.net.rssi { continue }
+                if !thisIsActive, rssi <= (existing.net.rssi ?? Int.min) { continue }
             }
 
             let security = Self.detectSecurity(on: net)
@@ -179,7 +183,9 @@ final class WifiManager: NSObject, ObservableObject {
                     channelWidth: channel.map { Self.channelWidthString($0.channelWidth) },
                     band: bandStr,
                     isCurrent: isCurrentRow,
-                    isSaved: savedSSIDs.contains(ssid)
+                    isSaved: savedSSIDs.contains(ssid),
+                    isPinned: pinnedSSIDs.contains(ssid),
+                    isAvailable: true
                 ),
                 net
             )
@@ -210,7 +216,9 @@ final class WifiManager: NSObject, ObservableObject {
                             }
                         }(),
                         isCurrent: true,
-                        isSaved: savedSSIDs.contains(currentSSID)
+                        isSaved: savedSSIDs.contains(currentSSID),
+                        isPinned: pinnedSSIDs.contains(currentSSID),
+                        isAvailable: true
                     ),
                     // No CWNetwork object for the active connection; connect()
                     // short-circuits if it's already current so this is unused.
@@ -220,10 +228,47 @@ final class WifiManager: NSObject, ObservableObject {
             )
         }
 
-        // Sort: connected first, then descending RSSI.
+        // Synthesise placeholder rows for any pinned SSID that isn't visible
+        // right now, so the user can still see (and try to reconnect to) it.
+        for ssid in pinnedSSIDs where !collected.contains(where: { $0.net.ssid == ssid }) {
+            collected.append(
+                (
+                    WifiNetwork(
+                        id: ssid,
+                        ssid: ssid,
+                        bssid: nil,
+                        rssi: nil,
+                        isSecured: true,            // assume secured; harmless if not
+                        security: nil,
+                        channelNumber: nil,
+                        channelWidth: nil,
+                        band: nil,
+                        isCurrent: false,
+                        isSaved: savedSSIDs.contains(ssid),
+                        isPinned: true,
+                        isAvailable: false
+                    ),
+                    CWNetwork()
+                )
+            )
+        }
+
+        // Sort order:
+        //   1. Pinned networks, most-recently-pinned first.
+        //   2. Currently-connected (when it isn't already pinned).
+        //   3. Everything else by descending RSSI.
+        let pinIndex: (String) -> Int = { [pinnedSSIDs] ssid in
+            pinnedSSIDs.firstIndex(of: ssid) ?? Int.max
+        }
         collected.sort { lhs, rhs in
+            if lhs.net.isPinned != rhs.net.isPinned { return lhs.net.isPinned }
+            if lhs.net.isPinned, rhs.net.isPinned {
+                return pinIndex(lhs.net.ssid) < pinIndex(rhs.net.ssid)
+            }
             if lhs.net.isCurrent != rhs.net.isCurrent { return lhs.net.isCurrent }
-            return lhs.net.rssi > rhs.net.rssi
+            let lr = lhs.net.rssi ?? Int.min
+            let rr = rhs.net.rssi ?? Int.min
+            return lr > rr
         }
 
         self.networks = collected.map(\.net)
@@ -235,11 +280,44 @@ final class WifiManager: NSObject, ObservableObject {
         if network.isCurrent { return }
         guard connectingTo == nil else { return }
 
+        // Offline pinned: rescan for the SSID and pick whichever BSSID
+        // answered. If nothing answers, surface a clear error.
+        if !network.isAvailable {
+            attemptAssociateOfflinePinned(interface: interface, network: network)
+            return
+        }
+
         if network.isSecured && !network.isSaved {
             promptForPasswordAndConnect(interface: interface, network: network)
         } else {
             attemptAssociate(interface: interface, network: network, password: nil)
         }
+    }
+
+    func togglePin(_ network: WifiNetwork) {
+        if pinnedSSIDs.contains(network.ssid) {
+            unpin(network.ssid)
+        } else {
+            pin(network.ssid)
+        }
+    }
+
+    func pin(_ ssid: String) {
+        guard !ssid.isEmpty else { return }
+        var list = pinnedSSIDs
+        list.removeAll { $0 == ssid }
+        list.insert(ssid, at: 0)
+        pinnedSSIDs = list
+        UserDefaults.standard.set(list, forKey: Self.pinnedDefaultsKey)
+        refresh()
+    }
+
+    func unpin(_ ssid: String) {
+        let list = pinnedSSIDs.filter { $0 != ssid }
+        guard list.count != pinnedSSIDs.count else { return }
+        pinnedSSIDs = list
+        UserDefaults.standard.set(list, forKey: Self.pinnedDefaultsKey)
+        refresh()
     }
 
     func clearError() { lastError = nil }
@@ -271,6 +349,53 @@ final class WifiManager: NSObject, ObservableObject {
         guard response == .alertFirstButtonReturn else { return }
         let password = secureField.stringValue
         attemptAssociate(interface: interface, network: network, password: password)
+    }
+
+    private func attemptAssociateOfflinePinned(interface: CWInterface, network: WifiNetwork) {
+        connectingTo = network.ssid
+        lastError = nil
+
+        let ssid = network.ssid
+        let ssidData = Data(ssid.utf8)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let found: CWNetwork? = {
+                do {
+                    let results = try interface.scanForNetworks(withSSID: ssidData)
+                    return results.first(where: { $0.ssid == ssid })
+                } catch {
+                    return nil
+                }
+            }()
+
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                guard let found else {
+                    self.connectingTo = nil
+                    self.lastError = NSLocalizedString("Network is not in range right now.", comment: "")
+                    return
+                }
+                // Splice the discovered CWNetwork into the lookup map and
+                // re-enter the normal connect flow.
+                self.cwNetworksByID[network.ssid] = found
+                let promoted = WifiNetwork(
+                    id: network.ssid,
+                    ssid: network.ssid,
+                    bssid: found.bssid,
+                    rssi: Int(found.rssiValue),
+                    isSecured: !found.supportsSecurity(.none),
+                    security: Self.securityString(Self.detectSecurity(on: found)),
+                    channelNumber: found.wlanChannel.map { Int($0.channelNumber) },
+                    channelWidth: found.wlanChannel.map { Self.channelWidthString($0.channelWidth) },
+                    band: nil,
+                    isCurrent: false,
+                    isSaved: network.isSaved,
+                    isPinned: true,
+                    isAvailable: true
+                )
+                self.connectingTo = nil
+                self.connect(to: promoted)
+            }
+        }
     }
 
     private func attemptAssociate(interface: CWInterface, network: WifiNetwork, password: String?) {

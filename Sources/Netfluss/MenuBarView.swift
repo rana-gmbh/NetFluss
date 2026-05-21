@@ -1313,7 +1313,27 @@ struct DNSPresetRow: View {
 
 struct WifiSwitcherSection: View {
     @EnvironmentObject private var wifi: WifiManager
+    @AppStorage("wifiLimitEnabled") private var limitEnabled: Bool = false
+    @AppStorage("wifiLimitCount") private var limitCount: Int = 10
     @State private var detailNetworkID: String?
+
+    /// Applies the "show only X strongest" preference. Pinned and current rows
+    /// always show; the limit caps the rest.
+    private var displayedNetworks: [WifiNetwork] {
+        guard limitEnabled else { return wifi.networks }
+        let cap = max(1, limitCount)
+        var kept: [WifiNetwork] = []
+        var capRemaining = cap
+        for net in wifi.networks {
+            if net.isPinned || net.isCurrent {
+                kept.append(net)
+            } else if capRemaining > 0 {
+                kept.append(net)
+                capRemaining -= 1
+            }
+        }
+        return kept
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1353,13 +1373,14 @@ struct WifiSwitcherSection: View {
                     .padding(.horizontal, 12)
             } else {
                 VStack(spacing: 2) {
-                    ForEach(wifi.networks) { network in
+                    ForEach(displayedNetworks) { network in
                         WifiNetworkRow(
                             network: network,
                             isConnecting: wifi.connectingTo == network.ssid,
                             isAnyConnecting: wifi.connectingTo != nil,
                             isDetailShown: detailNetworkID == network.id,
                             onSelect: { wifi.connect(to: network) },
+                            onTogglePin: { wifi.togglePin(network) },
                             onToggleDetail: {
                                 detailNetworkID = detailNetworkID == network.id ? nil : network.id
                             }
@@ -1402,19 +1423,18 @@ struct WifiNetworkRow: View {
     let isAnyConnecting: Bool
     let isDetailShown: Bool
     let onSelect: () -> Void
+    let onTogglePin: () -> Void
     let onToggleDetail: () -> Void
 
     private var signalIcon: String {
+        guard let rssi = network.rssi else { return "wifi.slash" }
         // RSSI is roughly -30 (excellent) to -90 (unusable).
-        switch network.rssi {
-        case ..<(-80): return "wifi.exclamationmark"
-        case -80 ..< -70: return "wifi"
-        default: return "wifi"
-        }
+        return rssi < -80 ? "wifi.exclamationmark" : "wifi"
     }
 
     private var signalOpacity: Double {
-        switch network.rssi {
+        guard let rssi = network.rssi else { return 0.35 }
+        switch rssi {
         case ..<(-80): return 0.45
         case -80 ..< -70: return 0.65
         case -70 ..< -60: return 0.85
@@ -1435,6 +1455,7 @@ struct WifiNetworkRow: View {
                             Text(network.ssid)
                                 .font(.system(size: 11, weight: network.isCurrent ? .semibold : .regular))
                                 .lineLimit(1)
+                                .opacity(network.isAvailable ? 1.0 : 0.7)
                             if network.isSecured {
                                 Image(systemName: "lock.fill")
                                     .font(.system(size: 9))
@@ -1447,14 +1468,23 @@ struct WifiNetworkRow: View {
                             }
                         }
                         HStack(spacing: 6) {
-                            if let band = network.band {
-                                Text(band)
+                            if network.isAvailable {
+                                if let band = network.band {
+                                    Text(band)
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.secondary)
+                                }
+                                if let rssi = network.rssi {
+                                    Text("\(rssi) dBm")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.secondary)
+                                }
+                            } else {
+                                Text("Not available")
                                     .font(.system(size: 9))
                                     .foregroundStyle(.secondary)
+                                    .italic()
                             }
-                            Text("\(network.rssi) dBm")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
@@ -1474,6 +1504,15 @@ struct WifiNetworkRow: View {
             }
             .buttonStyle(.borderless)
             .disabled(network.isCurrent || isAnyConnecting)
+
+            Button(action: onTogglePin) {
+                Image(systemName: network.isPinned ? "pin.fill" : "pin")
+                    .font(.system(size: 11))
+                    .foregroundStyle(network.isPinned ? Color.accentColor : Color.secondary)
+                    .rotationEffect(network.isPinned ? .degrees(-45) : .zero)
+            }
+            .buttonStyle(.borderless)
+            .help(network.isPinned ? "Unpin" : "Pin to top")
 
             Button(action: onToggleDetail) {
                 Image(systemName: "info.circle")
@@ -1508,9 +1547,17 @@ struct WifiScanDetailPopover: View {
                 let channelStr = width.isEmpty ? "Ch \(chNum)" : "Ch \(chNum) (\(width))"
                 detailRow("Channel", channelStr)
             }
-            detailRow("RSSI", "\(network.rssi) dBm")
+            if let rssi = network.rssi {
+                detailRow("RSSI", "\(rssi) dBm")
+            }
             if let bssid = network.bssid {
                 detailRow("BSSID", bssid)
+            }
+            if !network.isAvailable {
+                detailRow("Status", "Not in range")
+            }
+            if network.isPinned {
+                detailRow("Pinned", "Yes")
             }
         }
         .padding(12)

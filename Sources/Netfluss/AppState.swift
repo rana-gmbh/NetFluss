@@ -67,6 +67,8 @@ final class AppState {
             "externalIPv6": false,
             "showDNSSwitcher": false,
             "showWifiSwitcher": false,
+            "wifiLimitEnabled": false,
+            "wifiLimitCount": 10,
             "customDNSPresets": Data(),
             "hiddenDNSPresets": [],
             "dnsPresetOrder": [],

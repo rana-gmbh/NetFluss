@@ -180,7 +180,7 @@ struct WifiNetwork: Identifiable, Equatable, Sendable {
     let id: String           // Stable per-network key (BSSID if present, else SSID)
     let ssid: String
     let bssid: String?
-    let rssi: Int
+    let rssi: Int?           // nil for pinned-but-out-of-range entries
     let isSecured: Bool
     let security: String?    // Localised label ("WPA2 Personal", "Open", ...)
     let channelNumber: Int?
@@ -188,6 +188,8 @@ struct WifiNetwork: Identifiable, Equatable, Sendable {
     let band: String?        // "2.4 GHz" / "5 GHz" / "6 GHz"
     let isCurrent: Bool
     let isSaved: Bool        // Known to macOS via stored network profiles
+    let isPinned: Bool       // User-pinned in NetFluss preferences
+    let isAvailable: Bool    // false when synthesised for an out-of-range pinned SSID
 }
 
 struct DNSPreset: Identifiable, Codable, Equatable, Sendable {

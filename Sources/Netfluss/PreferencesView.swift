@@ -258,6 +258,8 @@ struct PreferencesView: View {
     @AppStorage("externalIPv6") private var externalIPv6: Bool = false
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
     @AppStorage("showWifiSwitcher") private var showWifiSwitcher: Bool = false
+    @AppStorage("wifiLimitEnabled") private var wifiLimitEnabled: Bool = false
+    @AppStorage("wifiLimitCount") private var wifiLimitCount: Int = 10
     @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
     @AppStorage("fritzBoxHost") private var fritzBoxHost: String = ""
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
@@ -789,6 +791,25 @@ struct PreferencesView: View {
                     LText("Lists nearby Wi-Fi networks from the system's cached scan. Tap a row to join — saved networks reconnect immediately, new secured networks prompt for a password.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
+
+                    Toggle(isOn: $wifiLimitEnabled) {
+                        LText("Only show the strongest networks")
+                    }
+                    if wifiLimitEnabled {
+                        LabeledContent {
+                            Stepper(value: $wifiLimitCount, in: 1...30) {
+                                Text("\(wifiLimitCount)")
+                                    .frame(minWidth: 28, alignment: .trailing)
+                                    .monospacedDigit()
+                            }
+                            .frame(maxWidth: 120)
+                        } label: {
+                            LText("Maximum networks shown")
+                        }
+                        LText("Pinned networks and the currently-connected network always appear regardless of this limit.")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
                 }
             } header: {
                 LText("Wi-Fi Switcher")
