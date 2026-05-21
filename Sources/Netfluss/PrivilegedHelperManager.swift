@@ -43,6 +43,23 @@ actor PrivilegedHelperManager {
         }
     }
 
+    func savePreferredWifiNetwork(
+        interfaceName: String,
+        ssid: String,
+        networksetupSecurityType: String,
+        password: String?
+    ) async -> CommandResult? {
+        await performIfAvailable { helper, reply in
+            helper.savePreferredWifiNetwork(
+                interfaceName: interfaceName,
+                ssid: ssid,
+                networksetupSecurityType: networksetupSecurityType,
+                password: password,
+                withReply: reply
+            )
+        }
+    }
+
     private func performIfAvailable(
         _ invocation: @escaping (NetflussPrivilegedHelperProtocol, @escaping (Bool, String?) -> Void) -> Void
     ) async -> CommandResult? {
@@ -150,6 +167,8 @@ actor PrivilegedHelperManager {
         return validateServiceStatus()
     }
 
+    private static let xpcInvocationTimeout: TimeInterval = 15
+
     private func performXPCInvocation(
         _ invocation: @escaping (NetflussPrivilegedHelperProtocol, @escaping (Bool, String?) -> Void) -> Void
     ) async -> CommandResult {
@@ -176,6 +195,20 @@ actor PrivilegedHelperManager {
 
                 connection.invalidate()
                 continuation.resume(returning: result)
+            }
+
+            // Defensive timeout: a helper that exits on launch (e.g. EX_CONFIG)
+            // can leave the connection in a half-open state where neither the
+            // reply, the invalidation handler, nor the interruption handler
+            // fires. Without this, the calling code (DNS switcher, Wi-Fi save)
+            // hangs forever.
+            DispatchQueue.global().asyncAfter(deadline: .now() + Self.xpcInvocationTimeout) {
+                finish(
+                    Self.failure(
+                        status: PrivilegedCommandStatus.helperConnectionFailed,
+                        message: "The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry."
+                    )
+                )
             }
 
             connection.interruptionHandler = {
