@@ -645,6 +645,15 @@ struct PreferencesView: View {
             } header: {
                 LText("IP addresses")
             }
+
+                    Section {
+                        PopoverSectionsReorderEditor()
+                        LText("Drag to reorder sections in the popover. Toggling a row mirrors the corresponding pref in DNS, Wi-Fi, Router, or Top Apps panels.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } header: {
+                        LText("Popover sections")
+                    }
                 }
 
                 if selectedPane == .topApps {
@@ -1394,5 +1403,118 @@ struct HiddenAppsSheet: View {
         }
         .padding(20)
         .frame(width: 340)
+    }
+}
+
+
+// MARK: - Popover section reorder editor
+
+private struct PopoverSectionsReorderEditor: View {
+    @AppStorage("showTotalsHeader") private var showTotalsHeader: Bool = true
+    @AppStorage("showAdapterList") private var showAdapterList: Bool = true
+    @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "flow"
+    @AppStorage("lastConnectionStatusMode") private var lastConnectionStatusMode: String = "flow"
+    @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
+    @AppStorage("showWifiSwitcher") private var showWifiSwitcher: Bool = false
+    @AppStorage("showTopApps") private var showTopApps: Bool = false
+    @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
+    @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
+    @AppStorage("openWRTEnabled") private var openWRTEnabled: Bool = false
+    @AppStorage("opnsenseEnabled") private var opnsenseEnabled: Bool = false
+
+    @State private var sections: [PopoverSection] = PopoverSection.resolvedOrder(
+        from: UserDefaults.standard.stringArray(forKey: "popoverSectionOrder")
+    )
+
+    private var anyRouterEnabled: Bool {
+        fritzBoxEnabled || unifiEnabled || openWRTEnabled || opnsenseEnabled
+    }
+
+    private func toggleBinding(_ section: PopoverSection) -> Binding<Bool> {
+        switch section {
+        case .totals:
+            return Binding(get: { showTotalsHeader }, set: { showTotalsHeader = $0 })
+        case .adapters:
+            return Binding(get: { showAdapterList }, set: { showAdapterList = $0 })
+        case .connection:
+            return Binding(
+                get: { connectionStatusMode != "none" },
+                set: { newValue in
+                    if newValue {
+                        connectionStatusMode = lastConnectionStatusMode.isEmpty || lastConnectionStatusMode == "none"
+                            ? "flow"
+                            : lastConnectionStatusMode
+                    } else {
+                        if connectionStatusMode != "none" {
+                            lastConnectionStatusMode = connectionStatusMode
+                        }
+                        connectionStatusMode = "none"
+                    }
+                }
+            )
+        case .dns:
+            return Binding(get: { showDNSSwitcher }, set: { showDNSSwitcher = $0 })
+        case .router:
+            return Binding(
+                get: { anyRouterEnabled },
+                set: { newValue in
+                    if !newValue {
+                        fritzBoxEnabled = false
+                        unifiEnabled = false
+                        openWRTEnabled = false
+                        opnsenseEnabled = false
+                    }
+                    // Turning Router ON here is a no-op — individual routers
+                    // need to be configured in the Router pane.
+                }
+            )
+        case .wifi:
+            return Binding(get: { showWifiSwitcher }, set: { showWifiSwitcher = $0 })
+        case .topApps:
+            return Binding(get: { showTopApps }, set: { showTopApps = $0 })
+        }
+    }
+
+    private func toggleDisabled(_ section: PopoverSection) -> Bool {
+        // Router toggle can only be turned OFF from here (turning on requires
+        // configuring an individual router in the Router pane).
+        section == .router && !anyRouterEnabled
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            List {
+                ForEach(sections) { section in
+                    HStack(spacing: 8) {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 14)
+                        Toggle("", isOn: toggleBinding(section))
+                            .labelsHidden()
+                            .disabled(toggleDisabled(section))
+                        Image(systemName: section.systemImage)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 18)
+                        Text(LocalizedStringKey(section.displayName))
+                            .lineLimit(1)
+                        Spacer()
+                    }
+                    .padding(.vertical, 2)
+                }
+                .onMove { source, destination in
+                    sections.move(fromOffsets: source, toOffset: destination)
+                    persist()
+                }
+            }
+            .listStyle(.plain)
+            .frame(height: CGFloat(PopoverSection.allCases.count) * 30 + 12)
+            .scrollDisabled(true)
+        }
+    }
+
+    private func persist() {
+        UserDefaults.standard.set(sections.map(\.rawValue), forKey: "popoverSectionOrder")
     }
 }

@@ -192,6 +192,65 @@ struct WifiNetwork: Identifiable, Equatable, Sendable {
     let isAvailable: Bool    // false when synthesised for an out-of-range pinned SSID
 }
 
+/// The customisable sections of the popover, in their default top-to-bottom
+/// order. Persisted as `popoverSectionOrder` (an array of rawValues) and
+/// `popoverSection.<id>.visible` style toggles are aliased to the existing
+/// canonical visibility keys (see PopoverSection.visibilityKey).
+enum PopoverSection: String, CaseIterable, Identifiable, Sendable {
+    case totals
+    case adapters
+    case connection
+    case dns
+    case router
+    case wifi
+    case topApps
+
+    var id: String { rawValue }
+
+    static let defaultOrder: [PopoverSection] = [
+        .totals, .adapters, .connection, .dns, .router, .wifi, .topApps
+    ]
+
+    var displayName: String {
+        switch self {
+        case .totals: return "Download / Upload"
+        case .adapters: return "Network adapters"
+        case .connection: return "Network flow"
+        case .dns: return "DNS"
+        case .router: return "Router"
+        case .wifi: return "Wi-Fi Networks"
+        case .topApps: return "Top Apps"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .totals: return "arrow.up.arrow.down"
+        case .adapters: return "network"
+        case .connection: return "globe"
+        case .dns: return "server.rack"
+        case .router: return "wifi.router"
+        case .wifi: return "wifi"
+        case .topApps: return "list.number"
+        }
+    }
+
+    static func resolvedOrder(from raw: [String]?) -> [PopoverSection] {
+        guard let raw, !raw.isEmpty else { return defaultOrder }
+        var seen = Set<PopoverSection>()
+        var ordered: [PopoverSection] = []
+        for token in raw {
+            guard let section = PopoverSection(rawValue: token) else { continue }
+            if seen.insert(section).inserted { ordered.append(section) }
+        }
+        // Append any sections that aren't in the stored order (new defaults).
+        for section in defaultOrder where !seen.contains(section) {
+            ordered.append(section)
+        }
+        return ordered
+    }
+}
+
 struct DNSPreset: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let name: String
