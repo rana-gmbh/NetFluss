@@ -94,7 +94,7 @@ final class AppState {
         self.statisticsManager = statisticsManager
         let speedTestManager = SpeedTestManager(monitor: monitor)
         self.speedTestManager = speedTestManager
-        let wifiManager = WifiManager()
+        let wifiManager = WifiManager.shared
         self.wifiManager = wifiManager
         self.statusBar = StatusBarController(
             monitor: monitor,

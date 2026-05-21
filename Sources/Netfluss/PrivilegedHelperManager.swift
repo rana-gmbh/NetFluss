@@ -43,6 +43,61 @@ actor PrivilegedHelperManager {
         }
     }
 
+    enum InstallOutcome {
+        case alreadyEnabled
+        case requiresApproval(message: String)
+        case registered
+        case unavailable(message: String)
+        case failed(message: String)
+    }
+
+    /// Explicit install entry point — called from Preferences so the user can
+    /// proactively trigger the macOS "Background Items Added" / approval flow
+    /// rather than waiting for the first DNS change or Wi-Fi save.
+    func install() async -> InstallOutcome {
+        guard Self.hasBundledHelper else {
+            return .unavailable(message: "The bundled helper executable is missing.")
+        }
+
+        switch service.status {
+        case .enabled:
+            return .alreadyEnabled
+        case .requiresApproval:
+            return .requiresApproval(
+                message: "Approve the Netfluss helper in System Settings → General → Login Items."
+            )
+        case .notRegistered, .notFound:
+            do {
+                try service.register()
+            } catch let error as NSError {
+                if error.domain == Self.appServiceErrorDomain,
+                   error.code == Int(kSMErrorAlreadyRegistered) {
+                    return statusOutcome()
+                }
+                return .failed(message: Self.registrationErrorMessage(for: error))
+            }
+            return statusOutcome()
+        @unknown default:
+            return .failed(message: "The privileged helper returned an unknown status.")
+        }
+    }
+
+    private func statusOutcome() -> InstallOutcome {
+        switch service.status {
+        case .enabled: return .alreadyEnabled
+        case .requiresApproval:
+            return .requiresApproval(
+                message: "Approve the Netfluss helper in System Settings → General → Login Items."
+            )
+        case .notRegistered:
+            return .failed(message: "Registration completed but the helper is still not registered.")
+        case .notFound:
+            return .failed(message: "The privileged helper bundle is incomplete.")
+        @unknown default:
+            return .failed(message: "The privileged helper returned an unknown status.")
+        }
+    }
+
     func savePreferredWifiNetwork(
         interfaceName: String,
         ssid: String,

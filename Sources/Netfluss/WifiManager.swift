@@ -28,6 +28,8 @@ enum WifiLocationStatus {
 
 @MainActor
 final class WifiManager: NSObject, ObservableObject {
+    static let shared = WifiManager()
+
     @Published private(set) var networks: [WifiNetwork] = []
     @Published private(set) var currentSSID: String?
     @Published private(set) var connectingTo: String?    // SSID being joined
@@ -77,6 +79,22 @@ final class WifiManager: NSObject, ObservableObject {
     func openLocationSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
             NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// Triggered from the Preferences "Grant Location Access" button.
+    /// Routes to the standard macOS prompt when undecided, or to
+    /// System Settings when previously denied.
+    func requestLocationAccess() {
+        switch locationStatus {
+        case .notDetermined:
+            locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
+            locationManager.requestWhenInUseAuthorization()
+            locationManager.startUpdatingLocation()
+        case .denied:
+            openLocationSettings()
+        case .authorized:
+            triggerFreshScan()
         }
     }
 

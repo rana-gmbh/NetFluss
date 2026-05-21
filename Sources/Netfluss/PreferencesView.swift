@@ -295,6 +295,12 @@ struct PreferencesView: View {
             Form {
                 if selectedPane == .general {
                     Section {
+                        SystemAccessControls()
+                    } header: {
+                        LText("System access")
+                    }
+
+                    Section {
                 Picker(selection: $appLanguage) {
                     ForEach(AppLanguage.allCases) { language in
                         Text(language.displayName).tag(language.rawValue)
@@ -1516,5 +1522,104 @@ private struct PopoverSectionsReorderEditor: View {
 
     private func persist() {
         UserDefaults.standard.set(sections.map(\.rawValue), forKey: "popoverSectionOrder")
+    }
+}
+
+// MARK: - System access controls (Preferences → General)
+
+private struct SystemAccessControls: View {
+    @ObservedObject private var wifi = WifiManager.shared
+    @State private var helperStatus: String? = nil
+    @State private var helperWorking = false
+
+    private var locationStatusLabel: String {
+        switch wifi.locationStatus {
+        case .notDetermined: return NSLocalizedString("Not requested yet", comment: "")
+        case .denied: return NSLocalizedString("Denied — open System Settings to allow", comment: "")
+        case .authorized: return NSLocalizedString("Granted", comment: "")
+        }
+    }
+
+    private var locationButtonTitle: String {
+        switch wifi.locationStatus {
+        case .notDetermined: return NSLocalizedString("Grant Location Access…", comment: "")
+        case .denied: return NSLocalizedString("Open Location Settings…", comment: "")
+        case .authorized: return NSLocalizedString("Refresh Wi-Fi Scan", comment: "")
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Location -----------------------------------------------------
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Button(locationButtonTitle) {
+                        wifi.requestLocationAccess()
+                    }
+                    Spacer()
+                    Text(locationStatusLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                LText("Required to list nearby Wi-Fi networks. macOS uses the same gate for its own Wi-Fi menu.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            // Helper -------------------------------------------------------
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Button {
+                        installHelper()
+                    } label: {
+                        if helperWorking {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small).frame(width: 12, height: 12)
+                                Text("Installing…")
+                            }
+                        } else {
+                            Text("Install Privileged Helper…")
+                        }
+                    }
+                    .disabled(helperWorking)
+                    Spacer()
+                    if let helperStatus, !helperStatus.isEmpty {
+                        Text(helperStatus)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+                LText("Used to change DNS servers and to persist new Wi-Fi credentials into macOS's Known Networks. macOS may show a \"Background Items Added\" approval prompt the first time.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func installHelper() {
+        helperWorking = true
+        helperStatus = nil
+        Task {
+            let outcome = await PrivilegedHelperManager.shared.install()
+            await MainActor.run {
+                helperWorking = false
+                switch outcome {
+                case .alreadyEnabled:
+                    helperStatus = NSLocalizedString("Already installed", comment: "")
+                case .registered:
+                    helperStatus = NSLocalizedString("Registered", comment: "")
+                case .requiresApproval(let msg):
+                    helperStatus = msg
+                case .unavailable(let msg):
+                    helperStatus = msg
+                case .failed(let msg):
+                    helperStatus = msg
+                }
+            }
+        }
     }
 }
