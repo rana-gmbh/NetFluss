@@ -43,6 +43,8 @@ struct MenuBarView: View {
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
     @AppStorage("openWRTEnabled") private var openWRTEnabled: Bool = false
     @AppStorage("opnsenseEnabled") private var opnsenseEnabled: Bool = false
+    @AppStorage("showTotalsHeader") private var showTotalsHeader: Bool = true
+    @AppStorage("showAdapterList") private var showAdapterList: Bool = true
 
     private static let cardSpacing: CGFloat = 6   // VStack spacing between cards
     @State private var contentHeight: CGFloat = 0
@@ -132,93 +134,117 @@ struct MenuBarView: View {
 
     private var cardSpacing: CGFloat { Self.cardSpacing }
 
+    private var orderedSections: [PopoverSection] {
+        PopoverSection.resolvedOrder(
+            from: UserDefaults.standard.stringArray(forKey: "popoverSectionOrder")
+        )
+    }
+
+    private func isSectionVisible(_ section: PopoverSection) -> Bool {
+        switch section {
+        case .totals: return showTotalsHeader
+        case .adapters: return showAdapterList
+        case .connection: return connectionStatusMode != "none"
+        case .dns: return showDNSSwitcher
+        case .router:
+            return fritzBoxEnabled || unifiEnabled || openWRTEnabled || opnsenseEnabled
+        case .wifi: return showWifiSwitcher
+        case .topApps: return showTopApps
+        }
+    }
+
     @ViewBuilder
-    private func popoverContent(adapters: [AdapterStatus], customNames: [String: String], headerTotals: RateTotals) -> some View {
-        ScrollView {
+    private func sectionView(
+        for section: PopoverSection,
+        adapters: [AdapterStatus],
+        customNames: [String: String],
+        headerTotals: RateTotals
+    ) -> some View {
+        switch section {
+        case .totals:
+            TotalRatesHeader(totals: headerTotals, useBits: useBits)
+
+        case .adapters:
+            if adapters.isEmpty {
+                Text("No active adapters")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            } else {
+                VStack(spacing: cardSpacing) {
+                    ForEach(adapters) { adapter in
+                        AdapterCard(
+                            adapter: adapter,
+                            useBits: useBits,
+                            customName: customNames[adapter.id],
+                            isReconnecting: monitor.reconnectingAdapters.contains(adapter.id),
+                            onReconnect: adapter.type != .other ? { monitor.reconnect(adapter: adapter) } : nil
+                        )
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+
+        case .connection:
+            if connectionStatusMode == "flow" {
+                ConnectionStatusSection(
+                    externalIP: monitor.externalIP,
+                    internalIP: monitor.internalIP,
+                    gatewayIP: monitor.gatewayIP,
+                    adapters: monitor.adapters,
+                    countryCode: monitor.externalIPCountryCode
+                )
+            } else {
+                IPAddressSection(
+                    externalIP: monitor.externalIP,
+                    internalIP: monitor.internalIP,
+                    gatewayIP: monitor.gatewayIP
+                )
+            }
+
+        case .dns:
+            DNSSwitcherSection()
+
+        case .router:
             VStack(spacing: 0) {
-                TotalRatesHeader(totals: headerTotals, useBits: useBits)
-
-                Divider()
-
-                if adapters.isEmpty {
-                    Text("No active adapters")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                } else {
-                    VStack(spacing: cardSpacing) {
-                        ForEach(adapters) { adapter in
-                            AdapterCard(
-                                adapter: adapter,
-                                useBits: useBits,
-                                customName: customNames[adapter.id],
-                                isReconnecting: monitor.reconnectingAdapters.contains(adapter.id),
-                                onReconnect: adapter.type != .other ? { monitor.reconnect(adapter: adapter) } : nil
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                }
-
-                if connectionStatusMode != "none" {
-                    Divider()
-                    if connectionStatusMode == "flow" {
-                        ConnectionStatusSection(
-                            externalIP: monitor.externalIP,
-                            internalIP: monitor.internalIP,
-                            gatewayIP: monitor.gatewayIP,
-                            adapters: monitor.adapters,
-                            countryCode: monitor.externalIPCountryCode
-                        )
-                    } else {
-                        IPAddressSection(
-                            externalIP: monitor.externalIP,
-                            internalIP: monitor.internalIP,
-                            gatewayIP: monitor.gatewayIP
-                        )
-                    }
-                }
-
-                if fritzBoxEnabled {
-                    Divider()
-                    FritzBoxSection(useBits: useBits)
-                }
-
+                if fritzBoxEnabled { FritzBoxSection(useBits: useBits) }
                 if unifiEnabled {
-                    Divider()
+                    if fritzBoxEnabled { Divider() }
                     UniFiSection(useBits: useBits)
                 }
-
                 if openWRTEnabled {
-                    Divider()
+                    if fritzBoxEnabled || unifiEnabled { Divider() }
                     OpenWRTSection(useBits: useBits)
                 }
-
                 if opnsenseEnabled {
-                    Divider()
+                    if fritzBoxEnabled || unifiEnabled || openWRTEnabled { Divider() }
                     OPNsenseSection(useBits: useBits)
                 }
+            }
 
-                if showDNSSwitcher {
-                    Divider()
-                    DNSSwitcherSection()
-                }
+        case .wifi:
+            WifiSwitcherSection()
 
-                if showWifiSwitcher {
-                    Divider()
-                    WifiSwitcherSection()
-                }
+        case .topApps:
+            TopAppsSection(topApps: monitor.topApps, useBits: useBits)
+        }
+    }
 
-                if showTopApps {
-                    Divider()
-                    TopAppsSection(
-                        topApps: monitor.topApps,
-                        useBits: useBits
+    private func popoverContent(adapters: [AdapterStatus], customNames: [String: String], headerTotals: RateTotals) -> some View {
+        let visibleSections = orderedSections.filter(isSectionVisible)
+        return ScrollView {
+            VStack(spacing: 0) {
+                ForEach(Array(visibleSections.enumerated()), id: \.element) { index, section in
+                    if index > 0 { Divider() }
+                    sectionView(
+                        for: section,
+                        adapters: adapters,
+                        customNames: customNames,
+                        headerTotals: headerTotals
                     )
                 }
-
             }
             .background(
                 GeometryReader { geo in
