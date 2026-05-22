@@ -86,6 +86,16 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var kernelRxBroken: Set<String> = []
     private var nettopTotalRxRate: Double = 0
     private var nettopLastSampleAt: Date?
+    // Auto-pause the nettop fallback when the popover is closed and there's
+    // no real traffic. Avoids burning CPU 24/7 just to maintain a synthetic
+    // rxBytes counter when nothing is being received anyway. The grace
+    // counter is refreshed by any tick whose tx rate exceeds the threshold
+    // and decremented otherwise — so a burst keeps nettop alive for the
+    // full grace window even if the very next tick is quiet, while a
+    // sustained idle period still pauses the subprocess.
+    private var nettopActivityCounter: Int = 0
+    private static let nettopIdleThresholdBps: Double = 65_536       // 64 KB/s tx (filters background chatter)
+    private static let nettopActivityGraceTicks: Int = 20            // ~20 s grace after the last active tick
     // Monotonic synthetic rxBytes counter per broken adapter — keeps
     // StatisticsManager's byte diffs sensible even though the kernel counter
     // is frozen. Seeded with the kernel value on first observation and then
@@ -177,11 +187,10 @@ final class NetworkMonitor: NSObject, ObservableObject {
             refresh()
         } else {
             forceDetailRefresh = false
-            // Keep the nettop subprocess alive if the rx fallback needs it
-            // (kernel ifi_ibytes is broken on this Mac). Otherwise stop it.
-            if kernelRxBroken.isEmpty {
-                liveTopAppsCollector.stop()
-            }
+            // Re-evaluate via the central state machine so the fallback
+            // collector either stops (no bug latched, or idle-parked) or
+            // keeps running (bug latched and recent traffic seen).
+            updateTopAppsCollectionState()
             processSnapshot = [:]
             processSnapshotTime = nil
             topAppLastActiveTime.removeAll()
@@ -335,6 +344,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         diagnostics.record(adapters: adjustedAdapters, at: now)
 
+        updateNettopIdleStreak(totals: adjustedTotals)
+
         let updatedAdapters = adjustedAdapters
 
         // Adapter grace period tracking
@@ -464,6 +475,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
         }
 
         if newlyBroken {
+            // Seed the grace window so the very first tick after detection
+            // doesn't immediately park the collector.
+            nettopActivityCounter = Self.nettopActivityGraceTicks
             updateTopAppsCollectionState()
         }
 
@@ -539,6 +553,30 @@ final class NetworkMonitor: NSObject, ObservableObject {
         return (adjusted, RateTotals(rxRateBps: newTotalRx, txRateBps: newTotalTx))
     }
 
+    /// Drives the nettop-fallback grace counter from the most recent tx rate.
+    /// Crosses the pause/resume boundary by re-evaluating the collector state,
+    /// so an idle Mac that's been quiet for the full grace window pauses the
+    /// nettop subprocess and the first tick of real traffic restarts it.
+    private func updateNettopIdleStreak(totals: RateTotals) {
+        guard !kernelRxBroken.isEmpty else {
+            if nettopActivityCounter != 0 { nettopActivityCounter = 0 }
+            return
+        }
+        let active = totals.txRateBps >= Self.nettopIdleThresholdBps
+        if active {
+            let wasParked = nettopActivityCounter == 0
+            nettopActivityCounter = Self.nettopActivityGraceTicks
+            if wasParked {
+                updateTopAppsCollectionState()
+            }
+        } else if nettopActivityCounter > 0 {
+            nettopActivityCounter -= 1
+            if nettopActivityCounter == 0 {
+                updateTopAppsCollectionState()
+            }
+        }
+    }
+
     private static func primaryInterfaceName(store: SCDynamicStore?) -> String? {
         let s = store ?? SCDynamicStoreCreate(nil, "NetFluss" as CFString, nil, nil)
         guard let s else { return nil }
@@ -560,7 +598,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private func updateTopAppsCollectionState() {
         let topAppsEnabled = detailMonitoringEnabled &&
             UserDefaults.standard.bool(forKey: "showTopApps")
-        let needForFallback = !kernelRxBroken.isEmpty
+        // Only park the fallback when the popover is closed; while the user is
+        // looking we always want fresh data, regardless of recent traffic.
+        let fallbackIdleParked = !kernelRxBroken.isEmpty &&
+            !detailMonitoringEnabled &&
+            nettopActivityCounter == 0
+        let needForFallback = !kernelRxBroken.isEmpty && !fallbackIdleParked
         let shouldRunLiveCollector = topAppsEnabled || needForFallback
 
         if shouldRunLiveCollector {
