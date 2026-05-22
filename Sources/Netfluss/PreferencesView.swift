@@ -688,7 +688,7 @@ struct PreferencesView: View {
                         }
                     }
                     HStack {
-                        Button("Apps to Hide\(hiddenApps.isEmpty ? "" : " (\(hiddenApps.count))")…") {
+                        Button(hiddenAppsButtonTitle) {
                             showHiddenAppsSheet = true
                         }
                     }
@@ -1243,6 +1243,12 @@ struct PreferencesView: View {
 
     private var allDNSPresets: [DNSPreset] {
         DNSPreset.builtIn + customDNSPresets
+    }
+
+    private var hiddenAppsButtonTitle: String {
+        let base = L10n.text("Apps to Hide…")
+        guard !hiddenApps.isEmpty else { return base }
+        return L10n.format("Apps to Hide (%d)…", hiddenApps.count)
     }
 
     private var sortedDNSPresets: [DNSPreset] {
