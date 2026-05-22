@@ -6,7 +6,29 @@
 
 A native macOS menubar app showing real-time upload and download rates, router-wide bandwidth, historical traffic statistics, and built-in speed testing.
 
-Latest release: **NetFluss 2.2.2**
+Latest release: **NetFluss 2.3**
+
+## New in 2.3
+
+- **Wi-Fi manager in the popover** — see every nearby Wi-Fi network, switch with a click, pin SSIDs to the top of the list, and have temporarily out-of-range pinned networks stay visible until you unpin them. Passwords entered through NetFluss are written into macOS's Known Networks via the privileged helper, so the standard macOS Wi-Fi menu will reuse them later — even if NetFluss isn't running. Especially handy on travel or in environments with many SSIDs.
+
+<p align="center">
+  <img src="Screenshots/FileFluss%20wifi%20manager.webp" width="420" alt="NetFluss Wi-Fi manager">
+</p>
+
+- **Customisable popover sections** — Preferences → Appearance now lets you drag the popover segments (Download / Upload, Network adapters, Network flow, DNS, Router, Wi-Fi Networks, Top Apps) into any order you like, and tick or untick each section right from the reorder list. The visibility toggles stay in sync with the existing per-section toggles elsewhere in Preferences.
+
+<p align="center">
+  <img src="Screenshots/FileFluss%20Popover%20sections.webp" width="420" alt="NetFluss popover section customisation">
+</p>
+
+- **Wi-Fi settings pane** — new Preferences → Wi-Fi pane with a toggle to enable the section and an option to cap the list to the strongest N networks (pinned and currently-connected networks always show). Preferences → General now also exposes one-click buttons to grant Location access and install the privileged helper, so the user never has to hunt for the right pane in System Settings.
+
+<p align="center">
+  <img src="Screenshots/FileFluss%20Wifi%20settings.webp" width="420" alt="NetFluss Wi-Fi settings pane">
+</p>
+
+- **Fix for Macs whose download counter stayed at 0.00** — on macOS 26.5 the kernel's `ifi_ibytes` counter is frozen on the active physical Wi-Fi / Ethernet adapter for some configurations (often Macs with a managed profile or specific NetworkExtension-based security software). NetFluss now detects that and substitutes a per-process inbound rate from `nettop` so both the menu-bar number and the Bandwidth Statistics history record correctly. Auto-pauses the helper subprocess when no real traffic is happening, so unaffected Macs see no extra CPU usage.
 
 <p align="center">
   <img src="screenshot.png" width="420" alt="NetFluss screenshot">
@@ -42,6 +64,12 @@ Latest release: **NetFluss 2.2.2**
   - Add your own custom DNS presets with up to four DNS servers
   - Shows the currently active DNS with a green checkmark
   - Built on a bundled privileged helper for reliable DNS changes and Ethernet resets
+- **Wi-Fi Switcher** — list nearby Wi-Fi networks and join them from the popover (enable in Preferences):
+  - Tap a known network to join silently; new secured networks prompt for a password
+  - Successful joins are written into macOS's Known Networks via the privileged helper, so the system Wi-Fi menu reuses the password later — even if NetFluss isn't running
+  - **Pin SSIDs** to the top of the list; pinned networks stay visible (marked "Not available") even when out of range, and a tap re-triggers a targeted scan to try reconnecting
+  - **(i) details** popover per row showing band, channel, RSSI, security, BSSID
+  - Optional "only show the N strongest" cap so the list stays short in crowded environments
 - **Router Bandwidth** — shows total WAN download/upload rates from supported routers:
   - **Fritz!Box** via TR-064 API
   - **UniFi** via the UniFi OS / controller REST API
@@ -95,15 +123,17 @@ Latest release: **NetFluss 2.2.2**
 
 ### Preferences
 
-- Clear pane-based Preferences window with sections for General, Adapters, Statistics, Appearance, Top Apps, DNS, and Router settings
+- Clear pane-based Preferences window with sections for General, Adapters, Statistics, Appearance, Top Apps, DNS, Wi-Fi, and Router settings
 - **Language selector** — choose English, German, Simplified Chinese, Traditional Chinese, or follow the macOS system language
 - **General** — launch at login, refresh interval (0.5 – 5 seconds), display rates in bits or bytes, and optional automatic GitHub update checks once per day
 - **Adapters** — show/hide inactive adapters, show/hide other adapters (VPN, virtual interfaces), adapter grace period, per-adapter visibility toggles, custom names, and drag-to-reorder
 - **Statistics** — toggle historical adapter statistics and app statistics separately
-- **Appearance** — upload/download arrow colours, upload/download number colours, menu bar style, menu bar size, font style, pinned unit, decimal places, and IP address display options
+- **Appearance** — upload/download arrow colours, upload/download number colours, menu bar style, menu bar size, font style, pinned unit, decimal places, IP address display options, and **drag-to-reorder popover sections** with per-section visibility toggles
+- **General → System access** — one-click buttons to grant Location access (required to list Wi-Fi networks) and to install the privileged helper used for DNS changes and Wi-Fi credential persistence
 - **IP addresses** — choose List, Flow, or None for the popover IP section, plus IPv4/IPv6 external IP preference
 - **Top Apps** — show/hide the section, configure the grace period, and filter noisy background apps from the live Top Apps list
 - **DNS Switcher** — toggle the DNS picker in the popover; includes built-in presets plus editable custom presets with up to four server fields, visibility toggles, drag-to-reorder, and delete for each preset
+- **Wi-Fi Switcher** — toggle the Wi-Fi networks picker in the popover and optionally cap the list to the strongest N networks; pinned and currently-connected networks are always shown regardless of the cap
 - **Router** — configure Fritz!Box, UniFi, OpenWRT, and OPNsense bandwidth monitoring in one place, with credentials stored securely in macOS Keychain where needed
 - Options to calculate total bandwidth from only visible adapters and to exclude VPN/tunnel adapters from totals while still showing them in the adapter list
 
@@ -134,7 +164,7 @@ Latest release: **NetFluss 2.2.2**
 
 ## Install
 
-Download `NetFluss-2.2.2.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
+Download `NetFluss-2.3.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
 
 NetFluss is notarized and signed with a Developer ID certificate, so Gatekeeper should clear it automatically on first launch.
 
