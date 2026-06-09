@@ -74,6 +74,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var topAppLastActiveTime: [String: (lastSeen: Date, rxRate: Double, txRate: Double)] = [:]
     private var allAppLastSeen: [String: Date] = [:]
     private let liveTopAppsCollector = LiveNettopCollector()
+    // Low-overhead inbound-rate source for the rx fallback (issues #31/#45).
+    // Replaces the continuously-running nettop subprocess when available.
+    private let netStatClient = NetworkStatisticsClient()
+    // True while `netStatClient` is the active fallback inbound-rate source, so
+    // the nettop collector (running for Top Apps) doesn't also drive the rate.
+    private var statsClientActive = false
     let diagnostics = NetworkDiagnostics()
 
     // Per-process rx fallback for the macOS 26.5 ifi_ibytes-frozen bug.
@@ -149,13 +155,18 @@ final class NetworkMonitor: NSObject, ObservableObject {
         wifiClient.delegate = self
         liveTopAppsCollector.onSample = { [weak self] apps, sampleTime in
             guard let self else { return }
-            // Capture system-wide rx rate from nettop regardless of whether the
-            // popover/Top Apps gating is currently active — the fallback path
-            // for the macOS 26.5 ifi_ibytes bug needs this even when Top Apps
-            // is disabled.
-            self.nettopTotalRxRate = apps.reduce(0) { $0 + $1.rxRateBps }
-            self.nettopLastSampleAt = sampleTime
+            // Drive the fallback rate from nettop only when the kernel-stats
+            // client isn't the active source (it is preferred — far cheaper).
+            if !self.statsClientActive {
+                self.nettopTotalRxRate = apps.reduce(0) { $0 + $1.rxRateBps }
+                self.nettopLastSampleAt = sampleTime
+            }
             self.applyTopAppsSample(apps, sampledAt: sampleTime)
+        }
+        netStatClient.onSample = { [weak self] rate, _, at in
+            guard let self else { return }
+            self.nettopTotalRxRate = rate
+            self.nettopLastSampleAt = at
         }
         startListeningForWiFiEvents()
         let workspaceCenter = NSWorkspace.shared.notificationCenter
@@ -192,6 +203,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
     /// relaunch did previously.
     @objc private func handleDidWake() {
         liveTopAppsCollector.stop()
+        netStatClient.stop()
+        statsClientActive = false
         // Re-baseline rate computation so the first post-wake tick doesn't
         // diff byte counters across the entire sleep interval.
         lastSample = [:]
@@ -652,19 +665,35 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private func updateTopAppsCollectionState() {
         let topAppsEnabled = detailMonitoringEnabled &&
             UserDefaults.standard.bool(forKey: "showTopApps")
-        // Only park the fallback when the popover is closed; while the user is
-        // looking we always want fresh data, regardless of recent traffic.
-        let fallbackIdleParked = !kernelRxBroken.isEmpty &&
+        let fallbackLatched = !kernelRxBroken.isEmpty
+
+        // Preferred fallback inbound-rate source: the kernel-statistics client.
+        // It costs ~0% CPU, so when it's available we run it continuously while
+        // the fallback is latched and never run nettop just to feed the rate
+        // (issue #45 — nettop pegged the CPU during browsing).
+        let statsAvailable = fallbackLatched && !netStatClient.subscriptionFailed
+        if statsAvailable {
+            netStatClient.start()
+            statsClientActive = true
+        } else {
+            netStatClient.stop()
+            statsClientActive = false
+        }
+
+        // nettop collector: required for Top Apps (per-process attribution), and
+        // as the fallback inbound source only when the stats client is
+        // unavailable (e.g. its private kernel protocol changed on a future
+        // macOS). The idle-park still applies to that nettop fallback path.
+        let fallbackIdleParked = fallbackLatched &&
             !detailMonitoringEnabled &&
             nettopActivityCounter == 0
-        let needForFallback = !kernelRxBroken.isEmpty && !fallbackIdleParked
-        let shouldRunLiveCollector = topAppsEnabled || needForFallback
+        let nettopForFallback = fallbackLatched && !statsAvailable && !fallbackIdleParked
+        let shouldRunLiveCollector = topAppsEnabled || nettopForFallback
 
         if shouldRunLiveCollector {
             // Sample at 1 s while the popover is open (fresh Top Apps / rate),
             // but back off to a slower cadence when the collector is only
-            // feeding the background rx-fallback — this roughly halves nettop's
-            // steady-state CPU cost (issue #45).
+            // feeding the background rx-fallback.
             let sampleSeconds = detailMonitoringEnabled ? 1 : Self.fallbackSampleSeconds
             liveTopAppsCollector.start(sampleSeconds: sampleSeconds)
         } else {
