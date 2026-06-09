@@ -28,14 +28,28 @@ final class LiveNettopCollector {
     private var sampleCount: UInt64 = 0
     private var lastSampleTime: Date?
     private var running = false
+    private var sampleSeconds: Int = 1
+    private var startedAt: Date?
+    // Bumped on every (re)spawn so callbacks belonging to a terminated process
+    // (e.g. after a watchdog restart) can detect that they are stale and skip
+    // mutating the live process's state.
+    private var generation: UInt64 = 0
+    // Watchdog: a PTY-wrapped `nettop` left running across sleep/wake can drop
+    // into a high-CPU spin and stop emitting frames (issue #45). If samples
+    // stall for noticeably longer than the sample interval, kill and respawn.
+    private var watchdog: DispatchSourceTimer?
 
     var isRunning: Bool {
         queue.sync { running }
     }
 
-    func start() {
+    /// Starts (or, if the sample interval changed, restarts) the streaming
+    /// collector. `sampleSeconds` maps to `nettop -s`; use a small value while
+    /// the popover is open and a larger one for the background rx-fallback so
+    /// nettop's steady-state CPU cost is roughly halved.
+    func start(sampleSeconds: Int) {
         queue.async { [weak self] in
-            self?.startLocked()
+            self?.startLocked(sampleSeconds: sampleSeconds)
         }
     }
 
@@ -45,8 +59,15 @@ final class LiveNettopCollector {
         }
     }
 
-    private func startLocked() {
-        guard process == nil else { return }
+    private func startLocked(sampleSeconds: Int) {
+        if process != nil {
+            // Already running at the requested cadence — nothing to do.
+            guard self.sampleSeconds != sampleSeconds else { return }
+            // Cadence changed: tear down the current process and respawn below.
+            stopLocked()
+        }
+
+        self.sampleSeconds = max(1, sampleSeconds)
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
@@ -60,7 +81,7 @@ final class LiveNettopCollector {
             "-L",
             "0",
             "-s",
-            "1",
+            String(self.sampleSeconds),
             "-J",
             "bytes_in,bytes_out"
         ]
@@ -70,16 +91,21 @@ final class LiveNettopCollector {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
+        generation &+= 1
+        let gen = generation
+
         stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             self?.queue.async {
-                self?.consume(data)
+                guard let self, self.generation == gen else { return }
+                self.consume(data)
             }
         }
 
         process.terminationHandler = { [weak self] _ in
             self?.queue.async {
-                self?.cleanupLocked()
+                guard let self, self.generation == gen else { return }
+                self.cleanupLocked()
             }
         }
 
@@ -91,7 +117,9 @@ final class LiveNettopCollector {
             self.currentRows.removeAll(keepingCapacity: false)
             self.sampleCount = 0
             self.lastSampleTime = nil
+            self.startedAt = Date()
             self.running = true
+            startWatchdogLocked()
         } catch {
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
             self.process = nil
@@ -101,6 +129,7 @@ final class LiveNettopCollector {
     }
 
     private func stopLocked() {
+        stopWatchdogLocked()
         outputHandle?.readabilityHandler = nil
         outputHandle = nil
 
@@ -114,11 +143,47 @@ final class LiveNettopCollector {
         cleanupLocked()
     }
 
+    // MARK: - Watchdog
+
+    private func startWatchdogLocked() {
+        stopWatchdogLocked()
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 5, repeating: 5, leeway: .seconds(1))
+        timer.setEventHandler { [weak self] in
+            self?.checkForStallLocked()
+        }
+        timer.resume()
+        watchdog = timer
+    }
+
+    private func stopWatchdogLocked() {
+        watchdog?.cancel()
+        watchdog = nil
+    }
+
+    private func checkForStallLocked() {
+        guard running, process != nil else { return }
+        // Allow generous slack over the sample interval plus a startup grace
+        // for nettop to produce its first delta-mode frames.
+        let stallThreshold = TimeInterval(sampleSeconds) * 4 + 5
+        let reference = lastSampleTime ?? startedAt
+        guard let reference else { return }
+        guard Date().timeIntervalSince(reference) > stallThreshold else { return }
+
+        // nettop has stalled (likely a post-wake spin) — respawn a fresh one
+        // at the current cadence.
+        let cadence = sampleSeconds
+        stopLocked()
+        startLocked(sampleSeconds: cadence)
+    }
+
     private func cleanupLocked() {
+        stopWatchdogLocked()
         buffer.removeAll(keepingCapacity: false)
         currentRows.removeAll(keepingCapacity: false)
         sampleCount = 0
         lastSampleTime = nil
+        startedAt = nil
         running = false
         process = nil
         outputHandle = nil

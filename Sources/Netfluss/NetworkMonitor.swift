@@ -104,6 +104,10 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var lastFallbackTickAt: Date?
     private static let rxStuckThreshold: TimeInterval = 20
     private static let nettopFreshness: TimeInterval = 3
+    // Slower nettop cadence (`-s`) when the live collector runs only for the
+    // background rx-fallback (popover closed). Halving the sample rate roughly
+    // halves nettop's CPU cost in the steady state (issue #45).
+    private static let fallbackSampleSeconds: Int = 3
     private var refreshInFlight = false
     private var detailMonitoringEnabled = false
     private var forceDetailRefresh = false
@@ -154,10 +158,60 @@ final class NetworkMonitor: NSObject, ObservableObject {
             self.applyTopAppsSample(apps, sampledAt: sampleTime)
         }
         startListeningForWiFiEvents()
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        workspaceCenter.addObserver(
+            self,
+            selector: #selector(handleWillSleep),
+            name: NSWorkspace.willSleepNotification,
+            object: nil
+        )
+        workspaceCenter.addObserver(
+            self,
+            selector: #selector(handleDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
     }
 
     deinit {
         timer?.cancel()
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
+
+    // MARK: - Sleep / wake
+
+    /// Tear the streaming nettop collector down before the machine sleeps so it
+    /// can't survive into a post-wake high-CPU spin (issue #45).
+    @objc private func handleWillSleep() {
+        liveTopAppsCollector.stop()
+    }
+
+    /// Recycle the collector and re-baseline counters on wake. A PTY-wrapped
+    /// `nettop` left alive across sleep is the suspected cause of the runaway
+    /// CPU load in issue #45; restarting it on wake does what a manual app
+    /// relaunch did previously.
+    @objc private func handleDidWake() {
+        liveTopAppsCollector.stop()
+        // Re-baseline rate computation so the first post-wake tick doesn't
+        // diff byte counters across the entire sleep interval.
+        lastSample = [:]
+        lastUpdate = nil
+        // Reset the live nettop rx state so a stale pre-sleep sample isn't
+        // treated as fresh while the new collector warms up.
+        nettopTotalRxRate = 0
+        nettopLastSampleAt = nil
+        // Restart the rx-stuck detection clocks: kernel counters can jump on
+        // wake, and we don't want that to register as movement or staleness.
+        rxLastBytes = [:]
+        rxLastChange = [:]
+        txLastBytes = [:]
+        txLastChange = [:]
+        // Keep a latched fallback alive through its grace window so it isn't
+        // immediately idle-parked before any post-wake traffic is observed.
+        if !kernelRxBroken.isEmpty {
+            nettopActivityCounter = Self.nettopActivityGraceTicks
+        }
+        updateTopAppsCollectionState()
     }
 
     func start(interval: Double) {
@@ -607,7 +661,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let shouldRunLiveCollector = topAppsEnabled || needForFallback
 
         if shouldRunLiveCollector {
-            liveTopAppsCollector.start()
+            // Sample at 1 s while the popover is open (fresh Top Apps / rate),
+            // but back off to a slower cadence when the collector is only
+            // feeding the background rx-fallback — this roughly halves nettop's
+            // steady-state CPU cost (issue #45).
+            let sampleSeconds = detailMonitoringEnabled ? 1 : Self.fallbackSampleSeconds
+            liveTopAppsCollector.start(sampleSeconds: sampleSeconds)
         } else {
             liveTopAppsCollector.stop()
             if !UserDefaults.standard.bool(forKey: "showTopApps"), !topApps.isEmpty {
