@@ -32,7 +32,9 @@ cp Packaging/LaunchDaemons/com.local.netfluss.privilegedhelper.plist \
 cp Packaging/Resources/AppIcon.icns NetFluss.app/Contents/Resources/AppIcon.icns
 cp Packaging/Resources/AppIconDark.icns NetFluss.app/Contents/Resources/AppIconDark.icns
 cp -R Packaging/Resources/SpeedTest NetFluss.app/Contents/Resources/SpeedTest
+cp -R Packaging/Resources/*.lproj NetFluss.app/Contents/Resources/   # REQUIRED — see note below
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.x.x" NetFluss.app/Contents/Info.plist
+xattr -cr NetFluss.app   # strip resource-fork/Finder xattrs or codesign fails with "resource fork ... not allowed"
 codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
   --options=runtime --timestamp NetFluss.app/Contents/Library/HelperTools/NetflussPrivilegedHelper
 codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
@@ -45,6 +47,8 @@ xcrun stapler staple NetFluss.app
 Signing identity: `Developer ID Application: Rana GmbH (D6P24X5377)`
 Team ID: `D6P24X5377`
 Bundle ID: `com.local.netfluss`
+
+**Do not skip the `*.lproj` copy.** `AppLanguage.bundle(for:)` in `Localization.swift` looks up `Localizable.strings` in `Bundle.main`; if the `.lproj` folders are missing from `Contents/Resources/` it falls back to `Bundle.module`, which traps at launch (`resource_bundle_accessor.swift: Fatal error: unable to find bundle named NetFluss_Netfluss`) because the SPM resource bundle is not shipped inside the `.app`. The app crashes on startup with no visible UI. The CI workflow (`release.yml`) already does this copy; the manual steps must match.
 
 ## Architecture
 
