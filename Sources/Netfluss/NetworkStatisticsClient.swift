@@ -42,9 +42,11 @@ import Darwin
 /// (a counter disappears when its flow closes), so we accumulate positive
 /// per-`srcref` deltas into a monotonic inbound total and derive the rate.
 final class NetworkStatisticsClient {
-    /// Called on the main queue once per poll with the smoothed inbound rate
-    /// (bytes/sec) and the monotonic cumulative inbound byte total.
-    var onSample: ((_ rxRateBps: Double, _ cumulativeRxBytes: UInt64, _ at: Date) -> Void)?
+    /// Called on the main queue once per poll with the total inbound rate
+    /// (bytes/sec, summed across all flows) and a per-interface breakdown keyed
+    /// by BSD name (e.g. "en0"). Flows whose interface hasn't been resolved yet
+    /// are absent from the breakdown but still included in the total.
+    var onSample: ((_ totalRxRateBps: Double, _ ratesByInterface: [String: Double], _ at: Date) -> Void)?
 
     /// `true` if the kernel rejected our subscription (e.g. the private message
     /// layout changed on a future macOS). The caller should fall back to the
@@ -61,10 +63,15 @@ final class NetworkStatisticsClient {
     // Per-srcref last-seen rxbytes, and the monotonic accumulator.
     private var lastRxBySrc: [UInt64: UInt64] = [:]
     private var currentRxBySrc: [UInt64: UInt64] = [:]
-    private var cumulativeRx: UInt64 = 0
     private var baselined = false
     private var lastPollAt: Date?
     private var readBuffer = [UInt8](repeating: 0, count: 1 << 18)
+
+    // Per-flow interface attribution: srcref -> ifindex (resolved lazily via
+    // GET_SRC_DESC), plus an ifindex -> BSD-name cache.
+    private var srcToIfIndex: [UInt64: UInt32] = [:]
+    private var descRequested: Set<UInt64> = []
+    private var ifNameCache: [UInt32: String] = [:]
 
     // MARK: ntstat protocol constants
     private static let controlName = "com.apple.network.statistics"
@@ -72,13 +79,18 @@ final class NetworkStatisticsClient {
     private static let CTLIOCGINFO: UInt = 0xC0000000 | ((100 & 0x1fff) << 16) | (UInt(UInt8(ascii: "N")) << 8) | 3
     private static let MSG_ADD_ALL_SRCS: UInt32 = 1002
     private static let MSG_QUERY_SRC: UInt32 = 1004
+    private static let MSG_GET_SRC_DESC: UInt32 = 1005
     private static let MSG_SRC_REMOVED: UInt32 = 10002
+    private static let MSG_SRC_DESC: UInt32 = 10003
     private static let MSG_SRC_COUNTS: UInt32 = 10004
     private static let MSG_SRC_UPDATE: UInt32 = 10005
     private static let MSG_ERROR: UInt32 = 1
     private static let providerTCP: UInt32 = 2
     private static let providerUDP: UInt32 = 3
     private static let srcRefAll: UInt64 = .max
+    // Offset of the u32 ifindex within a TCP/UDP flow SRC_DESC message
+    // (validated on macOS 26.5; guarded + sanity-checked at parse time).
+    private static let descIfIndexOffset = 112
     private static let pollInterval: TimeInterval = 1.0
 
     var isRunning: Bool { queue.sync { running } }
@@ -130,7 +142,8 @@ final class NetworkStatisticsClient {
         fd = sock
         lastRxBySrc.removeAll(keepingCapacity: false)
         currentRxBySrc.removeAll(keepingCapacity: false)
-        cumulativeRx = 0
+        srcToIfIndex.removeAll(keepingCapacity: false)
+        descRequested.removeAll(keepingCapacity: false)
         baselined = false
         lastPollAt = nil
 
@@ -159,7 +172,8 @@ final class NetworkStatisticsClient {
         if fd >= 0 { close(fd); fd = -1 }
         lastRxBySrc.removeAll(keepingCapacity: false)
         currentRxBySrc.removeAll(keepingCapacity: false)
-        cumulativeRx = 0
+        srcToIfIndex.removeAll(keepingCapacity: false)
+        descRequested.removeAll(keepingCapacity: false)
         baselined = false
         lastPollAt = nil
         running = false
@@ -181,6 +195,27 @@ final class NetworkStatisticsClient {
         writeU16(&msg, 24, at: 12)
         writeU64(&msg, Self.srcRefAll, at: 16)         // srcref = ALL
         send(msg)
+    }
+
+    /// Ask the kernel for a single flow's descriptor so we can learn its
+    /// interface. Requested once per srcref; the reply is an SRC_DESC message.
+    private func requestDescriptor(_ srcref: UInt64) {
+        var msg = [UInt8](repeating: 0, count: 24)
+        writeU32(&msg, Self.MSG_GET_SRC_DESC, at: 8)
+        writeU16(&msg, 24, at: 12)
+        writeU64(&msg, srcref, at: 16)
+        send(msg)
+    }
+
+    /// Resolve and cache an ifindex to its BSD interface name; nil if it does
+    /// not map to a real interface (guards against a wrong descriptor offset
+    /// on a future macOS — bad data simply won't be attributed).
+    private func interfaceName(for ifindex: UInt32) -> String? {
+        if let cached = ifNameCache[ifindex] { return cached.isEmpty ? nil : cached }
+        var buf = [CChar](repeating: 0, count: Int(IFNAMSIZ))
+        let name = if_indextoname(ifindex, &buf).map { String(cString: $0) }
+        ifNameCache[ifindex] = name ?? ""
+        return name
     }
 
     private func send(_ bytes: [UInt8]) {
@@ -218,13 +253,25 @@ final class NetworkStatisticsClient {
                 // srcref @ +16, nstat_counts @ +32 (rxpackets @+32, rxbytes @+40)
                 if len >= 48 {
                     let srcref = readU64(readBuffer, off + 16)
-                    let rxbytes = readU64(readBuffer, off + 40)
-                    currentRxBySrc[srcref] = rxbytes
+                    currentRxBySrc[srcref] = readU64(readBuffer, off + 40)
+                    // Learn this flow's interface once.
+                    if srcToIfIndex[srcref] == nil, !descRequested.contains(srcref) {
+                        descRequested.insert(srcref)
+                        requestDescriptor(srcref)
+                    }
+                }
+            case Self.MSG_SRC_DESC:
+                // srcref @ +16, flow descriptor with ifindex @ +112.
+                if len >= Self.descIfIndexOffset + 4 {
+                    let srcref = readU64(readBuffer, off + 16)
+                    srcToIfIndex[srcref] = readU32(readBuffer, off + Self.descIfIndexOffset)
                 }
             case Self.MSG_SRC_REMOVED:
                 let srcref = readU64(readBuffer, off + 16)
                 currentRxBySrc.removeValue(forKey: srcref)
                 lastRxBySrc.removeValue(forKey: srcref)
+                srcToIfIndex.removeValue(forKey: srcref)
+                descRequested.remove(srcref)
             case Self.MSG_ERROR:
                 _subscriptionFailed = true
             default:
@@ -237,24 +284,34 @@ final class NetworkStatisticsClient {
     // MARK: - Poll / accumulate
 
     private func pollLocked() {
-        // Fold the counts received since the previous poll into a monotonic total.
+        // Fold the counts received since the previous poll into a total and a
+        // per-interface breakdown.
         let now = Date()
         var intervalRx: UInt64 = 0
+        var intervalRxByIf: [UInt32: UInt64] = [:]
         for (ref, bytes) in currentRxBySrc {
             let prev = lastRxBySrc[ref] ?? 0
             // New or grown flow → count the gain. A smaller value means the
             // srcref was reused for a new flow, so count it from zero.
-            intervalRx &+= bytes >= prev ? (bytes - prev) : bytes
+            let delta = bytes >= prev ? (bytes - prev) : bytes
+            guard delta > 0 else { continue }
+            intervalRx &+= delta
+            if let ifindex = srcToIfIndex[ref] {
+                intervalRxByIf[ifindex, default: 0] &+= delta
+            }
         }
         lastRxBySrc = currentRxBySrc
 
         if baselined {
-            cumulativeRx &+= intervalRx
             let elapsed = max(now.timeIntervalSince(lastPollAt ?? now), 0.001)
-            let rate = Double(intervalRx) / elapsed
-            let total = cumulativeRx
+            let totalRate = Double(intervalRx) / elapsed
+            var ratesByName: [String: Double] = [:]
+            for (ifindex, bytes) in intervalRxByIf {
+                guard let name = interfaceName(for: ifindex) else { continue }
+                ratesByName[name] = Double(bytes) / elapsed
+            }
             if let onSample {
-                DispatchQueue.main.async { onSample(rate, total, now) }
+                DispatchQueue.main.async { onSample(totalRate, ratesByName, now) }
             }
         } else {
             // First poll only establishes per-flow baselines (existing flows

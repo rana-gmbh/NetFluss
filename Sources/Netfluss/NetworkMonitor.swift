@@ -88,9 +88,15 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var rxLastBytes: [String: UInt64] = [:]
     private var rxLastChange: [String: Date] = [:]
     private var txLastBytes: [String: UInt64] = [:]
-    private var txLastChange: [String: Date] = [:]
+    // tx byte count captured when rx last moved, to measure tx volume accrued
+    // while rx is frozen (gates broken-rx detection — see applyRxFallbackIfNeeded).
+    private var txBytesAtRxStuck: [String: UInt64] = [:]
     private var kernelRxBroken: Set<String> = []
     private var nettopTotalRxRate: Double = 0
+    // Per-interface (BSD name) inbound rate from the kernel-stats client, used
+    // to attribute the fallback rx to the correct adapter (issue #45). Empty
+    // when the nettop fallback is the source (total only).
+    private var fallbackRxByInterface: [String: Double] = [:]
     private var nettopLastSampleAt: Date?
     // Auto-pause the nettop fallback when the popover is closed and there's
     // no real traffic. Avoids burning CPU 24/7 just to maintain a synthetic
@@ -109,6 +115,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var syntheticRxBytes: [String: UInt64] = [:]
     private var lastFallbackTickAt: Date?
     private static let rxStuckThreshold: TimeInterval = 20
+    // Minimum tx bytes that must accrue while rx is frozen before flagging an
+    // adapter's rx counter as broken (filters idle adapters — issue #45).
+    private static let minActiveTxBytes: UInt64 = 128 * 1024
     private static let nettopFreshness: TimeInterval = 3
     // Slower nettop cadence (`-s`) when the live collector runs only for the
     // background rx-fallback (popover closed). Halving the sample rate roughly
@@ -157,15 +166,19 @@ final class NetworkMonitor: NSObject, ObservableObject {
             guard let self else { return }
             // Drive the fallback rate from nettop only when the kernel-stats
             // client isn't the active source (it is preferred — far cheaper).
+            // nettop yields only a system-wide total, so clear the per-interface
+            // breakdown (the fallback then uses the subtract rule).
             if !self.statsClientActive {
                 self.nettopTotalRxRate = apps.reduce(0) { $0 + $1.rxRateBps }
+                self.fallbackRxByInterface = [:]
                 self.nettopLastSampleAt = sampleTime
             }
             self.applyTopAppsSample(apps, sampledAt: sampleTime)
         }
-        netStatClient.onSample = { [weak self] rate, _, at in
+        netStatClient.onSample = { [weak self] total, byInterface, at in
             guard let self else { return }
-            self.nettopTotalRxRate = rate
+            self.nettopTotalRxRate = total
+            self.fallbackRxByInterface = byInterface
             self.nettopLastSampleAt = at
         }
         startListeningForWiFiEvents()
@@ -218,7 +231,6 @@ final class NetworkMonitor: NSObject, ObservableObject {
         rxLastBytes = [:]
         rxLastChange = [:]
         txLastBytes = [:]
-        txLastChange = [:]
         // Keep a latched fallback alive through its grace window so it isn't
         // immediately idle-parked before any post-wake traffic is observed.
         if !kernelRxBroken.isEmpty {
@@ -511,14 +523,16 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
             // Track byte-counter movement timestamps. Treat first observation as
             // movement so the threshold clock starts from "now" rather than zero.
+            // Capture the tx byte count at the moment rx last moved so we can
+            // measure how much tx has accrued while rx stayed frozen.
             let prevRx = rxLastBytes[adapter.id]
             if prevRx == nil || adapter.rxBytes != prevRx {
                 rxLastChange[adapter.id] = now
                 rxLastBytes[adapter.id] = adapter.rxBytes
+                txBytesAtRxStuck[adapter.id] = adapter.txBytes
             }
             let prevTx = txLastBytes[adapter.id]
             if prevTx == nil || adapter.txBytes != prevTx {
-                txLastChange[adapter.id] = now
                 txLastBytes[adapter.id] = adapter.txBytes
             }
 
@@ -530,12 +544,17 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 continue
             }
 
-            // Only flag if rx hasn't moved for ≥ rxStuckThreshold seconds AND tx
-            // *has* moved within that window (proving the link is actively used).
+            // Flag only if rx hasn't moved for ≥ rxStuckThreshold seconds AND a
+            // *meaningful* amount of tx has accrued in that window. Requiring
+            // real tx volume (not just any movement) avoids flagging a
+            // connected-but-idle secondary adapter whose only tx is background
+            // chatter (ARP/mDNS/keepalives) — that previously mis-attributed
+            // another adapter's download to it (issue #45). A genuinely active
+            // link with a frozen rx counter still emits plenty of tx (ACKs).
+            let txSinceStuck = adapter.txBytes &- (txBytesAtRxStuck[adapter.id] ?? adapter.txBytes)
             if let rxChanged = rxLastChange[adapter.id],
-               let txChanged = txLastChange[adapter.id],
                now.timeIntervalSince(rxChanged) >= Self.rxStuckThreshold,
-               now.timeIntervalSince(txChanged) < Self.rxStuckThreshold {
+               txSinceStuck >= Self.minActiveTxBytes {
                 kernelRxBroken.insert(adapter.id)
                 newlyBroken = true
             }
@@ -570,51 +589,63 @@ final class NetworkMonitor: NSObject, ObservableObject {
             return adapters.first { kernelRxBroken.contains($0.id) }?.id
         }()
 
-        // Substitute only when nettop is fresh (first sample is a baseline, so
-        // there's a ~1–2 s warm-up after the collector starts).
-        let nettopFresh: Bool = {
+        // Substitute only when the inbound source is fresh (the stats client's
+        // first poll is a baseline, so there's a ~1 s warm-up).
+        let sourceFresh: Bool = {
             guard let at = nettopLastSampleAt else { return false }
             return now.timeIntervalSince(at) <= Self.nettopFreshness
         }()
-        let substitutedRx = nettopFresh ? nettopTotalRxRate : 0
+        let totalInbound = sourceFresh ? nettopTotalRxRate : 0
+        let elapsed = now.timeIntervalSince(lastFallbackTickAt ?? now)
+        lastFallbackTickAt = now
 
-        // Advance the synthetic byte counter on the substitution target.
-        if let targetID, nettopFresh {
-            let elapsed = now.timeIntervalSince(lastFallbackTickAt ?? now)
-            if elapsed > 0 {
-                let delta = UInt64((nettopTotalRxRate * elapsed).rounded())
-                syntheticRxBytes[targetID, default: 0] &+= delta
+        // Assign each broken adapter a substituted rx rate such that the broken
+        // rates plus the (real) non-broken rates sum to the system-wide inbound
+        // total — so the same bytes are never counted twice (issue #45). When
+        // the kernel-stats per-interface breakdown is available, each broken
+        // adapter gets its own attributed share and the primary target also
+        // absorbs any not-yet-attributed remainder. With only a system total
+        // (nettop fallback), the breakdown is empty so the target gets
+        // `total − (real rx of everything else)`.
+        var assignedRx: [String: Double] = [:]
+        if sourceFresh {
+            var accounted: Double = 0
+            for adapter in adapters {
+                if !kernelRxBroken.contains(adapter.id) {
+                    accounted += adapter.rxRateBps
+                } else if adapter.id != targetID {
+                    let share = max(0, fallbackRxByInterface[adapter.id] ?? 0)
+                    assignedRx[adapter.id] = share
+                    accounted += share
+                }
+            }
+            if let targetID {
+                assignedRx[targetID] = max(0, totalInbound - accounted)
             }
         }
-        lastFallbackTickAt = now
 
         var adjusted = adapters
         var newTotalRx: Double = 0
         var newTotalTx: Double = 0
         for index in adjusted.indices {
             let adapter = adjusted[index]
-            let isBroken = kernelRxBroken.contains(adapter.id)
-            let isTarget = (adapter.id == targetID) && nettopFresh
+            newTotalTx += adapter.txRateBps
 
-            if isTarget {
-                // Default-route broken adapter: serve nettop-derived rate and
-                // the freshly-advanced synthetic byte counter.
-                let synthetic = syntheticRxBytes[adapter.id] ?? adapter.rxBytes
-                adjusted[index] = adapter.with(rxRateBps: substitutedRx, rxBytes: synthetic)
-                newTotalRx += substitutedRx
-                newTotalTx += adapter.txRateBps
-            } else if isBroken {
-                // Other broken adapter (or target while nettop is warming up):
-                // pin rxBytes to the synthetic counter so it never goes
-                // backward relative to a prior published value; rate is zero
-                // because we can't attribute nettop's sum across interfaces.
-                let synthetic = syntheticRxBytes[adapter.id] ?? adapter.rxBytes
-                adjusted[index] = adapter.with(rxRateBps: 0, rxBytes: synthetic)
-                newTotalTx += adapter.txRateBps
-            } else {
+            guard kernelRxBroken.contains(adapter.id) else {
                 newTotalRx += adapter.rxRateBps
-                newTotalTx += adapter.txRateBps
+                continue
             }
+
+            // Broken adapter: serve the attributed rate and advance a synthetic
+            // byte counter by that adapter's own rate so its rxBytes never goes
+            // backward relative to the frozen kernel value.
+            let rate = assignedRx[adapter.id] ?? 0
+            if elapsed > 0, rate > 0 {
+                syntheticRxBytes[adapter.id, default: 0] &+= UInt64((rate * elapsed).rounded())
+            }
+            let synthetic = syntheticRxBytes[adapter.id] ?? adapter.rxBytes
+            adjusted[index] = adapter.with(rxRateBps: rate, rxBytes: synthetic)
+            newTotalRx += rate
         }
         _ = totals
         return (adjusted, RateTotals(rxRateBps: newTotalRx, txRateBps: newTotalTx))
