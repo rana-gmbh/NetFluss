@@ -142,6 +142,12 @@ actor PrivilegedHelperManager {
         }
     }
 
+    func readVPNLog(path: String) async -> CommandResult? {
+        await performIfAvailable { helper, reply in
+            helper.readVPNLog(path: path, withReply: reply)
+        }
+    }
+
     func connectNativeVPN(serviceName: String) async -> CommandResult? {
         await performIfAvailable { helper, reply in
             helper.connectNativeVPN(serviceName: serviceName, withReply: reply)

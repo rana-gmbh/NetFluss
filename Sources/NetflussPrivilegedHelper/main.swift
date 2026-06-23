@@ -171,6 +171,24 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         }
     }
 
+    func readVPNLog(path: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Only ever read the tunnel log paths the helper itself creates.
+            let name = (path as NSString).lastPathComponent
+            guard (path as NSString).deletingLastPathComponent == "/tmp",
+                  name.hasPrefix("netfluss-vpn-"),
+                  name.hasSuffix(".log") else {
+                reply(false, "Refused to read path.")
+                return
+            }
+            guard let contents = try? String(contentsOfFile: path, encoding: .utf8) else {
+                reply(false, "No log available.")
+                return
+            }
+            reply(true, contents)
+        }
+    }
+
     /// Resolve a bundled VPN binary relative to the helper's own location
     /// (<App>/Contents/Library/HelperTools/ → <App>/Contents/Library/VPN/<bin>).
     private static func bundledVPNBinaryPath(kind: String) -> String? {

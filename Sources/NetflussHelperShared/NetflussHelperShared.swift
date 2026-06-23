@@ -5,7 +5,7 @@ public enum NetflussHelperConstants {
     /// daemon when the bundled version differs from the last registered one, so
     /// launchd picks up the new helper binary instead of keeping the old daemon
     /// (SMAppService does not refresh an already-enabled daemon on its own).
-    public static let helperVersion = 2
+    public static let helperVersion = 3
 
     public static let appBundleIdentifier = "com.local.netfluss"
     public static let teamIdentifier = "D6P24X5377"
@@ -57,4 +57,9 @@ public enum NetflussHelperConstants {
 
     /// Stop a macOS-native VPN service by name via `scutil`.
     func disconnectNativeVPN(serviceName: String, withReply reply: @escaping (Bool, String?) -> Void)
+
+    /// Read an openvpn log file (written by the root-launched openvpn, so the
+    /// unprivileged app can't read it directly). The helper restricts this to
+    /// the tunnel log path it creates.
+    func readVPNLog(path: String, withReply reply: @escaping (Bool, String?) -> Void)
 }
