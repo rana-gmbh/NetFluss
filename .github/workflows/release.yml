@@ -6,8 +6,36 @@ on:
       - 'v*'
 
 jobs:
+  # Build the x86_64 openvpn + dylib closure on an Intel runner (deployment
+  # target = the runner's macOS), so the Intel slice runs on real Intel Macs.
+  # Apple Silicon can't produce a usable Intel openvpn (no Homebrew bottle; a
+  # from-source build there targets the newest macOS).
+  intel-openvpn:
+    runs-on: macos-13
+    steps:
+      - name: Build Intel openvpn
+        run: |
+          brew install openvpn
+          P="$(brew --prefix)"
+          MIR="$RUNNER_TEMP/intel-brew"
+          mkdir -p "$MIR/opt/openvpn/sbin" "$MIR/opt/lzo/lib" "$MIR/opt/lz4/lib" \
+                   "$MIR/opt/pkcs11-helper/lib" "$MIR/opt/openssl@3/lib"
+          cp -L "$P/opt/openvpn/sbin/openvpn" "$MIR/opt/openvpn/sbin/openvpn"
+          cp -L "$P/opt/lzo/lib/liblzo2.2.dylib" "$MIR/opt/lzo/lib/"
+          cp -L "$P/opt/lz4/lib/liblz4.1.dylib" "$MIR/opt/lz4/lib/"
+          cp -L "$P/opt/pkcs11-helper/lib/libpkcs11-helper.1.dylib" "$MIR/opt/pkcs11-helper/lib/"
+          cp -L "$P/opt/openssl@3/lib/libssl.3.dylib" "$MIR/opt/openssl@3/lib/"
+          cp -L "$P/opt/openssl@3/lib/libcrypto.3.dylib" "$MIR/opt/openssl@3/lib/"
+          lipo -archs "$MIR/opt/openvpn/sbin/openvpn"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: intel-openvpn
+          path: ${{ runner.temp }}/intel-brew
+
   notarize:
     runs-on: macos-15
+    needs: intel-openvpn
     permissions:
       contents: write
 
@@ -50,6 +78,21 @@ jobs:
             -T /usr/bin/codesign -T /usr/bin/security
           security list-keychains -d user -s build.keychain
           security set-key-partition-list -S apple-tool:,apple: -s -k "ci" build.keychain
+
+      - name: Download Intel openvpn
+        uses: actions/download-artifact@v4
+        with:
+          name: intel-openvpn
+          path: ${{ runner.temp }}/intel-brew
+
+      - name: Bundle OpenVPN (universal)
+        run: |
+          brew install openvpn
+          export X86_BREW="$RUNNER_TEMP/intel-brew"
+          ./Packaging/VPN/bundle-openvpn.sh NetFluss.app/Contents/Library/VPN \
+            "Developer ID Application: Rana GmbH (D6P24X5377)"
+          xattr -cr NetFluss.app
+          echo "Bundled openvpn arches:"; lipo -archs NetFluss.app/Contents/Library/VPN/openvpn
 
       - name: Sign
         run: |
