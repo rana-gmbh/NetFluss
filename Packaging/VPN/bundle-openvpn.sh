@@ -17,7 +17,9 @@ DEST="${1:?usage: bundle-openvpn.sh <dest-dir> [signing-identity]}"
 SIGN_ID="${2:-}"
 
 ARM_BREW="/opt/homebrew"
-X86_BREW="/usr/local"
+# Intel source: a Homebrew prefix (default /usr/local) or, in CI, a downloaded
+# mirror directory mimicking <prefix>/opt/<formula>/... — set via X86_BREW.
+X86_BREW="${X86_BREW:-/usr/local}"
 
 # Dependency closure, as paths relative to a Homebrew prefix (stable for
 # openvpn 2.7 / openssl@3). Same names on both arches.
@@ -55,18 +57,19 @@ trap 'rm -rf "$TMP"' EXIT
 stage_and_rewrite "$ARM_BREW" "$TMP/arm64"
 mkdir -p "$DEST"
 
-if [[ -x "$X86_BREW/$REL_OPENVPN" ]]; then
-  echo "Found Intel openvpn — building universal binaries."
+if [[ -f "$X86_BREW/$REL_OPENVPN" ]]; then
+  echo "Found Intel openvpn at $X86_BREW — building universal binaries."
   stage_and_rewrite "$X86_BREW" "$TMP/x86_64"
   for f in "$TMP/arm64"/*; do
     base="$(basename "$f")"
     lipo -create "$TMP/arm64/$base" "$TMP/x86_64/$base" -output "$DEST/$base"
   done
 else
-  echo "WARNING: no Intel Homebrew openvpn at $X86_BREW — bundling arm64-only."
+  echo "WARNING: no Intel openvpn at $X86_BREW — bundling arm64-only."
   echo "         VPN will not work on Intel Macs in this build."
   cp "$TMP/arm64"/* "$DEST/"
 fi
+chmod +x "$DEST/openvpn"
 
 # Sign dylibs before the binary (dependencies first).
 if [[ -n "$SIGN_ID" ]]; then
