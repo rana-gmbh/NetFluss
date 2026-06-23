@@ -315,6 +315,9 @@
 "Wi-Fi Details" = "Wi-Fi Details";
 "Reconnect" = "Reconnect";
 "Reconnect automatically" = "Reconnect automatically";
+"Connect when NetFluss starts" = "Connect when NetFluss starts";
+"Use custom DNS while connected" = "Use custom DNS while connected";
+"DNS servers, comma-separated" = "DNS servers, comma-separated";
 "Edit" = "Edit";
 "Delete" = "Delete";
 "Rename" = "Rename";

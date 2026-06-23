@@ -280,6 +280,7 @@ struct VPNProfileRow: View {
     @State private var password = ""
     @State private var showCredentials = false
     @State private var savedNote = false
+    @State private var dnsServersText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -323,6 +324,32 @@ struct VPNProfileRow: View {
                 .toggleStyle(.checkbox)
             }
 
+            Toggle(isOn: Binding(
+                get: { profile.options.connectOnLaunch },
+                set: { vpn.setConnectOnLaunch($0, for: profile) }
+            )) {
+                LText("Connect when NetFluss starts")
+                    .font(.caption)
+            }
+            .toggleStyle(.checkbox)
+
+            Toggle(isOn: Binding(
+                get: { profile.options.useProfileDNS },
+                set: { vpn.setUseProfileDNS($0, for: profile) }
+            )) {
+                LText("Use custom DNS while connected")
+                    .font(.caption)
+            }
+            .toggleStyle(.checkbox)
+            if profile.options.useProfileDNS {
+                TextField("", text: $dnsServersText, prompt: Text(L10n.text("DNS servers, comma-separated")))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+                    .multilineTextAlignment(.leading)
+                    .labelsHidden()
+                    .onSubmit { saveDNSServers() }
+            }
+
             if profile.requiresCredentials {
                 DisclosureGroup(isExpanded: $showCredentials) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -351,7 +378,18 @@ struct VPNProfileRow: View {
             }
         }
         .padding(.vertical, 2)
-        .onAppear { editedName = profile.name }
+        .onAppear {
+            editedName = profile.name
+            dnsServersText = profile.options.dnsServers.joined(separator: ", ")
+        }
+    }
+
+    private func saveDNSServers() {
+        let servers = dnsServersText
+            .split(whereSeparator: { $0 == "," || $0 == " " })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        vpn.setProfileDNSServers(servers, for: profile)
     }
 
     private var subtitle: String {

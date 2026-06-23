@@ -211,6 +211,44 @@ final class VPNManager: ObservableObject {
         update(p)
     }
 
+    /// Enable/disable connect-on-launch. Only one profile can auto-connect (a
+    /// single tunnel is active at a time), so enabling it clears the flag on the
+    /// others.
+    func setConnectOnLaunch(_ enabled: Bool, for profile: VPNProfile) {
+        var changed = false
+        for i in profiles.indices {
+            let want = profiles[i].id == profile.id ? enabled : (enabled ? false : profiles[i].options.connectOnLaunch)
+            if profiles[i].options.connectOnLaunch != want {
+                profiles[i].options.connectOnLaunch = want
+                changed = true
+            }
+        }
+        if changed { try? store.save(profiles) }
+    }
+
+    /// Connect the profile marked connect-on-launch, if any. Called once at app
+    /// startup. A no-op if a tunnel is already active.
+    func connectOnLaunchIfNeeded() {
+        guard !status.state.isActive,
+              let profile = profiles.first(where: { $0.options.connectOnLaunch }) else { return }
+        connect(profile)
+    }
+
+    /// Enable/disable applying the profile's own DNS servers while connected.
+    func setUseProfileDNS(_ enabled: Bool, for profile: VPNProfile) {
+        guard var p = profiles.first(where: { $0.id == profile.id }),
+              p.options.useProfileDNS != enabled else { return }
+        p.options.useProfileDNS = enabled
+        update(p)
+    }
+
+    /// Set the profile's DNS servers (applied while connected when useProfileDNS).
+    func setProfileDNSServers(_ servers: [String], for profile: VPNProfile) {
+        guard var p = profiles.first(where: { $0.id == profile.id }) else { return }
+        p.options.dnsServers = servers
+        update(p)
+    }
+
     // MARK: - Connection
 
     func connect(_ profile: VPNProfile, server: VPNServerEndpoint? = nil) {
@@ -246,6 +284,7 @@ final class VPNManager: ObservableObject {
         cancelPendingReconnect()
         stopWireGuardMonitor()
         reconnectAttempts = 0
+        networkMonitor?.restoreVPNDNS()
         let previous = status
         status.state = .disconnecting
 
@@ -306,6 +345,7 @@ final class VPNManager: ObservableObject {
             reconnectAttempts = 0
             startWireGuardMonitor(interface: iface, profileID: profile.id)
             refreshPublicIP()
+            applyProfileDNSIfNeeded(profile.id)
             return
         }
 
@@ -335,6 +375,7 @@ final class VPNManager: ObservableObject {
                 if let assignedIP { status.assignedIP = assignedIP }
                 reconnectAttempts = 0    // a good connection clears the backoff
                 refreshPublicIP()
+                applyProfileDNSIfNeeded(status.profileID)
             case "RECONNECTING":
                 status.state = .reconnecting
             case "EXITING":
@@ -367,11 +408,21 @@ final class VPNManager: ObservableObject {
         }
     }
 
+    /// Apply the profile's own DNS servers once it's connected (if enabled). The
+    /// prior resolver config is restored on disconnect/drop via restoreVPNDNS().
+    private func applyProfileDNSIfNeeded(_ profileID: UUID?) {
+        guard let profileID,
+              let profile = profiles.first(where: { $0.id == profileID }),
+              profile.options.useProfileDNS, !profile.options.dnsServers.isEmpty else { return }
+        networkMonitor?.applyVPNDNS(profile.options.dnsServers)
+    }
+
     /// openvpn stopped on its own (failed to connect, or an established tunnel
     /// dropped). Surface the real reason from its log instead of silently
     /// returning to "Not connected".
     private func handleUnexpectedStop() {
         if case .failed = status.state { return }          // already have a reason
+        networkMonitor?.restoreVPNDNS()                    // tunnel DNS is unreachable now
         if status.state == .disconnecting || status.state == .idle {
             status = VPNRuntimeStatus(state: .idle, profileID: status.profileID)
             return
@@ -456,12 +507,14 @@ final class VPNManager: ObservableObject {
             if self.status.connectedSince == nil { self.status.connectedSince = Date() }
             reconnectAttempts = 0
             refreshPublicIP()
+            applyProfileDNSIfNeeded(self.status.profileID)
         case .reasserting:
             self.status.state = .reconnecting
         case .disconnecting:
             self.status.state = .disconnecting
         case .disconnected, .invalid:
             activeIKEv2 = false
+            networkMonitor?.restoreVPNDNS()
             let profileID = self.status.profileID
             let isInvalid = (status == .invalid)
             // Surface why it dropped (auth/config/etc.) rather than silently idling.
@@ -573,6 +626,7 @@ final class VPNManager: ObservableObject {
     private func handleWireGuardDrop() {
         if case .failed = status.state { return }
         if status.state == .disconnecting || status.state == .idle { return }
+        networkMonitor?.restoreVPNDNS()
         if scheduleReconnectIfEnabled(profileID: status.profileID) { return }
         status.state = .failed("The VPN connection stopped.")
     }

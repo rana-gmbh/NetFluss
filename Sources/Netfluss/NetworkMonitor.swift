@@ -951,6 +951,60 @@ final class NetworkMonitor: NSObject, ObservableObject {
         return presets
     }
 
+    /// Per-service DNS captured when a VPN with custom DNS connects, so the prior
+    /// resolver config can be restored on disconnect.
+    private var vpnDNSApplied = false
+    private var vpnDNSBackup: [String: [String]] = [:]
+
+    /// Apply a VPN profile's DNS servers to the active network services,
+    /// remembering each service's prior DNS so `restoreVPNDNS()` can undo it.
+    /// No-op if a VPN DNS override is already in effect.
+    func applyVPNDNS(_ servers: [String]) {
+        guard !vpnDNSApplied else { return }
+        let validChars = CharacterSet(charactersIn: "0123456789abcdefABCDEF.:[]")
+        let cleaned = servers
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && $0.unicodeScalars.allSatisfy { validChars.contains($0) } }
+        guard !cleaned.isEmpty else { return }
+        vpnDNSApplied = true
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let services = Self.dnsTargetServices()
+            guard !services.isEmpty else {
+                await MainActor.run { [weak self] in self?.vpnDNSApplied = false }
+                return
+            }
+            var captured: [String: [String]] = [:]
+            for service in services { captured[service] = Self.dnsServers(forService: service) }
+            _ = await Self.setDNS(services: services, servers: cleaned)
+            let backup = captured
+            await MainActor.run { [weak self] in
+                self?.vpnDNSBackup = backup
+                self?.updateCurrentDNS()
+            }
+        }
+    }
+
+    /// Restore the DNS captured by `applyVPNDNS` (called on VPN disconnect/drop).
+    func restoreVPNDNS() {
+        guard vpnDNSApplied else { return }
+        vpnDNSApplied = false
+        let backup = vpnDNSBackup
+        vpnDNSBackup = [:]
+        guard !backup.isEmpty else { return }
+        Task.detached(priority: .userInitiated) { [weak self] in
+            for (service, servers) in backup {
+                _ = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers)
+            }
+            await MainActor.run { [weak self] in self?.updateCurrentDNS() }
+        }
+    }
+
+    private nonisolated static func dnsServers(forService service: String) -> [String] {
+        let result = runSyncResult("/usr/sbin/networksetup", ["-getdnsservers", service])
+        guard result.success else { return [] }
+        return parseDNSServers(from: result.stdout)
+    }
+
     func applyDNS(preset: DNSPreset) {
         guard !dnsChanging else { return }
         // Validate server addresses: only allow IP-safe characters
