@@ -112,12 +112,14 @@ final class VPNManager: ObservableObject {
         return profile
     }
 
-    /// Create an IKEv2 profile managed via NEVPNManager. The password goes in the
-    /// System keychain via the helper (so the macOS VPN agent can read it without
-    /// prompting); the returned persistent reference is kept on the profile.
+    /// Create an IKEv2 profile managed via NEVPNManager. The username/password are
+    /// stored in NetFluss's own Keychain; at connect time the password is read back
+    /// and passed directly to the connection (see `startIKEv2`). We do NOT rely on
+    /// a `passwordReference` because the macOS IKEv2 EAP path ignores it and would
+    /// prompt for the password on every connect.
     @discardableResult
-    func addIKEv2Profile(name: String, server: String, remoteID: String, username: String, password: String) async -> VPNProfile {
-        var profile = VPNProfile(
+    func addIKEv2Profile(name: String, server: String, remoteID: String, username: String, password: String) -> VPNProfile {
+        let profile = VPNProfile(
             name: name,
             kind: .ikev2,
             configFileName: "",
@@ -127,18 +129,11 @@ final class VPNManager: ObservableObject {
             ikev2RemoteID: remoteID,
             ikev2Username: username
         )
-        if let result = await helper.storeSystemVPNPassword(service: Self.ikev2KeychainService, account: profile.keychainAccount, password: password),
-           result.success, let ref = Data(base64Encoded: result.stdout) {
-            profile.ikev2PasswordRef = ref
-        }
-        // Keep an app-keychain copy too (fallback / so it survives a helper change).
-        credentialStore.storeIKEv2Password(account: profile.keychainAccount, password: password)
+        credentialStore.save(account: profile.keychainAccount, username: username, password: password)
         profiles.append(profile)
         try? store.save(profiles)
         return profile
     }
-
-    private static let ikev2KeychainService = "com.local.netfluss.vpn"
 
     /// macOS-native VPN services (IKEv2/IPsec/L2TP) configured in System Settings
     /// or installed from a .mobileconfig.
@@ -172,11 +167,6 @@ final class VPNManager: ObservableObject {
     func deleteProfile(_ profile: VPNProfile) {
         if status.profileID == profile.id { disconnect() }
         credentialStore.delete(account: profile.keychainAccount)
-        credentialStore.deleteIKEv2Password(account: profile.keychainAccount)
-        if profile.kind == .ikev2 && profile.ikev2PasswordRef != nil {
-            let account = profile.keychainAccount
-            Task { _ = await helper.deleteSystemVPNPassword(service: Self.ikev2KeychainService, account: account) }
-        }
         profiles.removeAll { $0.id == profile.id }
         try? store.removeProfileDirectory(profile.id)
         try? store.save(profiles)
@@ -397,14 +387,19 @@ final class VPNManager: ObservableObject {
             status.state = .failed("This IKEv2 profile is missing its server settings.")
             return
         }
-        // Prefer the System-keychain ref (agent-readable, no prompt); fall back
-        // to the app-keychain ref.
-        let passwordRef = profile.ikev2PasswordRef ?? credentialStore.ikev2PasswordReference(account: profile.keychainAccount)
+        // Read the password back from our own Keychain and pass it to the
+        // connection directly — macOS ignores a stored passwordReference for
+        // IKEv2 EAP (it would prompt every connect).
+        guard let password = credentialStore.load(account: profile.keychainAccount)?.password,
+              !password.isEmpty else {
+            status.state = .failed("The VPN password isn't stored — remove the profile and add it again.")
+            return
+        }
         activeIKEv2 = true
         do {
             try await ikev2Controller.connect(
                 name: profile.name, server: server, remoteID: remoteID,
-                username: username, passwordRef: passwordRef
+                username: username, password: password
             )
             // Connection progress arrives via handleIKEv2Status.
         } catch {
