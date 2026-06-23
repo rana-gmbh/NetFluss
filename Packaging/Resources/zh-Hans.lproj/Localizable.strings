@@ -317,7 +317,7 @@
 "Reconnect automatically" = "自动重新连接";
 "Connect when NetFluss starts" = "NetFluss 启动时连接";
 "Use custom DNS while connected" = "连接时使用自定义 DNS";
-"DNS servers, comma-separated" = "DNS 服务器，以逗号分隔";
+"Choose a DNS preset" = "选择 DNS 预设";
 "Edit" = "编辑";
 "Delete" = "删除";
 "Rename" = "重命名";
