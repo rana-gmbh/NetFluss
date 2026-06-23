@@ -57,13 +57,18 @@ struct VPNServerEndpoint: Identifiable, Codable, Equatable, Sendable {
     var port: Int?
     /// Transport hint where relevant (e.g. "udp"/"tcp" for OpenVPN).
     var transport: String?
+    /// Config file (within the profile directory) this endpoint connects with.
+    /// Provider bundles ship one `.ovpn` per server, so each endpoint usually
+    /// references its own file; nil falls back to the profile's primary config.
+    var configFileName: String?
 
-    init(id: UUID = UUID(), label: String, host: String, port: Int? = nil, transport: String? = nil) {
+    init(id: UUID = UUID(), label: String, host: String, port: Int? = nil, transport: String? = nil, configFileName: String? = nil) {
         self.id = id
         self.label = label
         self.host = host
         self.port = port
         self.transport = transport
+        self.configFileName = configFileName
     }
 }
 
@@ -98,6 +103,9 @@ struct VPNProfile: Identifiable, Codable, Equatable, Sendable {
     var servers: [VPNServerEndpoint]
     /// Index into `servers` of the user's current selection.
     var selectedServerIndex: Int
+    /// Whether connecting prompts for a username/password (OpenVPN
+    /// `auth-user-pass`). Cert-only profiles are `false`.
+    var requiresCredentials: Bool
     /// Keychain account used to store this profile's credentials (if any).
     var keychainAccount: String
     var options: VPNProfileOptions
@@ -110,6 +118,7 @@ struct VPNProfile: Identifiable, Codable, Equatable, Sendable {
         configFileName: String,
         servers: [VPNServerEndpoint] = [],
         selectedServerIndex: Int = 0,
+        requiresCredentials: Bool = false,
         keychainAccount: String? = nil,
         options: VPNProfileOptions = VPNProfileOptions(),
         createdAt: Date = Date()
@@ -120,6 +129,7 @@ struct VPNProfile: Identifiable, Codable, Equatable, Sendable {
         self.configFileName = configFileName
         self.servers = servers
         self.selectedServerIndex = selectedServerIndex
+        self.requiresCredentials = requiresCredentials
         self.keychainAccount = keychainAccount ?? "vpn.\(id.uuidString)"
         self.options = options
         self.createdAt = createdAt

@@ -33,41 +33,59 @@ final class VPNManager: ObservableObject {
 
     private let helper: PrivilegedHelperManager
     private let store: VPNProfileStore
+    private let credentialStore: VPNCredentialStore
     /// Helper-side handle of the running bundled-binary tunnel (if any).
     private var activeTunnelHandle: String?
     /// Management-interface driver for the active OpenVPN tunnel.
     private var ovpnClient: OpenVPNManagementClient?
 
-    init(helper: PrivilegedHelperManager = .shared, store: VPNProfileStore = VPNProfileStore()) {
+    init(
+        helper: PrivilegedHelperManager = .shared,
+        store: VPNProfileStore = VPNProfileStore(),
+        credentialStore: VPNCredentialStore = VPNCredentialStore()
+    ) {
         self.helper = helper
         self.store = store
+        self.credentialStore = credentialStore
         self.profiles = (try? store.load()) ?? []
     }
 
     // MARK: - Profile management
 
-    /// Import a config file into a new profile. The raw config is copied into the
-    /// profile's directory; `servers` is the parsed endpoint list (parsing of
-    /// .ovpn/.conf/.mobileconfig lives in a dedicated importer — next phase).
+    /// Import an OpenVPN config (single `.ovpn`, folder, or `.zip`) into a new
+    /// profile. The raw files are copied into the profile's directory and each
+    /// `.ovpn` becomes a selectable server. Optional `name` overrides the
+    /// suggested name derived from the source.
     @discardableResult
-    func importProfile(
-        name: String,
-        kind: VPNProtocolKind,
-        configSource: URL,
-        servers: [VPNServerEndpoint]
-    ) throws -> VPNProfile {
+    func importOpenVPNProfile(from source: URL, name: String? = nil) throws -> VPNProfile {
+        let result = try VPNConfigImporter.importOpenVPN(from: source)
         let id = UUID()
-        let configName = configSource.lastPathComponent
-        try store.copyConfig(from: configSource, profileID: id, named: configName)
-        var profile = VPNProfile(id: id, name: name, kind: kind, configFileName: configName, servers: servers)
-        profile.selectedServerIndex = 0
+        try store.writeConfigFiles(result.files, profileID: id)
+        let profile = VPNProfile(
+            id: id,
+            name: name ?? result.suggestedName,
+            kind: .openVPN,
+            configFileName: result.primaryFileName,
+            servers: result.endpoints,
+            requiresCredentials: result.requiresCredentials
+        )
         profiles.append(profile)
         try store.save(profiles)
         return profile
     }
 
+    /// Store (or clear) the username/password for a profile in the Keychain.
+    func setCredentials(for profile: VPNProfile, username: String?, password: String?) {
+        if username == nil && password == nil {
+            credentialStore.delete(account: profile.keychainAccount)
+        } else {
+            credentialStore.save(account: profile.keychainAccount, username: username, password: password)
+        }
+    }
+
     func deleteProfile(_ profile: VPNProfile) {
         if status.profileID == profile.id { disconnect() }
+        credentialStore.delete(account: profile.keychainAccount)
         profiles.removeAll { $0.id == profile.id }
         try? store.removeProfileDirectory(profile.id)
         try? store.save(profiles)
@@ -89,13 +107,14 @@ final class VPNManager: ObservableObject {
 
     func connect(_ profile: VPNProfile, server: VPNServerEndpoint? = nil) {
         guard !status.state.isActive else { return }
-        status = VPNRuntimeStatus(state: .connecting, profileID: profile.id, serverID: (server ?? profile.selectedServer)?.id)
+        let endpoint = server ?? profile.selectedServer
+        status = VPNRuntimeStatus(state: .connecting, profileID: profile.id, serverID: endpoint?.id)
 
         Task { [weak self] in
             guard let self else { return }
             switch profile.kind {
             case .openVPN, .wireGuard:
-                await self.startBundledTunnel(profile)
+                await self.startBundledTunnel(profile, endpoint: endpoint)
             case .ikev2:
                 await self.startNativeTunnel(profile)
             }
@@ -130,8 +149,8 @@ final class VPNManager: ObservableObject {
 
     // MARK: - Backends
 
-    private func startBundledTunnel(_ profile: VPNProfile) async {
-        let configPath = store.configPath(for: profile)
+    private func startBundledTunnel(_ profile: VPNProfile, endpoint: VPNServerEndpoint?) async {
+        let configPath = store.configPath(for: profile, endpoint: endpoint)
         let socketPath = Self.managementSocketPath(for: profile)
 
         let result = await helper.startVPNTunnel(
@@ -153,11 +172,13 @@ final class VPNManager: ObservableObject {
         }
 
         let client = OpenVPNManagementClient(socketPath: socketPath)
-        client.credentialsProvider = { kind in
-            // TODO (next phase): fetch from Keychain. Cert-only profiles never
-            // prompt, so returning nil here still connects those.
-            _ = kind
-            return nil
+        // Capture the store + account (both Sendable) so the provider can read
+        // the Keychain from the client's background queue without the MainActor.
+        let credentialStore = self.credentialStore
+        let account = profile.keychainAccount
+        client.credentialsProvider = { _ in
+            guard let creds = credentialStore.load(account: account) else { return nil }
+            return (username: creds.username, password: creds.password)
         }
         client.onEvent = { [weak self] event in
             Task { @MainActor in self?.handleOpenVPNEvent(event) }
@@ -185,7 +206,7 @@ final class VPNManager: ObservableObject {
             status.bytesIn = inBytes
             status.bytesOut = outBytes
         case .needCredentials:
-            status.state = .failed("This VPN requires a username and password (credential entry is coming soon).")
+            status.state = .failed("This VPN needs a username and password. Add them in the profile's settings and reconnect.")
         case .authFailed(let message):
             status.state = .failed(message)
         case .disconnected:
@@ -250,16 +271,20 @@ struct VPNProfileStore {
         try data.write(to: profilesFile, options: .atomic)
     }
 
-    func copyConfig(from source: URL, profileID: UUID, named name: String) throws {
+    func writeConfigFiles(_ files: [VPNConfigImporter.ConfigFile], profileID: UUID) throws {
         let dir = profileDirectory(profileID)
         try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
-        let dest = dir.appendingPathComponent(name)
-        if fileManager.fileExists(atPath: dest.path) { try fileManager.removeItem(at: dest) }
-        try fileManager.copyItem(at: source, to: dest)
+        for file in files {
+            let dest = dir.appendingPathComponent(file.name)
+            try file.data.write(to: dest, options: .atomic)
+        }
     }
 
-    func configPath(for profile: VPNProfile) -> String {
-        profileDirectory(profile.id).appendingPathComponent(profile.configFileName).path
+    /// Absolute path of the config used to connect: the selected endpoint's own
+    /// file, falling back to the profile's primary config.
+    func configPath(for profile: VPNProfile, endpoint: VPNServerEndpoint?) -> String {
+        let name = endpoint?.configFileName ?? profile.configFileName
+        return profileDirectory(profile.id).appendingPathComponent(name).path
     }
 
     func removeProfileDirectory(_ id: UUID) throws {
