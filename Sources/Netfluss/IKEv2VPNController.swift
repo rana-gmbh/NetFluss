@@ -81,7 +81,8 @@ final class IKEv2VPNController {
         let proto = NEVPNProtocolIKEv2()
         proto.serverAddress = server
         proto.remoteIdentifier = remoteID
-        proto.localIdentifier = username
+        // Local ID intentionally left unset — providers (e.g. AdGuard) expect it
+        // empty for EAP; the username is supplied via EAP, not the IKE identity.
         proto.username = username
         proto.passwordReference = passwordRef
         proto.authenticationMethod = .none        // server cert + EAP user auth
