@@ -33,6 +33,9 @@ cp Packaging/Resources/AppIcon.icns NetFluss.app/Contents/Resources/AppIcon.icns
 cp Packaging/Resources/AppIconDark.icns NetFluss.app/Contents/Resources/AppIconDark.icns
 cp -R Packaging/Resources/SpeedTest NetFluss.app/Contents/Resources/SpeedTest
 cp -R Packaging/Resources/*.lproj NetFluss.app/Contents/Resources/   # REQUIRED — see note below
+# Bundle the OpenVPN binary + dylib closure for the VPN client (needs `brew install openvpn`).
+# Signs the VPN Mach-Os itself; arm64-only — a universal release must lipo in x86_64 too (TODO).
+./Packaging/VPN/bundle-openvpn.sh NetFluss.app/Contents/Library/VPN "Developer ID Application: Rana GmbH (D6P24X5377)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.x.x" NetFluss.app/Contents/Info.plist
 xattr -cr NetFluss.app   # strip resource-fork/Finder xattrs or codesign fails with "resource fork ... not allowed"
 codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
