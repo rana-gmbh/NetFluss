@@ -25,6 +25,7 @@ import UniformTypeIdentifiers
 struct VPNSectionView: View {
     let useBits: Bool
     @EnvironmentObject private var vpn: VPNManager
+    @EnvironmentObject private var monitor: NetworkMonitor
     @State private var selectedProfileID: UUID?
 
     private var currentProfile: VPNProfile? {
@@ -93,11 +94,29 @@ struct VPNSectionView: View {
                 .disabled(vpn.status.state.isBusy)
             }
 
-            if isActive(profile), let ip = vpn.status.assignedIP {
-                Text(verbatim: "IP \(ip)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+            if isActive(profile), vpn.status.state == .connected {
+                // Exit location: flag + country + public IP (from the external-IP
+                // lookup, refreshed on connect), then the assigned tunnel IP.
+                HStack(spacing: 6) {
+                    if let flag = Self.flagEmoji(monitor.externalIPCountryCode) {
+                        Text(flag).font(.system(size: 12))
+                    }
+                    if let country = Self.countryName(monitor.externalIPCountryCode) {
+                        Text(country).font(.system(size: 11))
+                    }
+                    if monitor.externalIP != "—" {
+                        Text(monitor.externalIP)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+                if let ip = vpn.status.assignedIP {
+                    Text(verbatim: "Tunnel \(ip)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
 
             if vpn.status.profileID == profile.id, case .failed(let message) = vpn.status.state {
@@ -109,6 +128,22 @@ struct VPNSectionView: View {
                     .textSelection(.enabled)
             }
         }
+    }
+
+    private static func flagEmoji(_ code: String) -> String? {
+        guard code.count == 2 else { return nil }
+        let base: UInt32 = 0x1F1E6
+        var scalars = String.UnicodeScalarView()
+        for u in code.uppercased().unicodeScalars {
+            guard u.value >= 65, u.value <= 90, let s = UnicodeScalar(base + u.value - 65) else { return nil }
+            scalars.append(s)
+        }
+        return String(scalars)
+    }
+
+    private static func countryName(_ code: String) -> String? {
+        guard code.count == 2 else { return nil }
+        return Locale.current.localizedString(forRegionCode: code.uppercased())
     }
 
     private func serverBinding(_ profile: VPNProfile) -> Binding<Int> {

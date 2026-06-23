@@ -99,6 +99,7 @@ final class AppState {
         let wifiManager = WifiManager.shared
         self.wifiManager = wifiManager
         self.vpnManager = VPNManager.shared
+        VPNManager.shared.networkMonitor = monitor
         self.statusBar = StatusBarController(
             monitor: monitor,
             statisticsManager: statisticsManager,
