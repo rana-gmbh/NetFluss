@@ -1,5 +1,6 @@
 import Foundation
 import NetflussHelperShared
+import Security
 
 private struct HelperCommandResult {
     let success: Bool
@@ -225,6 +226,49 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
                 return
             }
             reply(true, contents)
+        }
+    }
+
+    private static let systemKeychainPath = "/Library/Keychains/System.keychain"
+
+    func storeSystemVPNPassword(service: String, account: String, password: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Add to the System keychain with -A (any app may read, so the macOS
+            // VPN agent can) and -U (update if present). The app can't write the
+            // System keychain, but the root helper can.
+            _ = Self.runCommand(arguments: ["/usr/bin/security", "delete-generic-password", "-s", service, "-a", account, Self.systemKeychainPath])
+            let add = Self.runCommand(arguments: ["/usr/bin/security", "add-generic-password", "-U", "-A", "-s", service, "-a", account, "-w", password, Self.systemKeychainPath])
+            guard add.success else {
+                reply(false, add.message ?? "Could not store the VPN password.")
+                return
+            }
+            // Fetch the persistent reference from the System keychain.
+            var keychain: SecKeychain?
+            guard SecKeychainOpen(Self.systemKeychainPath, &keychain) == errSecSuccess, let keychain else {
+                reply(false, "Could not open the System keychain.")
+                return
+            }
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: account,
+                kSecMatchSearchList as String: [keychain],
+                kSecReturnPersistentRef as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne
+            ]
+            var ref: CFTypeRef?
+            guard SecItemCopyMatching(query as CFDictionary, &ref) == errSecSuccess, let data = ref as? Data else {
+                reply(false, "Could not read back the password reference.")
+                return
+            }
+            reply(true, data.base64EncodedString())
+        }
+    }
+
+    func deleteSystemVPNPassword(service: String, account: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = Self.runCommand(arguments: ["/usr/bin/security", "delete-generic-password", "-s", service, "-a", account, Self.systemKeychainPath])
+            reply(true, nil)
         }
     }
 

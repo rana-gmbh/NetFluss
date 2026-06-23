@@ -428,8 +428,11 @@ struct AddIKEv2Sheet: View {
     }
 
     private func create() {
-        vpn.addIKEv2Profile(name: name, server: server, remoteID: remoteID, username: username, password: password)
-        onInstalled()
+        let (n, s, r, u, p) = (name, server, remoteID, username, password)
+        Task {
+            await vpn.addIKEv2Profile(name: n, server: s, remoteID: r, username: u, password: p)
+            onInstalled()
+        }
         dismiss()
     }
 }

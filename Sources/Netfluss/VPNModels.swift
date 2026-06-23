@@ -114,6 +114,9 @@ struct VPNProfile: Identifiable, Codable, Equatable, Sendable {
     var ikev2Server: String?
     var ikev2RemoteID: String?
     var ikev2Username: String?
+    /// Persistent System-keychain reference to the IKEv2 password (so the macOS
+    /// VPN agent can read it). Base64 in JSON.
+    var ikev2PasswordRef: Data?
     /// Keychain account used to store this profile's credentials (if any).
     var keychainAccount: String
     var options: VPNProfileOptions
