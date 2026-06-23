@@ -825,6 +825,13 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
     // MARK: - IP Addresses
 
+    /// Force an immediate external-IP (and country) refresh — used right after a
+    /// VPN connects/disconnects so the public IP and flag update without waiting
+    /// for the slow periodic poll.
+    func forceRefreshExternalIP() {
+        updateIPsIfNeeded(force: true)
+    }
+
     private func updateIPsIfNeeded(force: Bool) {
         setIfChanged(\.internalIP, to: InterfaceSampler.primaryInternalIP())
         setIfChanged(\.gatewayIP, to: InterfaceSampler.defaultGatewayIP(store: dynamicStore))
@@ -875,8 +882,10 @@ final class NetworkMonitor: NSObject, ObservableObject {
         }
         guard let ip else { return nil }
 
-        // Only fetch country code when the connection flow view is active (needs flag emoji)
+        // Fetch the country code when something shows a flag: the connection
+        // flow view or the VPN section.
         let needsCountry = UserDefaults.standard.string(forKey: "connectionStatusMode") == "flow"
+            || UserDefaults.standard.bool(forKey: "showVPN")
         if needsCountry, let url = URL(string: "https://ipwho.is/\(ip)") {
             var request = URLRequest(url: url, timeoutInterval: 8)
             request.setValue("NetFluss/1.0", forHTTPHeaderField: "User-Agent")

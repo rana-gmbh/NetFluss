@@ -33,6 +33,10 @@ final class VPNManager: ObservableObject {
     @Published private(set) var profiles: [VPNProfile] = []
     @Published private(set) var status: VPNRuntimeStatus = .idle
 
+    /// Set by AppState so the manager can refresh the public IP/flag on
+    /// connect/disconnect.
+    weak var networkMonitor: NetworkMonitor?
+
     private let helper: PrivilegedHelperManager
     private let store: VPNProfileStore
     private let credentialStore: VPNCredentialStore
@@ -150,6 +154,7 @@ final class VPNManager: ObservableObject {
             self.ovpnClient?.close()
             self.ovpnClient = nil
             self.status = .idle
+            self.refreshPublicIP()
         }
     }
 
@@ -201,6 +206,7 @@ final class VPNManager: ObservableObject {
                 status.state = .connected
                 if status.connectedSince == nil { status.connectedSince = Date() }
                 if let assignedIP { status.assignedIP = assignedIP }
+                refreshPublicIP()
             case "RECONNECTING":
                 status.state = .reconnecting
             case "EXITING":
@@ -219,6 +225,17 @@ final class VPNManager: ObservableObject {
             handleUnexpectedStop()
         case .log:
             break
+        }
+    }
+
+    /// Refresh the public IP + country flag now and again shortly after, since
+    /// routes/DNS can take a moment to settle right after the tunnel comes up
+    /// (and to restore the real IP after disconnect).
+    private func refreshPublicIP() {
+        networkMonitor?.forceRefreshExternalIP()
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            self?.networkMonitor?.forceRefreshExternalIP()
         }
     }
 
@@ -280,6 +297,7 @@ final class VPNManager: ObservableObject {
         }
         status.state = .connected
         status.connectedSince = Date()
+        refreshPublicIP()
     }
 
     private func nativeServiceName(for profile: VPNProfile) -> String {
