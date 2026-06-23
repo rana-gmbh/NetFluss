@@ -104,6 +104,26 @@ final class VPNManager: ObservableObject {
         return profile
     }
 
+    /// macOS-native VPN services (IKEv2/IPsec/L2TP) configured in System Settings
+    /// or installed from a .mobileconfig.
+    func nativeServices() -> [NativeVPN.Service] { NativeVPN.list() }
+
+    /// Create an `.ikev2` profile that controls an existing native VPN service.
+    @discardableResult
+    func addNativeProfile(service: NativeVPN.Service) -> VPNProfile {
+        if let existing = profiles.first(where: { $0.nativeServiceName == service.name }) { return existing }
+        let profile = VPNProfile(
+            name: service.name,
+            kind: .ikev2,
+            configFileName: "",
+            servers: [],
+            nativeServiceName: service.name
+        )
+        profiles.append(profile)
+        try? store.save(profiles)
+        return profile
+    }
+
     /// Store (or clear) the username/password for a profile in the Keychain.
     func setCredentials(for profile: VPNProfile, username: String?, password: String?) {
         if username == nil && password == nil {
@@ -175,8 +195,8 @@ final class VPNManager: ObservableObject {
                 self.activeTunnelHandle = nil
             } else if let profileID = previous.profileID,
                       let profile = self.profiles.first(where: { $0.id == profileID }),
-                      profile.kind == .ikev2 {
-                _ = await self.helper.disconnectNativeVPN(serviceName: self.nativeServiceName(for: profile))
+                      profile.kind == .ikev2, let service = profile.nativeServiceName {
+                NativeVPN.stop(service)
             }
             self.ovpnClient?.close()
             self.ovpnClient = nil
@@ -321,20 +341,26 @@ final class VPNManager: ObservableObject {
     }
 
     private func startNativeTunnel(_ profile: VPNProfile) async {
-        // TODO (next phase): ensure the native service exists (created from the
-        // imported .mobileconfig); here we just start it by name.
-        let result = await helper.connectNativeVPN(serviceName: nativeServiceName(for: profile))
-        guard let result, result.success else {
-            status.state = .failed(result?.stderr ?? "Could not start the native VPN.")
+        guard let service = profile.nativeServiceName else {
+            status.state = .failed("No system VPN service is associated with this profile.")
             return
         }
-        status.state = .connected
-        status.connectedSince = Date()
-        refreshPublicIP()
-    }
-
-    private func nativeServiceName(for profile: VPNProfile) -> String {
-        "Netfluss \(profile.name)"
+        guard NativeVPN.start(service) else {
+            status.state = .failed("Could not start the system VPN.")
+            return
+        }
+        // Native connect is asynchronous — poll for the Connected state.
+        for _ in 0..<25 {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard status.profileID == profile.id, status.state.isActive else { return }
+            if NativeVPN.status(service) == "Connected" {
+                status.state = .connected
+                status.connectedSince = Date()
+                refreshPublicIP()
+                return
+            }
+        }
+        status.state = .failed("The system VPN did not connect (\(NativeVPN.status(service))).")
     }
 
     /// Parse the local [Interface] Address from a WireGuard config for display.
