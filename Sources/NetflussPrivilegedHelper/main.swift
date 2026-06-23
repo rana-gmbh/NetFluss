@@ -98,6 +98,10 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
                     "--management", managementSocketPath, "unix",
                     "--management-client-user", socketOwner,
                     "--management-hold",
+                    // Ask the management interface for auth-user-pass / private-key
+                    // credentials. Without this openvpn tries the (absent) tty at
+                    // startup and exits before the socket is even created.
+                    "--management-query-passwords",
                     "--script-security", "0"
                 ]
             // TODO: case "wireGuard": drive wireguard-go + wg UAPI.
