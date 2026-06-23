@@ -17,6 +17,7 @@
 
 import Foundation
 import NetworkExtension
+import Darwin
 
 /// Owns the user's VPN profiles and the single active connection. The UI
 /// (popover + Preferences) observes `profiles` and `status`.
@@ -49,6 +50,17 @@ final class VPNManager: ObservableObject {
     /// notifications to the current connection.
     private let ikev2Controller = IKEv2VPNController()
     private var activeIKEv2 = false
+
+    /// Auto-reconnect: when a profile with `options.autoReconnect` drops
+    /// unexpectedly, we re-dispatch the connection with exponential backoff
+    /// instead of going to a terminal state. `reconnectAttempts` resets on a
+    /// successful (re)connect and on a user-initiated connect/disconnect.
+    private var reconnectTask: Task<Void, Never>?
+    private var reconnectAttempts = 0
+    private static let maxReconnectAttempts = 10
+    /// Liveness poll for WireGuard, which has no control-channel drop signal —
+    /// we watch the tunnel interface and treat its disappearance as a drop.
+    private var wgMonitorTask: Task<Void, Never>?
 
     init(
         helper: PrivilegedHelperManager = .shared,
@@ -191,13 +203,28 @@ final class VPNManager: ObservableObject {
         update(p)
     }
 
+    /// Enable/disable automatic reconnection for a profile.
+    func setAutoReconnect(_ enabled: Bool, for profile: VPNProfile) {
+        guard var p = profiles.first(where: { $0.id == profile.id }),
+              p.options.autoReconnect != enabled else { return }
+        p.options.autoReconnect = enabled
+        update(p)
+    }
+
     // MARK: - Connection
 
     func connect(_ profile: VPNProfile, server: VPNServerEndpoint? = nil) {
         guard !status.state.isActive else { return }
-        let endpoint = server ?? profile.selectedServer
-        status = VPNRuntimeStatus(state: .connecting, profileID: profile.id, serverID: endpoint?.id)
+        cancelPendingReconnect()
+        reconnectAttempts = 0
+        dispatchConnect(profile, endpoint: server ?? profile.selectedServer, reconnecting: false)
+    }
 
+    /// Start the backend for a profile. Shared by the user-facing `connect` and
+    /// the auto-reconnect loop; `reconnecting` only affects the displayed state.
+    private func dispatchConnect(_ profile: VPNProfile, endpoint: VPNServerEndpoint?, reconnecting: Bool) {
+        status = VPNRuntimeStatus(state: reconnecting ? .reconnecting : .connecting,
+                                  profileID: profile.id, serverID: endpoint?.id)
         Task { [weak self] in
             guard let self else { return }
             switch profile.kind {
@@ -215,6 +242,10 @@ final class VPNManager: ObservableObject {
 
     func disconnect() {
         guard status.state.isActive else { return }
+        // A deliberate disconnect ends any auto-reconnect cycle.
+        cancelPendingReconnect()
+        stopWireGuardMonitor()
+        reconnectAttempts = 0
         let previous = status
         status.state = .disconnecting
 
@@ -267,10 +298,13 @@ final class VPNManager: ObservableObject {
         guard profile.kind == .openVPN else {
             // WireGuard: wg-quick brought the tunnel up synchronously, so a
             // successful helper reply means we're connected.
+            let iface = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             status.state = .connected
             status.connectedSince = Date()
-            status.tunnelInterface = result.stdout
+            status.tunnelInterface = iface
             status.assignedIP = wireGuardAddress(for: profile, endpoint: endpoint)
+            reconnectAttempts = 0
+            startWireGuardMonitor(interface: iface, profileID: profile.id)
             refreshPublicIP()
             return
         }
@@ -299,6 +333,7 @@ final class VPNManager: ObservableObject {
                 status.state = .connected
                 if status.connectedSince == nil { status.connectedSince = Date() }
                 if let assignedIP { status.assignedIP = assignedIP }
+                reconnectAttempts = 0    // a good connection clears the backoff
                 refreshPublicIP()
             case "RECONNECTING":
                 status.state = .reconnecting
@@ -341,6 +376,9 @@ final class VPNManager: ObservableObject {
             status = VPNRuntimeStatus(state: .idle, profileID: status.profileID)
             return
         }
+        // Unexpected drop (or a failed reconnect attempt): retry if the profile
+        // opted in, otherwise surface the failure.
+        if scheduleReconnectIfEnabled(profileID: status.profileID) { return }
         failWithReason("The VPN connection stopped.")
     }
 
@@ -416,6 +454,7 @@ final class VPNManager: ObservableObject {
         case .connected:
             self.status.state = .connected
             if self.status.connectedSince == nil { self.status.connectedSince = Date() }
+            reconnectAttempts = 0
             refreshPublicIP()
         case .reasserting:
             self.status.state = .reconnecting
@@ -424,15 +463,130 @@ final class VPNManager: ObservableObject {
         case .disconnected, .invalid:
             activeIKEv2 = false
             let profileID = self.status.profileID
+            let isInvalid = (status == .invalid)
             // Surface why it dropped (auth/config/etc.) rather than silently idling.
-            ikev2Controller.fetchLastError { [weak self] reason in
+            ikev2Controller.fetchLastError { [weak self] reason, code in
                 guard let self else { return }
+                // Auto-reconnect only transient drops — never config/auth/cert
+                // errors, which won't fix themselves on retry.
+                if !isInvalid, Self.ikev2DropIsRetryable(code),
+                   self.scheduleReconnectIfEnabled(profileID: profileID) {
+                    return
+                }
                 self.status = VPNRuntimeStatus(state: reason.map { .failed($0) } ?? .idle, profileID: profileID)
                 self.refreshPublicIP()
             }
         @unknown default:
             break
         }
+    }
+
+    // MARK: - Auto-reconnect
+
+    /// Schedule a reconnect for the profile if it has auto-reconnect enabled and
+    /// we haven't exhausted the attempt budget. Returns true when a reconnect was
+    /// scheduled (the caller should then NOT set a terminal state). Sets the
+    /// status to `.reconnecting` while waiting.
+    private func scheduleReconnectIfEnabled(profileID: UUID?) -> Bool {
+        guard let profileID,
+              let profile = profiles.first(where: { $0.id == profileID }),
+              profile.options.autoReconnect,
+              reconnectAttempts < Self.maxReconnectAttempts else { return false }
+
+        let attempt = reconnectAttempts
+        reconnectAttempts += 1
+        cancelPendingReconnect()
+        stopWireGuardMonitor()
+        let delay = Self.reconnectDelay(attempt: attempt)
+        let serverID = status.serverID
+        status = VPNRuntimeStatus(state: .reconnecting, profileID: profileID, serverID: serverID)
+
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            // Bail if the user disconnected or switched away while we waited.
+            guard self.status.profileID == profileID, self.status.state == .reconnecting,
+                  let profile = self.profiles.first(where: { $0.id == profileID }) else { return }
+            // Clean up any lingering bundled-tunnel process before restarting it
+            // (e.g. a WireGuard helper whose interface vanished but didn't exit).
+            if profile.kind == .openVPN || profile.kind == .wireGuard {
+                if let handle = self.activeTunnelHandle {
+                    _ = await self.helper.stopVPNTunnel(handle: handle)
+                    self.activeTunnelHandle = nil
+                }
+                self.ovpnClient?.close()
+                self.ovpnClient = nil
+            }
+            guard self.status.profileID == profileID, self.status.state == .reconnecting else { return }
+            let endpoint = profile.servers.first(where: { $0.id == serverID }) ?? profile.selectedServer
+            self.dispatchConnect(profile, endpoint: endpoint, reconnecting: true)
+        }
+        return true
+    }
+
+    private func cancelPendingReconnect() {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+    }
+
+    /// Exponential backoff capped at 30 s: 2, 4, 8, 16, 30, 30, …
+    private static func reconnectDelay(attempt: Int) -> Double {
+        min(30, 2 * pow(2, Double(attempt)))
+    }
+
+    /// Whether an IKEv2 disconnect error code is worth retrying. Auth (8), client
+    /// certificate (9/10/11) and configuration (4/13) errors are permanent; the
+    /// rest (network/server transients, or no error at all) are retryable.
+    private static func ikev2DropIsRetryable(_ code: Int?) -> Bool {
+        guard let code else { return true }
+        switch code {
+        case 4, 8, 9, 10, 11, 13: return false
+        default: return true
+        }
+    }
+
+    // MARK: - WireGuard liveness
+
+    /// WireGuard has no control channel, so poll the tunnel interface; if it
+    /// disappears while we think we're connected, treat it as an unexpected drop.
+    private func startWireGuardMonitor(interface: String, profileID: UUID) {
+        stopWireGuardMonitor()
+        guard !interface.isEmpty else { return }
+        wgMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                guard self.status.profileID == profileID, self.status.state == .connected else { return }
+                if !Self.interfaceExists(interface) {
+                    self.handleWireGuardDrop()
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopWireGuardMonitor() {
+        wgMonitorTask?.cancel()
+        wgMonitorTask = nil
+    }
+
+    private func handleWireGuardDrop() {
+        if case .failed = status.state { return }
+        if status.state == .disconnecting || status.state == .idle { return }
+        if scheduleReconnectIfEnabled(profileID: status.profileID) { return }
+        status.state = .failed("The VPN connection stopped.")
+    }
+
+    private static func interfaceExists(_ name: String) -> Bool {
+        var addrs: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&addrs) == 0 else { return true }  // on error, don't declare a drop
+        defer { freeifaddrs(addrs) }
+        var ptr = addrs
+        while let cur = ptr {
+            if String(cString: cur.pointee.ifa_name) == name { return true }
+            ptr = cur.pointee.ifa_next
+        }
+        return false
     }
 
     private func startNativeTunnel(_ profile: VPNProfile) async {

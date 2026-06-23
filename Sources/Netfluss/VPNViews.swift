@@ -312,6 +312,17 @@ struct VPNProfileRow: View {
                 } label: { LText("Server") }
             }
 
+            if supportsAutoReconnect {
+                Toggle(isOn: Binding(
+                    get: { profile.options.autoReconnect },
+                    set: { vpn.setAutoReconnect($0, for: profile) }
+                )) {
+                    LText("Reconnect automatically")
+                        .font(.caption)
+                }
+                .toggleStyle(.checkbox)
+            }
+
             if profile.requiresCredentials {
                 DisclosureGroup(isExpanded: $showCredentials) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -348,6 +359,16 @@ struct VPNProfileRow: View {
             return "System VPN · \(profile.nativeServiceName ?? profile.kind.displayName)"
         }
         return "\(profile.kind.displayName) · \(profile.servers.count) server(s)"
+    }
+
+    /// Auto-reconnect is offered only where NetFluss can detect a drop: OpenVPN
+    /// (management socket), WireGuard (interface poll), and NEVPNManager IKEv2.
+    /// Native scutil-managed services have no drop signal, so the toggle is hidden.
+    private var supportsAutoReconnect: Bool {
+        switch profile.kind {
+        case .openVPN, .wireGuard: return true
+        case .ikev2: return profile.ikev2Server != nil
+        }
     }
 
     private func saveCredentials() {

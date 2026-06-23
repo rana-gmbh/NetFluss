@@ -129,11 +129,14 @@ final class IKEv2VPNController {
         manager.connection.stopVPNTunnel()
     }
 
-    /// The reason the tunnel last disconnected (nil if it was a clean stop).
-    func fetchLastError(_ completion: @escaping (String?) -> Void) {
+    /// The reason the tunnel last disconnected (nil message if it was a clean
+    /// stop), plus the raw `NSError` code so the caller can tell transient drops
+    /// from permanent auth/config failures.
+    func fetchLastError(_ completion: @escaping (_ message: String?, _ code: Int?) -> Void) {
         manager.connection.fetchLastDisconnectError { error in
-            let message = (error as NSError?).map { "\($0.localizedDescription) [\($0.domain) \($0.code)]" }
-            Task { @MainActor in completion(message) }
+            let ns = error as NSError?
+            let message = ns.map { "\($0.localizedDescription) [\($0.domain) \($0.code)]" }
+            Task { @MainActor in completion(message, ns?.code) }
         }
     }
 
