@@ -101,6 +101,7 @@ private func accentNSColor(named name: String) -> NSColor? {
     case "pink":   return .systemPink
     case "white":  return .white
     case "black":  return .black
+    case "system": return .labelColor
     default:       return nil
     }
 }

@@ -954,22 +954,22 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         let menuBarDownloadTextColorName = UserDefaults.standard.string(forKey: "menuBarDownloadTextColor") ?? "blue"
         let menuBarUploadTextColorHex = UserDefaults.standard.string(forKey: "menuBarUploadTextColorHex") ?? ""
         let menuBarDownloadTextColorHex = UserDefaults.standard.string(forKey: "menuBarDownloadTextColorHex") ?? ""
-        let upColor = resolvedAccentNSColor(
+        var upColor = resolvedAccentNSColor(
             selection: uploadColorName,
             customHex: uploadColorHex,
             fallback: NSColor(theme.uploadColor)
         )
-        let downColor = resolvedAccentNSColor(
+        var downColor = resolvedAccentNSColor(
             selection: downloadColorName,
             customHex: downloadColorHex,
             fallback: NSColor(theme.downloadColor)
         )
-        let upTextColor = resolvedAccentNSColor(
+        var upTextColor = resolvedAccentNSColor(
             selection: menuBarUploadTextColorName,
             customHex: menuBarUploadTextColorHex,
             fallback: upColor
         )
-        let downTextColor = resolvedAccentNSColor(
+        var downTextColor = resolvedAccentNSColor(
             selection: menuBarDownloadTextColorName,
             customHex: menuBarDownloadTextColorHex,
             fallback: downColor
@@ -982,6 +982,20 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         case .stack, .unified:
             defaultTextColor = .labelColor
         }
+
+        // "System default" resolves to NSColor.labelColor, which is near-black on a
+        // light appearance. Dashboard styles draw a fixed dark capsule, so labelColor
+        // would be invisible there — substitute the dashboard text color instead.
+        switch style {
+        case .dashboard, .dashboardBasic:
+            if uploadColorName == "system" { upColor = defaultTextColor }
+            if downloadColorName == "system" { downColor = defaultTextColor }
+            if menuBarUploadTextColorName == "system" { upTextColor = defaultTextColor }
+            if menuBarDownloadTextColorName == "system" { downTextColor = defaultTextColor }
+        case .stack, .unified:
+            break
+        }
+
         let textColor = defaultTextColor
         let secondaryTextColor: NSColor = {
             switch style {
