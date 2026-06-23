@@ -100,6 +100,7 @@ final class AppState {
         self.wifiManager = wifiManager
         self.vpnManager = VPNManager.shared
         VPNManager.shared.networkMonitor = monitor
+        VPNManager.shared.connectOnLaunchIfNeeded()
         self.statusBar = StatusBarController(
             monitor: monitor,
             statisticsManager: statisticsManager,
