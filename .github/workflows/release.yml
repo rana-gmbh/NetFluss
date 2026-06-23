@@ -103,6 +103,23 @@ jobs:
           echo "wg:"; lipo -archs NetFluss.app/Contents/Library/VPN/wg
           echo "bash:"; lipo -archs NetFluss.app/Contents/Library/VPN/bash
 
+      # The app is signed with the Personal VPN entitlement (allow-vpn) so IKEv2
+      # works. That entitlement is restricted and authorized only by an embedded
+      # provisioning profile — signing with allow-vpn but NO profile produces an
+      # app that fails to launch. So this step is a hard gate: no profile, no build.
+      - name: Embed provisioning profile
+        env:
+          PROFILE_BASE64: ${{ secrets.VPN_PROVISIONING_PROFILE }}
+        run: |
+          if [ -z "$PROFILE_BASE64" ]; then
+            echo "::error::VPN_PROVISIONING_PROFILE secret is not set. The app is signed with the Personal VPN entitlement (allow-vpn) and will NOT launch without an embedded provisioning profile. Create it with: base64 -i NetFluss_Developer_ID_VPN.provisionprofile | gh secret set VPN_PROVISIONING_PROFILE"
+            exit 1
+          fi
+          echo "$PROFILE_BASE64" | base64 --decode > NetFluss.app/Contents/embedded.provisionprofile
+          # Fail early if the secret didn't decode to a valid CMS-signed profile.
+          security cms -D -i NetFluss.app/Contents/embedded.provisionprofile > /dev/null
+          echo "Embedded provisioning profile ($(stat -f%z NetFluss.app/Contents/embedded.provisionprofile) bytes)"
+
       - name: Sign
         run: |
           codesign --force \
@@ -114,9 +131,15 @@ jobs:
             --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
             --options=runtime \
             --timestamp \
-            --entitlements Netfluss.entitlements \
+            --entitlements Netfluss-vpn.entitlements \
             NetFluss.app
           codesign --verify --deep --strict NetFluss.app
+          # Guard: confirm the shipped app actually carries the VPN entitlement and
+          # the profile, so a misconfigured build can never produce a broken release.
+          codesign -d --entitlements - NetFluss.app 2>/dev/null | grep -q "allow-vpn" \
+            || { echo "::error::allow-vpn entitlement missing from signed app"; exit 1; }
+          test -f NetFluss.app/Contents/embedded.provisionprofile \
+            || { echo "::error::embedded.provisionprofile missing from signed app"; exit 1; }
 
       - name: Package
         run: |
