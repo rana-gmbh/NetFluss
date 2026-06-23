@@ -93,7 +93,17 @@ final class IKEv2VPNController {
         // Local ID intentionally left unset — providers (e.g. AdGuard) expect it
         // empty for EAP; the username is supplied via EAP, not the IKE identity.
         proto.username = username
-        proto.authenticationMethod = .none        // server cert + EAP user auth
+        // The server authenticates with its certificate; the user authenticates
+        // via EAP (username/password). For this "server cert + EAP" model the IKE
+        // authentication method must be .certificate — NOT .none. This matches
+        // what macOS System Settings and a .mobileconfig configure
+        // (AuthenticationMethod=Certificate + ExtendedAuthEnabled=1); using .none
+        // makes the server-side authentication fail with NEVPNConnectionErrorDomain
+        // 8. No client certificate/identity is needed because extended (EAP)
+        // authentication is enabled — the cert here is the server's, validated by
+        // the client. (Local identifier left empty to match the working manual
+        // setup, where macOS uses the client IP as the IKE IDi.)
+        proto.authenticationMethod = .certificate
         proto.useExtendedAuthentication = true     // username/password (EAP)
         proto.disconnectOnSleep = false
         // No passwordReference — see the method doc. The password is supplied at
