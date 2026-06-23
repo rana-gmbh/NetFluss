@@ -39,6 +39,7 @@ struct MenuBarView: View {
     @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "flow"
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
     @AppStorage("showWifiSwitcher") private var showWifiSwitcher: Bool = false
+    @AppStorage("showVPN") private var showVPN: Bool = false
     @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
     @AppStorage("openWRTEnabled") private var openWRTEnabled: Bool = false
@@ -149,6 +150,7 @@ struct MenuBarView: View {
         case .router:
             return fritzBoxEnabled || unifiEnabled || openWRTEnabled || opnsenseEnabled
         case .wifi: return showWifiSwitcher
+        case .vpn: return showVPN
         case .topApps: return showTopApps
         }
     }
@@ -226,6 +228,9 @@ struct MenuBarView: View {
 
         case .wifi:
             WifiSwitcherSection()
+
+        case .vpn:
+            VPNSectionView(useBits: useBits)
 
         case .topApps:
             TopAppsSection(topApps: monitor.topApps, useBits: useBits)
