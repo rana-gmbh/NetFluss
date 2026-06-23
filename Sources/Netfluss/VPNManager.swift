@@ -359,6 +359,8 @@ struct VPNProfileStore {
         try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         for file in files {
             let dest = dir.appendingPathComponent(file.name)
+            // file.name may carry subdirectories (folder/zip imports).
+            try fileManager.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
             try file.data.write(to: dest, options: .atomic)
         }
     }
