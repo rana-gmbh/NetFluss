@@ -314,6 +314,7 @@
 "%d snapshots were captured. Paste them into the GitHub issue (issue #31) so the developer can identify which interface accumulates download bytes on your Mac." = "%d Aufnahmen wurden erfasst. Fügen Sie sie in das GitHub-Issue (#31) ein, damit der Entwickler erkennen kann, welche Schnittstelle auf Ihrem Mac Download-Bytes ansammelt.";
 "Wi-Fi Details" = "WLAN-Details";
 "Reconnect" = "Erneut verbinden";
+"Reconnect automatically" = "Automatisch neu verbinden";
 "Edit" = "Bearbeiten";
 "Delete" = "Löschen";
 "Rename" = "Umbenennen";

@@ -314,6 +314,7 @@
 "%d snapshots were captured. Paste them into the GitHub issue (issue #31) so the developer can identify which interface accumulates download bytes on your Mac." = "已擷取 %d 個快照。請將其貼到 GitHub Issue (#31)，以便開發者判斷您 Mac 上哪個介面在累積下載位元組。";
 "Wi-Fi Details" = "Wi-Fi 詳細資訊";
 "Reconnect" = "重新連線";
+"Reconnect automatically" = "自動重新連線";
 "Edit" = "編輯";
 "Delete" = "刪除";
 "Rename" = "重新命名";
