@@ -788,6 +788,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         .environmentObject(monitor)
         .environmentObject(statisticsManager)
         .environmentObject(wifiManager)
+        .environmentObject(VPNManager.shared)
         .environment(\.locale, AppLanguage.current(from: UserDefaults.standard.string(forKey: "appLanguage") ?? AppLanguage.system.rawValue).locale)
     }
 

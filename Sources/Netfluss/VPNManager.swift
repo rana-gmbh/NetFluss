@@ -28,6 +28,8 @@ import Foundation
 ///     the helper's `scutil --nc` wrappers.
 @MainActor
 final class VPNManager: ObservableObject {
+    static let shared = VPNManager()
+
     @Published private(set) var profiles: [VPNProfile] = []
     @Published private(set) var status: VPNRuntimeStatus = .idle
 
@@ -72,6 +74,10 @@ final class VPNManager: ObservableObject {
         profiles.append(profile)
         try store.save(profiles)
         return profile
+    }
+
+    func hasStoredCredentials(_ profile: VPNProfile) -> Bool {
+        credentialStore.load(account: profile.keychainAccount) != nil
     }
 
     /// Store (or clear) the username/password for a profile in the Keychain.

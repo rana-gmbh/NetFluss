@@ -23,6 +23,7 @@ final class AppState {
     let statisticsManager: StatisticsManager
     let speedTestManager: SpeedTestManager
     let wifiManager: WifiManager
+    let vpnManager: VPNManager
     let statusBar: StatusBarController
     let updateNotifier: UpdateNotifier
     private var defaultsObserver: NSObjectProtocol?
@@ -86,7 +87,8 @@ final class AppState {
             "opnsenseHost": "",
             "automaticUpdateChecksEnabled": true,
             "appLanguage": AppLanguage.system.rawValue,
-            "backgroundUpdateLastNotifiedVersion": ""
+            "backgroundUpdateLastNotifiedVersion": "",
+            "showVPN": false
         ])
         let monitor = NetworkMonitor()
         self.monitor = monitor
@@ -96,6 +98,7 @@ final class AppState {
         self.speedTestManager = speedTestManager
         let wifiManager = WifiManager.shared
         self.wifiManager = wifiManager
+        self.vpnManager = VPNManager.shared
         self.statusBar = StatusBarController(
             monitor: monitor,
             statisticsManager: statisticsManager,

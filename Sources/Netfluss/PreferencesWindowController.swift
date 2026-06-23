@@ -38,6 +38,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         let view = LocalizedRoot {
             PreferencesView()
                 .environmentObject(monitor)
+                .environmentObject(VPNManager.shared)
         }
         let hosting = NSHostingController(rootView: view)
         hosting.sizingOptions = []

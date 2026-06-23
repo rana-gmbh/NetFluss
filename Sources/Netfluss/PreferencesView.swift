@@ -179,6 +179,7 @@ private enum PreferencePane: String, CaseIterable, Identifiable {
     case topApps
     case dns
     case wifi
+    case vpn
     case router
 
     var id: Self { self }
@@ -199,6 +200,8 @@ private enum PreferencePane: String, CaseIterable, Identifiable {
             return "DNS"
         case .wifi:
             return "Wi-Fi"
+        case .vpn:
+            return "VPN"
         case .router:
             return "Router"
         }
@@ -220,6 +223,8 @@ private enum PreferencePane: String, CaseIterable, Identifiable {
             return "server.rack"
         case .wifi:
             return "wifi"
+        case .vpn:
+            return "lock.shield"
         case .router:
             return "wifi.router"
         }
@@ -831,6 +836,10 @@ struct PreferencesView: View {
             }
                 }
 
+                if selectedPane == .vpn {
+                    VPNPreferencesContent()
+                }
+
                 if selectedPane == .router {
                     Section {
                 Toggle(isOn: $fritzBoxEnabled) {
@@ -1428,6 +1437,7 @@ private struct PopoverSectionsReorderEditor: View {
     @AppStorage("lastConnectionStatusMode") private var lastConnectionStatusMode: String = "flow"
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
     @AppStorage("showWifiSwitcher") private var showWifiSwitcher: Bool = false
+    @AppStorage("showVPN") private var showVPN: Bool = false
     @AppStorage("showTopApps") private var showTopApps: Bool = false
     @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
@@ -1482,6 +1492,8 @@ private struct PopoverSectionsReorderEditor: View {
             )
         case .wifi:
             return Binding(get: { showWifiSwitcher }, set: { showWifiSwitcher = $0 })
+        case .vpn:
+            return Binding(get: { showVPN }, set: { showVPN = $0 })
         case .topApps:
             return Binding(get: { showTopApps }, set: { showTopApps = $0 })
         }
