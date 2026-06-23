@@ -148,6 +148,19 @@ actor PrivilegedHelperManager {
         }
     }
 
+    /// Returns the persistent reference (base64, in `stdout`) on success.
+    func storeSystemVPNPassword(service: String, account: String, password: String) async -> CommandResult? {
+        await performIfAvailable { helper, reply in
+            helper.storeSystemVPNPassword(service: service, account: account, password: password, withReply: reply)
+        }
+    }
+
+    func deleteSystemVPNPassword(service: String, account: String) async -> CommandResult? {
+        await performIfAvailable { helper, reply in
+            helper.deleteSystemVPNPassword(service: service, account: account, withReply: reply)
+        }
+    }
+
     func connectNativeVPN(serviceName: String) async -> CommandResult? {
         await performIfAvailable { helper, reply in
             helper.connectNativeVPN(serviceName: serviceName, withReply: reply)
