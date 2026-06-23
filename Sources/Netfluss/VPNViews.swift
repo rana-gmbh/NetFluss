@@ -187,6 +187,7 @@ struct VPNPreferencesContent: View {
     @EnvironmentObject private var vpn: VPNManager
     @AppStorage("showVPN") private var showVPN: Bool = false
     @State private var importError: String?
+    @State private var nativeServices: [NativeVPN.Service] = []
 
     var body: some View {
         Section {
@@ -203,6 +204,25 @@ struct VPNPreferencesContent: View {
             LText("VPN")
         }
 
+        Section {
+            if nativeServices.isEmpty {
+                LText("No system VPNs found. Configure one in System Settings → VPN, or install a provider configuration profile below.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Menu {
+                    ForEach(nativeServices) { service in
+                        Button("\(service.name) — \(service.kind)") { vpn.addNativeProfile(service: service) }
+                    }
+                } label: { LText("Add system VPN…") }
+            }
+            Button { installMobileconfig() } label: { LText("Install configuration profile (.mobileconfig)…") }
+            Button { nativeServices = vpn.nativeServices() } label: { LText("Refresh system VPNs") }
+        } header: {
+            LText("System VPN (IKEv2 / IPsec / L2TP)")
+        }
+        .onAppear { nativeServices = vpn.nativeServices() }
+
         if !vpn.profiles.isEmpty {
             Section {
                 ForEach(vpn.profiles) { profile in
@@ -212,6 +232,17 @@ struct VPNPreferencesContent: View {
                 LText("Profiles")
             }
         }
+    }
+
+    private func installMobileconfig() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        if let t = UTType(filenameExtension: "mobileconfig") { panel.allowedContentTypes = [t] }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        // Opening a .mobileconfig hands it to macOS, which prompts to install it
+        // in System Settings; the new service then appears under "Add system VPN".
+        NSWorkspace.shared.open(url)
     }
 
     private func importProfile(kind: VPNProtocolKind) {
@@ -256,7 +287,7 @@ struct VPNProfileRow: View {
                         .multilineTextAlignment(.leading)
                         .labelsHidden()
                         .onSubmit { vpn.rename(profile, to: editedName) }
-                    Text(verbatim: "\(profile.kind.displayName) · \(profile.servers.count) server(s)")
+                    Text(verbatim: subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -307,6 +338,13 @@ struct VPNProfileRow: View {
         }
         .padding(.vertical, 2)
         .onAppear { editedName = profile.name }
+    }
+
+    private var subtitle: String {
+        if profile.kind == .ikev2 {
+            return "System VPN · \(profile.nativeServiceName ?? profile.kind.displayName)"
+        }
+        return "\(profile.kind.displayName) · \(profile.servers.count) server(s)"
     }
 
     private func saveCredentials() {
