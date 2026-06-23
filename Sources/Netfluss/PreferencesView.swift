@@ -20,6 +20,7 @@ import ServiceManagement
 import SwiftUI
 
 private let colorOptions: [(id: String, label: String)] = [
+    ("system", "System default"),
     ("green", "Green"), ("blue", "Blue"), ("orange", "Orange"),
     ("teal", "Teal"), ("purple", "Purple"), ("pink", "Pink"), ("white", "White"), ("black", "Black")
 ]
@@ -37,6 +38,7 @@ private func swatchColor(_ name: String) -> Color {
     case "pink":   return .pink
     case "white":  return Color(.white)
     case "black":  return Color(.black)
+    case "system": return Color(nsColor: .labelColor)
     default:       return .primary
     }
 }
