@@ -34,7 +34,10 @@ cp Packaging/Resources/AppIconDark.icns NetFluss.app/Contents/Resources/AppIconD
 cp -R Packaging/Resources/SpeedTest NetFluss.app/Contents/Resources/SpeedTest
 cp -R Packaging/Resources/*.lproj NetFluss.app/Contents/Resources/   # REQUIRED — see note below
 # Bundle the OpenVPN binary + dylib closure for the VPN client (needs `brew install openvpn`).
-# Signs the VPN Mach-Os itself; arm64-only — a universal release must lipo in x86_64 too (TODO).
+# Signs the VPN Mach-Os itself. Produces a universal set when an Intel Homebrew with
+# openvpn is present at /usr/local; otherwise arm64-only (VPN won't run on Intel).
+# Intel openvpn must be built on/for the oldest supported macOS (CI Intel runner) — a
+# from-source build on Apple Silicon/macOS 26 targets macOS 26 and won't run on Intel.
 ./Packaging/VPN/bundle-openvpn.sh NetFluss.app/Contents/Library/VPN "Developer ID Application: Rana GmbH (D6P24X5377)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.x.x" NetFluss.app/Contents/Info.plist
 xattr -cr NetFluss.app   # strip resource-fork/Finder xattrs or codesign fails with "resource fork ... not allowed"
