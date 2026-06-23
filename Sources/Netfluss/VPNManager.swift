@@ -204,7 +204,7 @@ final class VPNManager: ObservableObject {
             case "RECONNECTING":
                 status.state = .reconnecting
             case "EXITING":
-                status.state = .idle
+                handleUnexpectedStop()
             default:
                 if status.state == .idle { status.state = .connecting }
             }
@@ -216,10 +216,22 @@ final class VPNManager: ObservableObject {
         case .authFailed(let message):
             status.state = .failed(enrichedFailure(message))
         case .disconnected:
-            status.state = .idle
+            handleUnexpectedStop()
         case .log:
             break
         }
+    }
+
+    /// openvpn stopped on its own (failed to connect, or an established tunnel
+    /// dropped). Surface the real reason from its log instead of silently
+    /// returning to "Not connected".
+    private func handleUnexpectedStop() {
+        if case .failed = status.state { return }          // already have a reason
+        if status.state == .disconnecting || status.state == .idle {
+            status = VPNRuntimeStatus(state: .idle, profileID: status.profileID)
+            return
+        }
+        status.state = .failed(enrichedFailure("The VPN connection stopped."))
     }
 
     private func startNativeTunnel(_ profile: VPNProfile) async {
