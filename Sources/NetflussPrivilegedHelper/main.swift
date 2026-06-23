@@ -69,6 +69,7 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         kind: String,
         configPath: String,
         managementSocketPath: String,
+        socketOwner: String,
         withReply reply: @escaping (Bool, String?) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
@@ -95,6 +96,7 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
                 args = [
                     "--config", configPath,
                     "--management", managementSocketPath, "unix",
+                    "--management-client-user", socketOwner,
                     "--management-hold",
                     "--script-security", "0"
                 ]

@@ -35,6 +35,8 @@ final class VPNManager: ObservableObject {
     private let store: VPNProfileStore
     /// Helper-side handle of the running bundled-binary tunnel (if any).
     private var activeTunnelHandle: String?
+    /// Management-interface driver for the active OpenVPN tunnel.
+    private var ovpnClient: OpenVPNManagementClient?
 
     init(helper: PrivilegedHelperManager = .shared, store: VPNProfileStore = VPNProfileStore()) {
         self.helper = helper
@@ -105,9 +107,14 @@ final class VPNManager: ObservableObject {
         let previous = status
         status.state = .disconnecting
 
+        // Ask openvpn to exit cleanly over the management socket first.
+        ovpnClient?.disconnect()
+
         Task { [weak self] in
             guard let self else { return }
             if let handle = self.activeTunnelHandle {
+                // Give the clean shutdown a moment, then ensure the process is gone.
+                try? await Task.sleep(nanoseconds: 500_000_000)
                 _ = await self.helper.stopVPNTunnel(handle: handle)
                 self.activeTunnelHandle = nil
             } else if let profileID = previous.profileID,
@@ -115,6 +122,8 @@ final class VPNManager: ObservableObject {
                       profile.kind == .ikev2 {
                 _ = await self.helper.disconnectNativeVPN(serviceName: self.nativeServiceName(for: profile))
             }
+            self.ovpnClient?.close()
+            self.ovpnClient = nil
             self.status = .idle
         }
     }
@@ -128,23 +137,62 @@ final class VPNManager: ObservableObject {
         let result = await helper.startVPNTunnel(
             kind: profile.kind.rawValue,
             configPath: configPath,
-            managementSocketPath: socketPath
+            managementSocketPath: socketPath,
+            socketOwner: NSUserName()
         )
 
         guard let result, result.success else {
             status.state = .failed(result?.stderr ?? "Could not start the VPN helper.")
             return
         }
-
         activeTunnelHandle = result.stdout   // helper returns the handle in stdout
 
-        // TODO (next phase): connect to the OpenVPN management socket at
-        // `socketPath`, send credentials (from Keychain) in response to its
-        // prompts, release `--management-hold`, then parse `>STATE:` and
-        // `bytecount` events to drive `status` (connected, assignedIP, bytesIn/
-        // Out, tunnelInterface). For now we optimistically mark connecting.
-        status.state = .connecting
-        status.connectedSince = Date()
+        guard profile.kind == .openVPN else {
+            // WireGuard control channel (wg UAPI) is a separate next-phase driver.
+            return
+        }
+
+        let client = OpenVPNManagementClient(socketPath: socketPath)
+        client.credentialsProvider = { kind in
+            // TODO (next phase): fetch from Keychain. Cert-only profiles never
+            // prompt, so returning nil here still connects those.
+            _ = kind
+            return nil
+        }
+        client.onEvent = { [weak self] event in
+            Task { @MainActor in self?.handleOpenVPNEvent(event) }
+        }
+        ovpnClient = client
+        client.connect()
+    }
+
+    private func handleOpenVPNEvent(_ event: OpenVPNManagementClient.Event) {
+        switch event {
+        case .state(let state, let assignedIP):
+            switch state {
+            case "CONNECTED":
+                status.state = .connected
+                if status.connectedSince == nil { status.connectedSince = Date() }
+                if let assignedIP { status.assignedIP = assignedIP }
+            case "RECONNECTING":
+                status.state = .reconnecting
+            case "EXITING":
+                status.state = .idle
+            default:
+                if status.state == .idle { status.state = .connecting }
+            }
+        case .byteCount(let inBytes, let outBytes):
+            status.bytesIn = inBytes
+            status.bytesOut = outBytes
+        case .needCredentials:
+            status.state = .failed("This VPN requires a username and password (credential entry is coming soon).")
+        case .authFailed(let message):
+            status.state = .failed(message)
+        case .disconnected:
+            status.state = .idle
+        case .log:
+            break
+        }
     }
 
     private func startNativeTunnel(_ profile: VPNProfile) async {

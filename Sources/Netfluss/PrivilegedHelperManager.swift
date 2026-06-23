@@ -118,12 +118,13 @@ actor PrivilegedHelperManager {
     // MARK: VPN
 
     /// Returns the tunnel handle (in `stdout`) on success.
-    func startVPNTunnel(kind: String, configPath: String, managementSocketPath: String) async -> CommandResult? {
+    func startVPNTunnel(kind: String, configPath: String, managementSocketPath: String, socketOwner: String) async -> CommandResult? {
         await performIfAvailable { helper, reply in
             helper.startVPNTunnel(
                 kind: kind,
                 configPath: configPath,
                 managementSocketPath: managementSocketPath,
+                socketOwner: socketOwner,
                 withReply: reply
             )
         }

@@ -28,10 +28,14 @@ public enum NetflussHelperConstants {
     /// supplies the binary path). The helper builds a safe argument list itself
     /// (e.g. forcing `--script-security 0` for OpenVPN). On success the reply
     /// message carries an opaque tunnel handle used to stop / query it.
+    /// `socketOwner` is the app's user name; the helper passes it to
+    /// `--management-client-user` so the management socket is owned by (and only
+    /// reachable by) that user, letting the unprivileged app connect to it.
     func startVPNTunnel(
         kind: String,
         configPath: String,
         managementSocketPath: String,
+        socketOwner: String,
         withReply reply: @escaping (Bool, String?) -> Void
     )
 
