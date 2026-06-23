@@ -85,8 +85,10 @@ struct VPNCredentialStore: Sendable {
         guard !password.isEmpty, let data = password.data(using: .utf8) else { return nil }
         let attributes: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
+            kSecUseDataProtectionKeychain as String: true,
             kSecAttrService as String: Self.ikev2Service,
             kSecAttrAccount as String: account,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
             kSecValueData as String: data,
             kSecReturnPersistentRef as String: true
         ]
@@ -99,6 +101,7 @@ struct VPNCredentialStore: Sendable {
     func ikev2PasswordReference(account: String) -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
+            kSecUseDataProtectionKeychain as String: true,
             kSecAttrService as String: Self.ikev2Service,
             kSecAttrAccount as String: account,
             kSecReturnPersistentRef as String: true,
@@ -112,6 +115,7 @@ struct VPNCredentialStore: Sendable {
     func deleteIKEv2Password(account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
+            kSecUseDataProtectionKeychain as String: true,
             kSecAttrService as String: Self.ikev2Service,
             kSecAttrAccount as String: account
         ]

@@ -51,6 +51,20 @@ final class IKEv2VPNController {
 
     var status: NEVPNStatus { manager.connection.status }
 
+    enum IKEv2Error: LocalizedError {
+        case missingPassword
+        case step(String, Error)
+        var errorDescription: String? {
+            switch self {
+            case .missingPassword:
+                return "The VPN password isn't stored in the Keychain — remove the profile and add it again."
+            case .step(let step, let error):
+                let ns = error as NSError
+                return "IKEv2 \(step) failed: \(ns.localizedDescription) [\(ns.domain) \(ns.code)]"
+            }
+        }
+    }
+
     /// Configure the Personal VPN from the profile and start it. `passwordRef` is
     /// a persistent Keychain reference to the password item.
     func connect(
@@ -60,7 +74,9 @@ final class IKEv2VPNController {
         username: String,
         passwordRef: Data?
     ) async throws {
-        try await load()
+        guard let passwordRef else { throw IKEv2Error.missingPassword }
+
+        do { try await load() } catch { throw IKEv2Error.step("load", error) }
 
         let proto = NEVPNProtocolIKEv2()
         proto.serverAddress = server
@@ -76,10 +92,10 @@ final class IKEv2VPNController {
         manager.localizedDescription = name
         manager.isEnabled = true
 
-        try await save()
+        do { try await save() } catch { throw IKEv2Error.step("save", error) }
         // A save can invalidate the in-memory object — reload before starting.
-        try await load()
-        try manager.connection.startVPNTunnel()
+        do { try await load() } catch { throw IKEv2Error.step("reload", error) }
+        do { try manager.connection.startVPNTunnel() } catch { throw IKEv2Error.step("start", error) }
     }
 
     func disconnect() {

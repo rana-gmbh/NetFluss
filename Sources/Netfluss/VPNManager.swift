@@ -394,7 +394,7 @@ final class VPNManager: ObservableObject {
             // Connection progress arrives via handleIKEv2Status.
         } catch {
             activeIKEv2 = false
-            status.state = .failed("IKEv2 could not start: \(error.localizedDescription). (Requires the Personal VPN entitlement.)")
+            status.state = .failed(error.localizedDescription)
         }
     }
 

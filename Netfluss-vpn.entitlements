@@ -14,5 +14,12 @@
     <array>
         <string>allow-vpn</string>
     </array>
+    <!-- application-identifier gives the app a data-protection-keychain access
+         group, which NEVPNManager needs to resolve the password reference.
+         Authorized by the embedded provisioning profile. -->
+    <key>com.apple.application-identifier</key>
+    <string>D6P24X5377.com.local.netfluss</string>
+    <key>com.apple.developer.team-identifier</key>
+    <string>D6P24X5377</string>
 </dict>
 </plist>
