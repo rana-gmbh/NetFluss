@@ -65,16 +65,25 @@ final class IKEv2VPNController {
         }
     }
 
-    /// Configure the Personal VPN from the profile and start it. `passwordRef` is
-    /// a persistent Keychain reference to the password item.
+    /// Configure the Personal VPN from the profile and start it, passing the
+    /// EAP username/password directly to *this* connection.
+    ///
+    /// We deliberately do NOT store a `passwordReference` on the protocol. On
+    /// macOS the IKEv2 EAP path does not resolve `passwordReference` — a
+    /// long-standing, Apple-confirmed limitation (DTS: "a known limitation with
+    /// OSX") — so the VPN agent prompts for the password on every connect no
+    /// matter how/where the Keychain item is stored. Instead we hand the
+    /// credentials to the connection via `startVPNTunnel(options:)`, which the
+    /// agent uses without prompting. This works because the user always starts
+    /// the tunnel from NetFluss (not via on-demand, where the app isn't running).
     func connect(
         name: String,
         server: String,
         remoteID: String,
         username: String,
-        passwordRef: Data?
+        password: String
     ) async throws {
-        guard let passwordRef else { throw IKEv2Error.missingPassword }
+        guard !password.isEmpty else { throw IKEv2Error.missingPassword }
 
         do { try await load() } catch { throw IKEv2Error.step("load", error) }
 
@@ -84,10 +93,11 @@ final class IKEv2VPNController {
         // Local ID intentionally left unset — providers (e.g. AdGuard) expect it
         // empty for EAP; the username is supplied via EAP, not the IKE identity.
         proto.username = username
-        proto.passwordReference = passwordRef
         proto.authenticationMethod = .none        // server cert + EAP user auth
         proto.useExtendedAuthentication = true     // username/password (EAP)
         proto.disconnectOnSleep = false
+        // No passwordReference — see the method doc. The password is supplied at
+        // start time via the options dictionary below.
 
         manager.protocolConfiguration = proto
         manager.localizedDescription = name
@@ -96,7 +106,13 @@ final class IKEv2VPNController {
         do { try await save() } catch { throw IKEv2Error.step("save", error) }
         // A save can invalidate the in-memory object — reload before starting.
         do { try await load() } catch { throw IKEv2Error.step("reload", error) }
-        do { try manager.connection.startVPNTunnel() } catch { throw IKEv2Error.step("start", error) }
+
+        let options: [String: NSObject] = [
+            NEVPNConnectionStartOptionUsername: username as NSString,
+            NEVPNConnectionStartOptionPassword: password as NSString
+        ]
+        do { try manager.connection.startVPNTunnel(options: options) }
+        catch { throw IKEv2Error.step("start", error) }
     }
 
     func disconnect() {
