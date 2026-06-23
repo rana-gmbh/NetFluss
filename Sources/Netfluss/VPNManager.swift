@@ -84,6 +84,26 @@ final class VPNManager: ObservableObject {
         credentialStore.load(account: profile.keychainAccount) != nil
     }
 
+    /// Import a WireGuard config (single `.conf`, folder, or `.zip`) into a new
+    /// profile. Each `.conf` becomes a selectable server.
+    @discardableResult
+    func importWireGuardProfile(from source: URL, name: String? = nil) throws -> VPNProfile {
+        let result = try VPNConfigImporter.importWireGuard(from: source)
+        let id = UUID()
+        try store.writeConfigFiles(result.files, profileID: id)
+        let profile = VPNProfile(
+            id: id,
+            name: name ?? result.suggestedName,
+            kind: .wireGuard,
+            configFileName: result.primaryFileName,
+            servers: result.endpoints,
+            requiresCredentials: false
+        )
+        profiles.append(profile)
+        try store.save(profiles)
+        return profile
+    }
+
     /// Store (or clear) the username/password for a profile in the Keychain.
     func setCredentials(for profile: VPNProfile, username: String?, password: String?) {
         if username == nil && password == nil {
@@ -185,7 +205,13 @@ final class VPNManager: ObservableObject {
         activeTunnelHandle = result.stdout   // helper returns the handle in stdout
 
         guard profile.kind == .openVPN else {
-            // WireGuard control channel (wg UAPI) is a separate next-phase driver.
+            // WireGuard: wg-quick brought the tunnel up synchronously, so a
+            // successful helper reply means we're connected.
+            status.state = .connected
+            status.connectedSince = Date()
+            status.tunnelInterface = result.stdout
+            status.assignedIP = wireGuardAddress(for: profile, endpoint: endpoint)
+            refreshPublicIP()
             return
         }
 
@@ -309,6 +335,20 @@ final class VPNManager: ObservableObject {
 
     private func nativeServiceName(for profile: VPNProfile) -> String {
         "Netfluss \(profile.name)"
+    }
+
+    /// Parse the local [Interface] Address from a WireGuard config for display.
+    private func wireGuardAddress(for profile: VPNProfile, endpoint: VPNServerEndpoint?) -> String? {
+        let path = store.configPath(for: profile, endpoint: endpoint)
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            let parts = line.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 2, parts[0].caseInsensitiveCompare("Address") == .orderedSame else { continue }
+            let first = parts[1].split(separator: ",").first.map(String.init) ?? parts[1]
+            return first.split(separator: "/").first.map(String.init)
+        }
+        return nil
     }
 
     /// Unix socket path for the OpenVPN management interface. Kept short to stay

@@ -39,6 +39,9 @@ cp -R Packaging/Resources/*.lproj NetFluss.app/Contents/Resources/   # REQUIRED 
 # Intel openvpn must be built on/for the oldest supported macOS (CI Intel runner) — a
 # from-source build on Apple Silicon/macOS 26 targets macOS 26 and won't run on Intel.
 ./Packaging/VPN/bundle-openvpn.sh NetFluss.app/Contents/Library/VPN "Developer ID Application: Rana GmbH (D6P24X5377)"
+# WireGuard tools (needs `brew install wireguard-go wireguard-tools`). Bundles
+# wireguard-go + wg + wg-quick + bash (wg-quick needs bash 4+) and their dylibs.
+./Packaging/VPN/bundle-wireguard.sh NetFluss.app/Contents/Library/VPN "Developer ID Application: Rana GmbH (D6P24X5377)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.x.x" NetFluss.app/Contents/Info.plist
 xattr -cr NetFluss.app   # strip resource-fork/Finder xattrs or codesign fails with "resource fork ... not allowed"
 codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \

@@ -17,14 +17,13 @@
 
 import Foundation
 
-/// Parses imported OpenVPN configs into a profile shape. Accepts a single
-/// `.ovpn`, a folder of them, or a `.zip` (how providers usually ship "router"
-/// profiles — one file per server). Each `.ovpn` becomes one selectable server.
+/// Parses imported VPN configs into a profile shape. Accepts a single config, a
+/// folder of them, or a `.zip` (how providers usually ship "router" profiles —
+/// one file per server). Each config file becomes one selectable server.
 ///
-/// Configs that inline their certs (`<ca>…</ca>`) need nothing extra; configs
-/// that reference external files (`ca ca.crt`, `tls-auth ta.key 1`, …) need
-/// those files imported too — handled by copying the referenced sidecar files
-/// (single `.ovpn`) or the whole directory tree (folder / zip).
+/// OpenVPN configs that reference external files (`ca ca.crt`, `tls-auth ta.key`)
+/// have those sidecar files imported too; folder/zip imports copy the whole tree.
+/// WireGuard `.conf` files are self-contained.
 enum VPNConfigImporter {
     struct ConfigFile {
         /// Path relative to the profile directory (may contain subdirectories).
@@ -32,7 +31,7 @@ enum VPNConfigImporter {
         let data: Data
     }
 
-    struct OpenVPNImport {
+    struct ImportResult {
         var suggestedName: String
         var files: [ConfigFile]
         var endpoints: [VPNServerEndpoint]
@@ -41,25 +40,44 @@ enum VPNConfigImporter {
     }
 
     enum ImportError: LocalizedError {
-        case noConfigsFound
+        case noConfigsFound(String)
         case unreadable(String)
 
         var errorDescription: String? {
             switch self {
-            case .noConfigsFound: return "No .ovpn configuration files were found."
+            case .noConfigsFound(let ext): return "No .\(ext) configuration files were found."
             case .unreadable(let detail): return "Could not read the configuration: \(detail)."
             }
         }
     }
 
-    /// Directives whose argument is an external file the tunnel needs.
-    private static let fileDirectives: Set<String> = [
-        "ca", "cert", "key", "tls-auth", "tls-crypt", "tls-crypt-v2",
-        "pkcs12", "crl-verify", "extra-certs", "dh"
-    ]
+    private struct Parsed {
+        var host: String?
+        var port: Int?
+        var transport: String?
+        var requiresCredentials: Bool
+    }
+
     private static let maxFileBytes = 5 * 1024 * 1024
 
-    static func importOpenVPN(from url: URL) throws -> OpenVPNImport {
+    // MARK: - Entry points
+
+    static func importOpenVPN(from url: URL) throws -> ImportResult {
+        try importConfigs(from: url, ext: "ovpn", collectSidecars: true, parse: parseOpenVPN)
+    }
+
+    static func importWireGuard(from url: URL) throws -> ImportResult {
+        try importConfigs(from: url, ext: "conf", collectSidecars: false, parse: parseWireGuard)
+    }
+
+    // MARK: - Generic import
+
+    private static func importConfigs(
+        from url: URL,
+        ext: String,
+        collectSidecars: Bool,
+        parse: (String) -> Parsed
+    ) throws -> ImportResult {
         let fm = FileManager.default
         var isDir: ObjCBool = false
         guard fm.fileExists(atPath: url.path, isDirectory: &isDir) else {
@@ -67,95 +85,72 @@ enum VPNConfigImporter {
         }
 
         if url.pathExtension.lowercased() == "zip" {
-            return try importTree(root: try extractZip(url), suggestedName: url.deletingPathExtension().lastPathComponent)
+            return try importTree(root: try extractZip(url), ext: ext, suggestedName: url.deletingPathExtension().lastPathComponent, parse: parse)
         }
         if isDir.boolValue {
-            return try importTree(root: url, suggestedName: url.lastPathComponent)
+            return try importTree(root: url, ext: ext, suggestedName: url.lastPathComponent, parse: parse)
         }
-        return try importSingle(url)
+        return try importSingle(url, collectSidecars: collectSidecars, parse: parse)
     }
 
-    // MARK: - Single .ovpn (+ referenced sidecar files)
-
-    private static func importSingle(_ url: URL) throws -> OpenVPNImport {
+    private static func importSingle(_ url: URL, collectSidecars: Bool, parse: (String) -> Parsed) throws -> ImportResult {
         guard let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) else {
             throw ImportError.unreadable(url.lastPathComponent)
         }
         let name = url.lastPathComponent
         var files = [ConfigFile(name: name, data: data)]
 
-        let dir = url.deletingLastPathComponent()
-        for ref in referencedFiles(in: text) where !ref.contains("..") {
-            let refURL = dir.appendingPathComponent(ref)
-            if let d = try? Data(contentsOf: refURL), d.count <= maxFileBytes {
-                files.append(ConfigFile(name: ref, data: d))
+        if collectSidecars {
+            let dir = url.deletingLastPathComponent()
+            for ref in referencedFiles(in: text) where !ref.contains("..") {
+                let refURL = dir.appendingPathComponent(ref)
+                if let d = try? Data(contentsOf: refURL), d.count <= maxFileBytes {
+                    files.append(ConfigFile(name: ref, data: d))
+                }
             }
         }
 
         let parsed = parse(text)
         let baseName = url.deletingPathExtension().lastPathComponent
         let endpoint = VPNServerEndpoint(
-            label: baseName,
-            host: parsed.host ?? baseName,
-            port: parsed.port,
-            transport: parsed.transport,
-            configFileName: name
+            label: baseName, host: parsed.host ?? baseName, port: parsed.port,
+            transport: parsed.transport, configFileName: name
         )
-        return OpenVPNImport(
-            suggestedName: baseName,
-            files: files,
-            endpoints: [endpoint],
-            primaryFileName: name,
-            requiresCredentials: parsed.requiresCredentials
-        )
+        return ImportResult(suggestedName: baseName, files: files, endpoints: [endpoint], primaryFileName: name, requiresCredentials: parsed.requiresCredentials)
     }
 
-    // MARK: - Folder / zip (copy the whole tree, one endpoint per .ovpn)
-
-    private static func importTree(root: URL, suggestedName: String) throws -> OpenVPNImport {
+    private static func importTree(root: URL, ext: String, suggestedName: String, parse: (String) -> Parsed) throws -> ImportResult {
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey]) else {
-            throw ImportError.noConfigsFound
+            throw ImportError.noConfigsFound(ext)
         }
 
         var files: [ConfigFile] = []
-        var ovpnRelPaths: [String] = []
+        var configRelPaths: [String] = []
         for case let fileURL as URL in enumerator {
             guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
             let rel = relativePath(of: fileURL, under: root)
-            guard !rel.isEmpty, !rel.hasPrefix("__MACOSX/"), !(fileURL.lastPathComponent.hasPrefix("._")) else { continue }
+            guard !rel.isEmpty, !rel.hasPrefix("__MACOSX/"), !fileURL.lastPathComponent.hasPrefix("._") else { continue }
             guard let data = try? Data(contentsOf: fileURL), data.count <= maxFileBytes else { continue }
             files.append(ConfigFile(name: rel, data: data))
-            if fileURL.pathExtension.lowercased() == "ovpn" { ovpnRelPaths.append(rel) }
+            if fileURL.pathExtension.lowercased() == ext { configRelPaths.append(rel) }
         }
-        guard !ovpnRelPaths.isEmpty else { throw ImportError.noConfigsFound }
+        guard !configRelPaths.isEmpty else { throw ImportError.noConfigsFound(ext) }
 
         let byName = Dictionary(uniqueKeysWithValues: files.map { ($0.name, $0.data) })
         var endpoints: [VPNServerEndpoint] = []
         var requiresCredentials = false
-        for rel in ovpnRelPaths.sorted() {
+        for rel in configRelPaths.sorted() {
             let text = byName[rel].flatMap { String(data: $0, encoding: .utf8) } ?? ""
             let parsed = parse(text)
             requiresCredentials = requiresCredentials || parsed.requiresCredentials
-            let label = (rel as NSString).lastPathComponent.replacingOccurrences(of: ".ovpn", with: "")
+            let label = ((rel as NSString).lastPathComponent as NSString).deletingPathExtension
             endpoints.append(
-                VPNServerEndpoint(
-                    label: label,
-                    host: parsed.host ?? label,
-                    port: parsed.port,
-                    transport: parsed.transport,
-                    configFileName: rel
-                )
+                VPNServerEndpoint(label: label, host: parsed.host ?? label, port: parsed.port, transport: parsed.transport, configFileName: rel)
             )
         }
 
-        return OpenVPNImport(
-            suggestedName: suggestedName,
-            files: files,
-            endpoints: endpoints,
-            primaryFileName: ovpnRelPaths.sorted().first!,
-            requiresCredentials: requiresCredentials
-        )
+        return ImportResult(suggestedName: suggestedName, files: files, endpoints: endpoints, primaryFileName: configRelPaths.sorted().first!, requiresCredentials: requiresCredentials)
     }
 
     private static func relativePath(of url: URL, under root: URL) -> String {
@@ -165,7 +160,12 @@ enum VPNConfigImporter {
         return url.lastPathComponent
     }
 
-    // MARK: - Parsing
+    // MARK: - OpenVPN parsing
+
+    private static let fileDirectives: Set<String> = [
+        "ca", "cert", "key", "tls-auth", "tls-crypt", "tls-crypt-v2",
+        "pkcs12", "crl-verify", "extra-certs", "dh"
+    ]
 
     private static func referencedFiles(in text: String) -> [String] {
         var refs: [String] = []
@@ -181,7 +181,7 @@ enum VPNConfigImporter {
         return refs
     }
 
-    private static func parse(_ text: String) -> (host: String?, port: Int?, transport: String?, requiresCredentials: Bool) {
+    private static func parseOpenVPN(_ text: String) -> Parsed {
         var firstRemoteHost: String?
         var remotePort: Int?
         var remoteProto: String?
@@ -194,7 +194,6 @@ enum VPNConfigImporter {
             guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix(";") else { continue }
             let tokens = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
             guard let directive = tokens.first else { continue }
-
             switch directive {
             case "remote" where firstRemoteHost == nil:
                 if tokens.count >= 2 { firstRemoteHost = tokens[1] }
@@ -210,13 +209,7 @@ enum VPNConfigImporter {
                 break
             }
         }
-
-        return (
-            host: firstRemoteHost,
-            port: remotePort ?? globalPort,
-            transport: remoteProto ?? globalProto,
-            requiresCredentials: requiresCredentials
-        )
+        return Parsed(host: firstRemoteHost, port: remotePort ?? globalPort, transport: remoteProto ?? globalProto, requiresCredentials: requiresCredentials)
     }
 
     private static func normalizeProto(_ proto: String) -> String {
@@ -225,6 +218,38 @@ enum VPNConfigImporter {
         if p.hasPrefix("udp") { return "udp" }
         return p
     }
+
+    // MARK: - WireGuard parsing
+
+    private static func parseWireGuard(_ text: String) -> Parsed {
+        var host: String?
+        var port: Int?
+        for rawLine in text.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix("[") else { continue }
+            let parts = line.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 2 else { continue }
+            if parts[0].caseInsensitiveCompare("Endpoint") == .orderedSame {
+                let endpoint = parts[1]
+                // host:port — host may be a bracketed IPv6 literal.
+                if endpoint.hasPrefix("["), let close = endpoint.firstIndex(of: "]") {
+                    host = String(endpoint[endpoint.index(after: endpoint.startIndex)..<close])
+                    if let colon = endpoint[close...].lastIndex(of: ":") {
+                        port = Int(endpoint[endpoint.index(after: colon)...])
+                    }
+                } else if let colon = endpoint.lastIndex(of: ":") {
+                    host = String(endpoint[..<colon])
+                    port = Int(endpoint[endpoint.index(after: colon)...])
+                } else {
+                    host = endpoint
+                }
+            }
+        }
+        // WireGuard is always UDP; keys (not user/pass) handle auth.
+        return Parsed(host: host, port: port, transport: "udp", requiresCredentials: false)
+    }
+
+    // MARK: - Zip
 
     private static func extractZip(_ zipURL: URL) throws -> URL {
         let dest = FileManager.default.temporaryDirectory

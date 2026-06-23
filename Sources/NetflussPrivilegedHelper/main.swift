@@ -61,9 +61,9 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
 
     // MARK: - VPN
 
-    // Tunnels started by this helper, keyed by handle (the child pid as string).
     private let tunnelsQueue = DispatchQueue(label: "com.local.netfluss.helper.vpn")
-    private var tunnels: [String: Process] = [:]
+    private var tunnels: [String: Process] = [:]   // OpenVPN: handle(pid) -> process
+    private var wgTunnels: [String: String] = [:]  // WireGuard: handle(iface) -> temp .conf path
 
     func startVPNTunnel(
         kind: String,
@@ -73,77 +73,111 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         withReply reply: @escaping (Bool, String?) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
-            // Resolve the binary from the helper's own bundle — never trust a
-            // client-supplied path. (TODO: also verify the binary's Team-ID code
-            // signature before exec for defence in depth.)
-            guard let binary = Self.bundledVPNBinaryPath(kind: kind) else {
-                reply(false, "Unsupported or missing VPN binary for kind '\(kind)'.")
-                return
-            }
             guard FileManager.default.fileExists(atPath: configPath) else {
                 reply(false, "VPN config not found.")
                 return
             }
-
-            // The helper builds the argument list itself so an imported config
-            // cannot smuggle dangerous flags. For OpenVPN, scripts are disabled
-            // (`--script-security 0`) so `up`/`down`/`route-up` directives can't
-            // run as root; the management socket is in listen mode with a hold
-            // so the app can send credentials before connecting.
-            let args: [String]
             switch kind {
             case "openVPN":
-                // Write a log next to the socket so the app can surface the real
-                // failure reason (openvpn validates options and exits before the
-                // management socket exists on many config errors).
-                let logPath = (managementSocketPath as NSString).deletingPathExtension + ".log"
-                args = [
-                    "--config", configPath,
-                    "--management", managementSocketPath, "unix",
-                    "--management-client-user", socketOwner,
-                    "--management-hold",
-                    // Ask the management interface for auth-user-pass / private-key
-                    // credentials. Without this openvpn tries the (absent) tty at
-                    // startup and exits before the socket is even created.
-                    "--management-query-passwords",
-                    "--log", logPath,
-                    "--verb", "3",
-                    // Level 1 = openvpn may call its built-in helpers (ifconfig,
-                    // route) to bring the tunnel up, but NOT user-defined
-                    // up/down/route-up scripts from an untrusted imported config.
-                    // (Level 0 also blocks ifconfig/route, so the tunnel can't
-                    // be configured at all.)
-                    "--script-security", "1"
-                ]
-            // TODO: case "wireGuard": drive wireguard-go + wg UAPI.
+                self.startOpenVPN(configPath: configPath, managementSocketPath: managementSocketPath, socketOwner: socketOwner, reply: reply)
+            case "wireGuard":
+                self.startWireGuard(configPath: configPath, reply: reply)
             default:
                 reply(false, "Unsupported VPN kind '\(kind)'.")
-                return
             }
+        }
+    }
 
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: binary)
-            process.arguments = args
-            // Run from the config's directory so relative ca/cert/key refs resolve.
-            process.currentDirectoryURL = URL(fileURLWithPath: configPath).deletingLastPathComponent()
+    private func startOpenVPN(configPath: String, managementSocketPath: String, socketOwner: String, reply: @escaping (Bool, String?) -> Void) {
+        guard let binary = Self.bundledVPNBinaryPath(kind: "openVPN") else {
+            reply(false, "Missing bundled openvpn binary.")
+            return
+        }
+        // Write a log next to the socket so the app can surface the real failure
+        // reason (openvpn validates options and exits before the socket exists on
+        // many config errors). script-security 1 lets openvpn call its built-in
+        // ifconfig/route but not user-defined up/down scripts from the config.
+        let logPath = (managementSocketPath as NSString).deletingPathExtension + ".log"
+        let args = [
+            "--config", configPath,
+            "--management", managementSocketPath, "unix",
+            "--management-client-user", socketOwner,
+            "--management-hold",
+            "--management-query-passwords",
+            "--log", logPath,
+            "--verb", "3",
+            "--script-security", "1"
+        ]
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = args
+        process.currentDirectoryURL = URL(fileURLWithPath: configPath).deletingLastPathComponent()
+        do {
+            try process.run()
+        } catch {
+            reply(false, error.localizedDescription)
+            return
+        }
+        let handle = String(process.processIdentifier)
+        tunnelsQueue.sync { tunnels[handle] = process }
+        process.terminationHandler = { [weak self] _ in
+            self?.tunnelsQueue.sync { self?.tunnels[handle] = nil }
+        }
+        reply(true, handle)
+    }
 
-            do {
-                try process.run()
-            } catch {
-                reply(false, error.localizedDescription)
-                return
-            }
-
-            let handle = String(process.processIdentifier)
-            self.tunnelsQueue.sync { self.tunnels[handle] = process }
-            process.terminationHandler = { [weak self] _ in
-                self?.tunnelsQueue.sync { self?.tunnels[handle] = nil }
-            }
-            reply(true, handle)
+    private func startWireGuard(configPath: String, reply: @escaping (Bool, String?) -> Void) {
+        guard let toolsDir = Self.vpnToolsDir() else {
+            reply(false, "Missing bundled WireGuard tools.")
+            return
+        }
+        let bashPath = toolsDir + "/bash"
+        let wgQuick = toolsDir + "/wg-quick"
+        guard FileManager.default.isExecutableFile(atPath: bashPath),
+              FileManager.default.fileExists(atPath: wgQuick) else {
+            reply(false, "Missing bundled WireGuard tools.")
+            return
+        }
+        // wg-quick derives the interface name from the config filename, which
+        // must be a valid (≤15 char) interface name — copy to a short temp name.
+        let name = "nf" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8).lowercased()
+        let tmpConf = "/tmp/\(name).conf"
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
+            try data.write(to: URL(fileURLWithPath: tmpConf), options: .atomic)
+        } catch {
+            reply(false, error.localizedDescription)
+            return
+        }
+        let env = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "WG_QUICK_USERSPACE_IMPLEMENTATION": "wireguard-go"]
+        let result = Self.runProcess(bashPath, [wgQuick, "up", tmpConf], env: env)
+        if result.success {
+            tunnelsQueue.sync { wgTunnels[name] = tmpConf }
+            reply(true, name)
+        } else {
+            try? FileManager.default.removeItem(atPath: tmpConf)
+            reply(false, result.message ?? "wg-quick up failed.")
         }
     }
 
     func stopVPNTunnel(handle: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        // WireGuard tunnel?
+        let wgConf: String? = tunnelsQueue.sync { wgTunnels[handle] }
+        if let conf = wgConf {
+            DispatchQueue.global(qos: .userInitiated).async {
+                var message: String? = nil
+                var ok = false
+                if let toolsDir = Self.vpnToolsDir() {
+                    let env = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "WG_QUICK_USERSPACE_IMPLEMENTATION": "wireguard-go"]
+                    let result = Self.runProcess(toolsDir + "/bash", [toolsDir + "/wg-quick", "down", conf], env: env)
+                    ok = result.success; message = result.message
+                }
+                self.tunnelsQueue.sync { self.wgTunnels[handle] = nil }
+                try? FileManager.default.removeItem(atPath: conf)
+                reply(ok, message)
+            }
+            return
+        }
         tunnelsQueue.async {
             guard let process = self.tunnels[handle] else {
                 reply(false, "No active tunnel for handle \(handle).")
@@ -194,8 +228,17 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         }
     }
 
-    /// Resolve a bundled VPN binary relative to the helper's own location
-    /// (<App>/Contents/Library/HelperTools/ → <App>/Contents/Library/VPN/<bin>).
+    /// The bundled VPN tools directory, relative to the helper's own location
+    /// (<App>/Contents/Library/HelperTools/ → <App>/Contents/Library/VPN).
+    private static func vpnToolsDir() -> String? {
+        let helperPath = Bundle.main.executablePath ?? CommandLine.arguments.first ?? ""
+        let helperToolsDir = (helperPath as NSString).deletingLastPathComponent
+        let libraryDir = (helperToolsDir as NSString).deletingLastPathComponent
+        let dir = (libraryDir as NSString).appendingPathComponent("VPN")
+        var isDir: ObjCBool = false
+        return (FileManager.default.fileExists(atPath: dir, isDirectory: &isDir) && isDir.boolValue) ? dir : nil
+    }
+
     private static func bundledVPNBinaryPath(kind: String) -> String? {
         let name: String
         switch kind {
@@ -203,11 +246,33 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         case "wireGuard": name = "wireguard-go"
         default: return nil
         }
-        let helperPath = Bundle.main.executablePath ?? CommandLine.arguments.first ?? ""
-        let helperToolsDir = (helperPath as NSString).deletingLastPathComponent
-        let libraryDir = (helperToolsDir as NSString).deletingLastPathComponent
-        let path = (libraryDir as NSString).appendingPathComponent("VPN/\(name)")
+        guard let dir = vpnToolsDir() else { return nil }
+        let path = (dir as NSString).appendingPathComponent(name)
         return FileManager.default.isExecutableFile(atPath: path) ? path : nil
+    }
+
+    /// Run a command with an explicit executable + environment, capturing output.
+    private static func runProcess(_ executable: String, _ args: [String], env: [String: String]?) -> HelperCommandResult {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = args
+        if let env { process.environment = env }
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+        do {
+            try process.run()
+        } catch {
+            return HelperCommandResult(success: false, message: error.localizedDescription)
+        }
+        let outData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        let out = String(data: outData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let err = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let message = !err.isEmpty ? err : (!out.isEmpty ? out : nil)
+        return HelperCommandResult(success: process.terminationStatus == 0, message: message)
     }
 
     private static func runCommand(arguments: [String]) -> HelperCommandResult {

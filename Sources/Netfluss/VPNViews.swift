@@ -191,8 +191,9 @@ struct VPNPreferencesContent: View {
     var body: some View {
         Section {
             Toggle(isOn: $showVPN) { LText("Show VPN in popover") }
-            Button { importOpenVPN() } label: { LText("Import OpenVPN profile…") }
-            LText("Import a single .ovpn file, or a folder or .zip of them (e.g. a provider's router profiles). Each .ovpn becomes a selectable server.")
+            Button { importProfile(kind: .openVPN) } label: { LText("Import OpenVPN profile…") }
+            Button { importProfile(kind: .wireGuard) } label: { LText("Import WireGuard profile…") }
+            LText("Import a single config file, or a folder or .zip of them (e.g. a provider's router profiles). Each config becomes a selectable server.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let importError {
@@ -213,18 +214,23 @@ struct VPNPreferencesContent: View {
         }
     }
 
-    private func importOpenVPN() {
+    private func importProfile(kind: VPNProtocolKind) {
         importError = nil
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
+        let ext = kind == .openVPN ? "ovpn" : "conf"
         var types: [UTType] = [.zip, .folder]
-        if let ovpn = UTType(filenameExtension: "ovpn") { types.append(ovpn) }
+        if let t = UTType(filenameExtension: ext) { types.append(t) }
         panel.allowedContentTypes = types
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try vpn.importOpenVPNProfile(from: url)
+            switch kind {
+            case .openVPN: try vpn.importOpenVPNProfile(from: url)
+            case .wireGuard: try vpn.importWireGuardProfile(from: url)
+            case .ikev2: break
+            }
         } catch {
             importError = error.localizedDescription
         }
