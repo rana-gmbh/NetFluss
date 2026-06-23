@@ -115,6 +115,44 @@ actor PrivilegedHelperManager {
         }
     }
 
+    // MARK: VPN
+
+    /// Returns the tunnel handle (in `stdout`) on success.
+    func startVPNTunnel(kind: String, configPath: String, managementSocketPath: String) async -> CommandResult? {
+        await performIfAvailable { helper, reply in
+            helper.startVPNTunnel(
+                kind: kind,
+                configPath: configPath,
+                managementSocketPath: managementSocketPath,
+                withReply: reply
+            )
+        }
+    }
+
+    func stopVPNTunnel(handle: String) async -> CommandResult? {
+        await performIfAvailable { helper, reply in
+            helper.stopVPNTunnel(handle: handle, withReply: reply)
+        }
+    }
+
+    func vpnTunnelStatus(handle: String) async -> CommandResult? {
+        await performIfAvailable { helper, reply in
+            helper.vpnTunnelStatus(handle: handle, withReply: reply)
+        }
+    }
+
+    func connectNativeVPN(serviceName: String) async -> CommandResult? {
+        await performIfAvailable { helper, reply in
+            helper.connectNativeVPN(serviceName: serviceName, withReply: reply)
+        }
+    }
+
+    func disconnectNativeVPN(serviceName: String) async -> CommandResult? {
+        await performIfAvailable { helper, reply in
+            helper.disconnectNativeVPN(serviceName: serviceName, withReply: reply)
+        }
+    }
+
     private func performIfAvailable(
         _ invocation: @escaping (NetflussPrivilegedHelperProtocol, @escaping (Bool, String?) -> Void) -> Void
     ) async -> CommandResult? {

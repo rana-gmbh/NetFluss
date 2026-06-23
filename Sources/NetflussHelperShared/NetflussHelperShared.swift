@@ -20,4 +20,31 @@ public enum NetflussHelperConstants {
         password: String?,
         withReply reply: @escaping (Bool, String?) -> Void
     )
+
+    // MARK: VPN
+
+    /// Launch a bundled VPN binary (OpenVPN/WireGuard) as root. `kind` selects
+    /// the binary (resolved by the helper from its own bundle — the client never
+    /// supplies the binary path). The helper builds a safe argument list itself
+    /// (e.g. forcing `--script-security 0` for OpenVPN). On success the reply
+    /// message carries an opaque tunnel handle used to stop / query it.
+    func startVPNTunnel(
+        kind: String,
+        configPath: String,
+        managementSocketPath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    )
+
+    /// Terminate a tunnel previously started via `startVPNTunnel`.
+    func stopVPNTunnel(handle: String, withReply reply: @escaping (Bool, String?) -> Void)
+
+    /// Report whether the tunnel with the given handle is still running
+    /// (success == running).
+    func vpnTunnelStatus(handle: String, withReply reply: @escaping (Bool, String?) -> Void)
+
+    /// Start a macOS-native (IKEv2/IPsec/L2TP) VPN service by name via `scutil`.
+    func connectNativeVPN(serviceName: String, withReply reply: @escaping (Bool, String?) -> Void)
+
+    /// Stop a macOS-native VPN service by name via `scutil`.
+    func disconnectNativeVPN(serviceName: String, withReply reply: @escaping (Bool, String?) -> Void)
 }

@@ -59,6 +59,122 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         }
     }
 
+    // MARK: - VPN
+
+    // Tunnels started by this helper, keyed by handle (the child pid as string).
+    private let tunnelsQueue = DispatchQueue(label: "com.local.netfluss.helper.vpn")
+    private var tunnels: [String: Process] = [:]
+
+    func startVPNTunnel(
+        kind: String,
+        configPath: String,
+        managementSocketPath: String,
+        withReply reply: @escaping (Bool, String?) -> Void
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Resolve the binary from the helper's own bundle — never trust a
+            // client-supplied path. (TODO: also verify the binary's Team-ID code
+            // signature before exec for defence in depth.)
+            guard let binary = Self.bundledVPNBinaryPath(kind: kind) else {
+                reply(false, "Unsupported or missing VPN binary for kind '\(kind)'.")
+                return
+            }
+            guard FileManager.default.fileExists(atPath: configPath) else {
+                reply(false, "VPN config not found.")
+                return
+            }
+
+            // The helper builds the argument list itself so an imported config
+            // cannot smuggle dangerous flags. For OpenVPN, scripts are disabled
+            // (`--script-security 0`) so `up`/`down`/`route-up` directives can't
+            // run as root; the management socket is in listen mode with a hold
+            // so the app can send credentials before connecting.
+            let args: [String]
+            switch kind {
+            case "openVPN":
+                args = [
+                    "--config", configPath,
+                    "--management", managementSocketPath, "unix",
+                    "--management-hold",
+                    "--script-security", "0"
+                ]
+            // TODO: case "wireGuard": drive wireguard-go + wg UAPI.
+            default:
+                reply(false, "Unsupported VPN kind '\(kind)'.")
+                return
+            }
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: binary)
+            process.arguments = args
+            // Run from the config's directory so relative ca/cert/key refs resolve.
+            process.currentDirectoryURL = URL(fileURLWithPath: configPath).deletingLastPathComponent()
+
+            do {
+                try process.run()
+            } catch {
+                reply(false, error.localizedDescription)
+                return
+            }
+
+            let handle = String(process.processIdentifier)
+            self.tunnelsQueue.sync { self.tunnels[handle] = process }
+            process.terminationHandler = { [weak self] _ in
+                self?.tunnelsQueue.sync { self?.tunnels[handle] = nil }
+            }
+            reply(true, handle)
+        }
+    }
+
+    func stopVPNTunnel(handle: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        tunnelsQueue.async {
+            guard let process = self.tunnels[handle] else {
+                reply(false, "No active tunnel for handle \(handle).")
+                return
+            }
+            if process.isRunning { process.terminate() }
+            self.tunnels[handle] = nil
+            reply(true, nil)
+        }
+    }
+
+    func vpnTunnelStatus(handle: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        tunnelsQueue.async {
+            let running = self.tunnels[handle]?.isRunning ?? false
+            reply(running, running ? "running" : "stopped")
+        }
+    }
+
+    func connectNativeVPN(serviceName: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Self.runCommand(arguments: ["/usr/sbin/scutil", "--nc", "start", serviceName])
+            reply(result.success, result.message)
+        }
+    }
+
+    func disconnectNativeVPN(serviceName: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Self.runCommand(arguments: ["/usr/sbin/scutil", "--nc", "stop", serviceName])
+            reply(result.success, result.message)
+        }
+    }
+
+    /// Resolve a bundled VPN binary relative to the helper's own location
+    /// (<App>/Contents/Library/HelperTools/ → <App>/Contents/Library/VPN/<bin>).
+    private static func bundledVPNBinaryPath(kind: String) -> String? {
+        let name: String
+        switch kind {
+        case "openVPN": name = "openvpn"
+        case "wireGuard": name = "wireguard-go"
+        default: return nil
+        }
+        let helperPath = Bundle.main.executablePath ?? CommandLine.arguments.first ?? ""
+        let helperToolsDir = (helperPath as NSString).deletingLastPathComponent
+        let libraryDir = (helperToolsDir as NSString).deletingLastPathComponent
+        let path = (libraryDir as NSString).appendingPathComponent("VPN/\(name)")
+        return FileManager.default.isExecutableFile(atPath: path) ? path : nil
+    }
+
     private static func runCommand(arguments: [String]) -> HelperCommandResult {
         guard let executable = arguments.first else {
             return HelperCommandResult(success: false, message: "Missing command.")
