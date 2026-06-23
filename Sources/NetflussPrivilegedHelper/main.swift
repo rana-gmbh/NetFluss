@@ -108,7 +108,12 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
                     "--management-query-passwords",
                     "--log", logPath,
                     "--verb", "3",
-                    "--script-security", "0"
+                    // Level 1 = openvpn may call its built-in helpers (ifconfig,
+                    // route) to bring the tunnel up, but NOT user-defined
+                    // up/down/route-up scripts from an untrusted imported config.
+                    // (Level 0 also blocks ifconfig/route, so the tunnel can't
+                    // be configured at all.)
+                    "--script-security", "1"
                 ]
             // TODO: case "wireGuard": drive wireguard-go + wg UAPI.
             default:
