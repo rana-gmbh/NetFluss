@@ -242,10 +242,10 @@ final class VPNManager: ObservableObject {
         update(p)
     }
 
-    /// Set the profile's DNS servers (applied while connected when useProfileDNS).
-    func setProfileDNSServers(_ servers: [String], for profile: VPNProfile) {
+    /// Set the DNS preset (by id) applied while connected when useProfileDNS.
+    func setProfileDNSPreset(_ presetID: String?, for profile: VPNProfile) {
         guard var p = profiles.first(where: { $0.id == profile.id }) else { return }
-        p.options.dnsServers = servers
+        p.options.dnsPresetID = presetID
         update(p)
     }
 
@@ -413,8 +413,11 @@ final class VPNManager: ObservableObject {
     private func applyProfileDNSIfNeeded(_ profileID: UUID?) {
         guard let profileID,
               let profile = profiles.first(where: { $0.id == profileID }),
-              profile.options.useProfileDNS, !profile.options.dnsServers.isEmpty else { return }
-        networkMonitor?.applyVPNDNS(profile.options.dnsServers)
+              profile.options.useProfileDNS,
+              let presetID = profile.options.dnsPresetID,
+              let preset = NetworkMonitor.allDNSPresets().first(where: { $0.id == presetID }),
+              !preset.servers.isEmpty else { return }
+        networkMonitor?.applyVPNDNS(preset.servers)
     }
 
     /// openvpn stopped on its own (failed to connect, or an established tunnel

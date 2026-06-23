@@ -79,10 +79,11 @@ struct VPNProfileOptions: Codable, Equatable, Sendable {
     var autoReconnect: Bool = false
     /// Block other traffic while connected if the tunnel goes down.
     var killSwitch: Bool = false
-    /// Apply the profile's own DNS servers while connected (reuses the existing
-    /// DNS-via-helper machinery).
+    /// Apply a DNS preset (from NetFluss's DNS section) while connected, restoring
+    /// the prior resolver config on disconnect. `dnsPresetID` references a
+    /// `DNSPreset.id`; servers are resolved at connect time so edits propagate.
     var useProfileDNS: Bool = false
-    var dnsServers: [String] = []
+    var dnsPresetID: String?
     /// Connect this profile automatically when NetFluss launches.
     var connectOnLaunch: Bool = false
 

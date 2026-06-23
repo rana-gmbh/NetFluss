@@ -317,7 +317,7 @@
 "Reconnect automatically" = "Automatisch neu verbinden";
 "Connect when NetFluss starts" = "Beim Start von NetFluss verbinden";
 "Use custom DNS while connected" = "Während der Verbindung eigene DNS-Server verwenden";
-"DNS servers, comma-separated" = "DNS-Server, durch Kommas getrennt";
+"Choose a DNS preset" = "DNS-Voreinstellung wählen";
 "Edit" = "Bearbeiten";
 "Delete" = "Löschen";
 "Rename" = "Umbenennen";

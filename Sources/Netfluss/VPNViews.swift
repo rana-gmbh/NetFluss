@@ -280,7 +280,11 @@ struct VPNProfileRow: View {
     @State private var password = ""
     @State private var showCredentials = false
     @State private var savedNote = false
-    @State private var dnsServersText = ""
+
+    /// DNS presets from NetFluss's DNS section, excluding "automatic" (no servers).
+    private var dnsPresets: [DNSPreset] {
+        NetworkMonitor.allDNSPresets().filter { !$0.servers.isEmpty }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -342,12 +346,17 @@ struct VPNProfileRow: View {
             }
             .toggleStyle(.checkbox)
             if profile.options.useProfileDNS {
-                TextField("", text: $dnsServersText, prompt: Text(L10n.text("DNS servers, comma-separated")))
-                    .textFieldStyle(.roundedBorder)
-                    .font(.caption)
-                    .multilineTextAlignment(.leading)
-                    .labelsHidden()
-                    .onSubmit { saveDNSServers() }
+                Picker(selection: Binding(
+                    get: { profile.options.dnsPresetID ?? "" },
+                    set: { vpn.setProfileDNSPreset($0.isEmpty ? nil : $0, for: profile) }
+                )) {
+                    Text(L10n.text("Choose a DNS preset")).tag("")
+                    ForEach(dnsPresets) { preset in
+                        Text(preset.name).tag(preset.id)
+                    }
+                } label: { EmptyView() }
+                .labelsHidden()
+                .font(.caption)
             }
 
             if profile.requiresCredentials {
@@ -378,18 +387,7 @@ struct VPNProfileRow: View {
             }
         }
         .padding(.vertical, 2)
-        .onAppear {
-            editedName = profile.name
-            dnsServersText = profile.options.dnsServers.joined(separator: ", ")
-        }
-    }
-
-    private func saveDNSServers() {
-        let servers = dnsServersText
-            .split(whereSeparator: { $0 == "," || $0 == " " })
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        vpn.setProfileDNSServers(servers, for: profile)
+        .onAppear { editedName = profile.name }
     }
 
     private var subtitle: String {
