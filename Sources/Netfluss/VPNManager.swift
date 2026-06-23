@@ -399,7 +399,7 @@ final class VPNManager: ObservableObject {
     }
 
     private func handleIKEv2Status(_ status: NEVPNStatus) {
-        guard activeIKEv2, self.status.state.isActive || self.status.state == .connected else { return }
+        guard activeIKEv2 else { return }
         switch status {
         case .connecting:
             self.status.state = .connecting
@@ -413,8 +413,13 @@ final class VPNManager: ObservableObject {
             self.status.state = .disconnecting
         case .disconnected, .invalid:
             activeIKEv2 = false
-            self.status = VPNRuntimeStatus(state: .idle, profileID: self.status.profileID)
-            refreshPublicIP()
+            let profileID = self.status.profileID
+            // Surface why it dropped (auth/config/etc.) rather than silently idling.
+            ikev2Controller.fetchLastError { [weak self] reason in
+                guard let self else { return }
+                self.status = VPNRuntimeStatus(state: reason.map { .failed($0) } ?? .idle, profileID: profileID)
+                self.refreshPublicIP()
+            }
         @unknown default:
             break
         }
