@@ -102,6 +102,14 @@ final class IKEv2VPNController {
         manager.connection.stopVPNTunnel()
     }
 
+    /// The reason the tunnel last disconnected (nil if it was a clean stop).
+    func fetchLastError(_ completion: @escaping (String?) -> Void) {
+        manager.connection.fetchLastDisconnectError { error in
+            let message = (error as NSError?).map { "\($0.localizedDescription) [\($0.domain) \($0.code)]" }
+            Task { @MainActor in completion(message) }
+        }
+    }
+
     // MARK: - Async wrappers around the callback API
 
     private func load() async throws {
