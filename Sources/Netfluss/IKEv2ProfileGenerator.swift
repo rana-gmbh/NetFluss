@@ -83,8 +83,11 @@ enum IKEv2ProfileGenerator {
 
         let data = try PropertyListSerialization.data(fromPropertyList: profile, format: .xml, options: 0)
         let safe = input.name.components(separatedBy: CharacterSet.alphanumerics.inverted).joined(separator: "-")
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("netfluss-\(safe.isEmpty ? "vpn" : safe).mobileconfig")
+        // Write to Downloads (a stable, user-visible location) — the profile
+        // installer can miss files in the per-app temp directory.
+        let dir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let url = dir.appendingPathComponent("netfluss-\(safe.isEmpty ? "vpn" : safe).mobileconfig")
         try data.write(to: url, options: .atomic)
         return url
     }

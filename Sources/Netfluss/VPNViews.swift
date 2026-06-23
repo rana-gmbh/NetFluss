@@ -245,9 +245,7 @@ struct VPNPreferencesContent: View {
         panel.allowsMultipleSelection = false
         if let t = UTType(filenameExtension: "mobileconfig") { panel.allowedContentTypes = [t] }
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        // Opening a .mobileconfig hands it to macOS, which prompts to install it
-        // in System Settings; the new service then appears under "Add system VPN".
-        NSWorkspace.shared.open(url)
+        ProfileInstaller.present(url)
     }
 
     private func importProfile(kind: VPNProtocolKind) {
@@ -402,8 +400,9 @@ struct AddIKEv2Sheet: View {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
 
-            LText("NetFluss creates a configuration profile. macOS will ask you to install it in System Settings; then add it here via “Add system VPN…”.")
+            LText("NetFluss saves a configuration profile to your Downloads and reveals it. macOS no longer shows an install dialog automatically — approve it in System Settings → General → VPN & Device Management (double-click the file in Downloads if it isn't already pending). Then add it here via “Add system VPN…”.")
                 .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             HStack {
                 Spacer()
@@ -458,11 +457,28 @@ struct AddIKEv2Sheet: View {
         )
         do {
             let url = try IKEv2ProfileGenerator.makeMobileconfig(input)
-            NSWorkspace.shared.open(url)
+            ProfileInstaller.present(url)
             onInstalled()
             dismiss()
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Profile installation
+
+/// Hands a .mobileconfig to macOS for installation. Modern macOS no longer shows
+/// an install dialog on open — it queues the profile and the user must approve it
+/// in System Settings — so we also reveal the file and open the profiles pane.
+enum ProfileInstaller {
+    static func present(_ url: URL) {
+        NSWorkspace.shared.open(url)
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            if let pane = URL(string: "x-apple.systempreferences:com.apple.preferences.configurationprofiles") {
+                NSWorkspace.shared.open(pane)
+            }
         }
     }
 }
