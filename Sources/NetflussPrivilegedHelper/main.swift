@@ -93,6 +93,10 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             let args: [String]
             switch kind {
             case "openVPN":
+                // Write a log next to the socket so the app can surface the real
+                // failure reason (openvpn validates options and exits before the
+                // management socket exists on many config errors).
+                let logPath = (managementSocketPath as NSString).deletingPathExtension + ".log"
                 args = [
                     "--config", configPath,
                     "--management", managementSocketPath, "unix",
@@ -102,6 +106,8 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
                     // credentials. Without this openvpn tries the (absent) tty at
                     // startup and exits before the socket is even created.
                     "--management-query-passwords",
+                    "--log", logPath,
+                    "--verb", "3",
                     "--script-security", "0"
                 ]
             // TODO: case "wireGuard": drive wireguard-go + wg UAPI.

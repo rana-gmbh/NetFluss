@@ -214,7 +214,7 @@ final class VPNManager: ObservableObject {
         case .needCredentials:
             status.state = .failed("This VPN needs a username and password. Add them in the profile's settings and reconnect.")
         case .authFailed(let message):
-            status.state = .failed(message)
+            status.state = .failed(enrichedFailure(message))
         case .disconnected:
             status.state = .idle
         case .log:
@@ -238,11 +238,34 @@ final class VPNManager: ObservableObject {
         "Netfluss \(profile.name)"
     }
 
+    /// Append the real openvpn error (from its log) to a generic failure, or a
+    /// hint if no log was produced (e.g. an outdated privileged helper).
+    private func enrichedFailure(_ message: String) -> String {
+        guard let profileID = status.profileID,
+              let profile = profiles.first(where: { $0.id == profileID }) else { return message }
+        let logPath = Self.managementLogPath(for: profile)
+        guard let log = try? String(contentsOfFile: logPath, encoding: .utf8), !log.isEmpty else {
+            return message + " (No openvpn log was produced — the privileged helper may be outdated: quit NetFluss, remove it from System Settings → General → Login Items, and relaunch.)"
+        }
+        // Surface the most telling lines (errors / fatal) from the tail.
+        let lines = log.split(whereSeparator: \.isNewline).map(String.init)
+        let notable = lines.filter {
+            let l = $0.lowercased()
+            return l.contains("error") || l.contains("fatal") || l.contains("cannot") || l.contains("failed") || l.contains("must define")
+        }
+        let detail = (notable.suffix(2).isEmpty ? lines.suffix(2) : notable.suffix(2)).joined(separator: " — ")
+        return detail.isEmpty ? message : detail
+    }
+
     /// Unix socket path for the OpenVPN management interface. Kept short to stay
     /// under the ~104-char sockaddr_un limit.
     private static func managementSocketPath(for profile: VPNProfile) -> String {
         let short = profile.id.uuidString.prefix(8)
         return "/tmp/netfluss-vpn-\(short).sock"
+    }
+
+    private static func managementLogPath(for profile: VPNProfile) -> String {
+        (managementSocketPath(for: profile) as NSString).deletingPathExtension + ".log"
     }
 }
 
