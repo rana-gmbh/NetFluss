@@ -16,6 +16,7 @@
 // along with Netfluss. If not, see <https://www.gnu.org/licenses/>.
 
 import Foundation
+import NetworkExtension
 
 /// Owns the user's VPN profiles and the single active connection. The UI
 /// (popover + Preferences) observes `profiles` and `status`.
@@ -44,6 +45,10 @@ final class VPNManager: ObservableObject {
     private var activeTunnelHandle: String?
     /// Management-interface driver for the active OpenVPN tunnel.
     private var ovpnClient: OpenVPNManagementClient?
+    /// NEVPNManager-backed IKEv2 controller; `activeIKEv2` gates its status
+    /// notifications to the current connection.
+    private let ikev2Controller = IKEv2VPNController()
+    private var activeIKEv2 = false
 
     init(
         helper: PrivilegedHelperManager = .shared,
@@ -54,6 +59,9 @@ final class VPNManager: ObservableObject {
         self.store = store
         self.credentialStore = credentialStore
         self.profiles = (try? store.load()) ?? []
+        ikev2Controller.onStatusChange = { [weak self] status in
+            self?.handleIKEv2Status(status)
+        }
     }
 
     // MARK: - Profile management
@@ -101,6 +109,26 @@ final class VPNManager: ObservableObject {
         )
         profiles.append(profile)
         try store.save(profiles)
+        return profile
+    }
+
+    /// Create an IKEv2 profile managed via NEVPNManager. The password is stored
+    /// in the Keychain (referenced by the VPN configuration).
+    @discardableResult
+    func addIKEv2Profile(name: String, server: String, remoteID: String, username: String, password: String) -> VPNProfile {
+        let profile = VPNProfile(
+            name: name,
+            kind: .ikev2,
+            configFileName: "",
+            servers: [],
+            requiresCredentials: true,
+            ikev2Server: server,
+            ikev2RemoteID: remoteID,
+            ikev2Username: username
+        )
+        credentialStore.storeIKEv2Password(account: profile.keychainAccount, password: password)
+        profiles.append(profile)
+        try? store.save(profiles)
         return profile
     }
 
@@ -173,7 +201,11 @@ final class VPNManager: ObservableObject {
             case .openVPN, .wireGuard:
                 await self.startBundledTunnel(profile, endpoint: endpoint)
             case .ikev2:
-                await self.startNativeTunnel(profile)
+                if profile.ikev2Server != nil {
+                    await self.startIKEv2(profile)        // NEVPNManager
+                } else {
+                    await self.startNativeTunnel(profile) // legacy scutil service
+                }
             }
         }
     }
@@ -195,8 +227,13 @@ final class VPNManager: ObservableObject {
                 self.activeTunnelHandle = nil
             } else if let profileID = previous.profileID,
                       let profile = self.profiles.first(where: { $0.id == profileID }),
-                      profile.kind == .ikev2, let service = profile.nativeServiceName {
-                NativeVPN.stop(service)
+                      profile.kind == .ikev2 {
+                if profile.ikev2Server != nil {
+                    self.ikev2Controller.disconnect()   // NEVPNManager; status flows via handleIKEv2Status
+                    self.activeIKEv2 = false
+                } else if let service = profile.nativeServiceName {
+                    NativeVPN.stop(service)
+                }
             }
             self.ovpnClient?.close()
             self.ovpnClient = nil
@@ -338,6 +375,49 @@ final class VPNManager: ObservableObject {
         }
         let joined = cleaned.joined(separator: " — ")
         return joined.isEmpty ? nil : joined
+    }
+
+    private func startIKEv2(_ profile: VPNProfile) async {
+        guard let server = profile.ikev2Server,
+              let remoteID = profile.ikev2RemoteID,
+              let username = profile.ikev2Username else {
+            status.state = .failed("This IKEv2 profile is missing its server settings.")
+            return
+        }
+        let passwordRef = credentialStore.ikev2PasswordReference(account: profile.keychainAccount)
+        activeIKEv2 = true
+        do {
+            try await ikev2Controller.connect(
+                name: profile.name, server: server, remoteID: remoteID,
+                username: username, passwordRef: passwordRef
+            )
+            // Connection progress arrives via handleIKEv2Status.
+        } catch {
+            activeIKEv2 = false
+            status.state = .failed("IKEv2 could not start: \(error.localizedDescription). (Requires the Personal VPN entitlement.)")
+        }
+    }
+
+    private func handleIKEv2Status(_ status: NEVPNStatus) {
+        guard activeIKEv2, self.status.state.isActive || self.status.state == .connected else { return }
+        switch status {
+        case .connecting:
+            self.status.state = .connecting
+        case .connected:
+            self.status.state = .connected
+            if self.status.connectedSince == nil { self.status.connectedSince = Date() }
+            refreshPublicIP()
+        case .reasserting:
+            self.status.state = .reconnecting
+        case .disconnecting:
+            self.status.state = .disconnecting
+        case .disconnected, .invalid:
+            activeIKEv2 = false
+            self.status = VPNRuntimeStatus(state: .idle, profileID: self.status.profileID)
+            refreshPublicIP()
+        @unknown default:
+            break
+        }
     }
 
     private func startNativeTunnel(_ profile: VPNProfile) async {

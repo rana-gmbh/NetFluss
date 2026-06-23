@@ -71,4 +71,50 @@ struct VPNCredentialStore: Sendable {
         ]
         SecItemDelete(query as CFDictionary)
     }
+
+    // MARK: - IKEv2 (NEVPNManager) password reference
+
+    private static let ikev2Service = "com.local.netfluss.vpn.ikev2"
+
+    /// Store the raw password as a generic-password item and return its
+    /// persistent Keychain reference, which `NEVPNProtocolIKEv2.passwordReference`
+    /// requires. Returns nil if the password is empty.
+    @discardableResult
+    func storeIKEv2Password(account: String, password: String) -> Data? {
+        deleteIKEv2Password(account: account)
+        guard !password.isEmpty, let data = password.data(using: .utf8) else { return nil }
+        let attributes: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.ikev2Service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecReturnPersistentRef as String: true
+        ]
+        var ref: CFTypeRef?
+        guard SecItemAdd(attributes as CFDictionary, &ref) == errSecSuccess else { return nil }
+        return ref as? Data
+    }
+
+    /// Fetch the persistent reference for a previously stored IKEv2 password.
+    func ikev2PasswordReference(account: String) -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.ikev2Service,
+            kSecAttrAccount as String: account,
+            kSecReturnPersistentRef as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var ref: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &ref) == errSecSuccess else { return nil }
+        return ref as? Data
+    }
+
+    func deleteIKEv2Password(account: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.ikev2Service,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
 }

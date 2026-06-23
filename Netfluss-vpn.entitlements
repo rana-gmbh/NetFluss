@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required for URLSession (external IP lookup) -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- Personal VPN (NEVPNManager) — lets NetFluss create/start IKEv2 VPNs.
+         RESTRICTED: requires a provisioning profile that grants it (see
+         Packaging/VPN/README.md). Signing with this entitlement but no matching
+         provisioning profile makes the app fail to launch — only use this
+         entitlements file for the IKEv2-enabled build. -->
+    <key>com.apple.developer.networking.vpn.api</key>
+    <array>
+        <string>allow-vpn</string>
+    </array>
+</dict>
+</plist>

@@ -368,6 +368,7 @@ struct VPNProfileRow: View {
 /// "Add system VPN…".
 struct AddIKEv2Sheet: View {
     var onInstalled: () -> Void
+    @EnvironmentObject private var vpn: VPNManager
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
@@ -375,8 +376,6 @@ struct AddIKEv2Sheet: View {
     @State private var remoteID = ""
     @State private var username = ""
     @State private var password = ""
-    @State private var caCertURL: URL?
-    @State private var error: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -388,26 +387,16 @@ struct AddIKEv2Sheet: View {
                 field("Remote ID", text: $remoteID, placeholder: "vpn.example.com")
                 field("Username", text: $username, placeholder: "")
                 secureField("Password", text: $password)
-                HStack {
-                    LText("CA certificate (optional)").font(.system(size: 11)).foregroundStyle(.secondary)
-                    Spacer()
-                    Button(caCertURL?.lastPathComponent ?? L10n.text("Choose…")) { pickCert() }
-                        .controlSize(.small)
-                }
             }
 
-            if let error {
-                Text(error).font(.caption).foregroundStyle(.red)
-            }
-
-            LText("NetFluss saves a configuration profile to your Downloads and reveals it. macOS no longer shows an install dialog automatically — approve it in System Settings → General → VPN & Device Management (double-click the file in Downloads if it isn't already pending). Then add it here via “Add system VPN…”.")
+            LText("Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack {
                 Spacer()
                 Button(L10n.text("Cancel")) { dismiss() }
-                Button(L10n.text("Create & Install")) { create() }
+                Button(L10n.text("Add")) { create() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(name.isEmpty || server.isEmpty || remoteID.isEmpty || username.isEmpty)
             }
@@ -438,31 +427,10 @@ struct AddIKEv2Sheet: View {
         }
     }
 
-    private func pickCert() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        var types: [UTType] = [.x509Certificate]
-        for ext in ["crt", "cer", "pem", "der"] { if let t = UTType(filenameExtension: ext) { types.append(t) } }
-        panel.allowedContentTypes = types
-        if panel.runModal() == .OK { caCertURL = panel.url }
-    }
-
     private func create() {
-        error = nil
-        let caData = caCertURL.flatMap { try? Data(contentsOf: $0) }
-        let input = IKEv2ProfileGenerator.Input(
-            name: name, server: server, remoteID: remoteID,
-            username: username, password: password, caCertificate: caData
-        )
-        do {
-            let url = try IKEv2ProfileGenerator.makeMobileconfig(input)
-            ProfileInstaller.present(url)
-            onInstalled()
-            dismiss()
-        } catch {
-            self.error = error.localizedDescription
-        }
+        vpn.addIKEv2Profile(name: name, server: server, remoteID: remoteID, username: username, password: password)
+        onInstalled()
+        dismiss()
     }
 }
 

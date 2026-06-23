@@ -106,9 +106,14 @@ struct VPNProfile: Identifiable, Codable, Equatable, Sendable {
     /// Whether connecting prompts for a username/password (OpenVPN
     /// `auth-user-pass`). Cert-only profiles are `false`.
     var requiresCredentials: Bool
-    /// For `.ikev2` profiles: the name of the macOS-native VPN service (from
-    /// `scutil --nc list`) this profile controls.
+    /// For `.ikev2` profiles controlling a legacy `scutil`-managed service: the
+    /// service name from `scutil --nc list`.
     var nativeServiceName: String?
+    /// For `.ikev2` profiles managed via NEVPNManager (Personal VPN): the server
+    /// address, remote identifier, and username (password is in the Keychain).
+    var ikev2Server: String?
+    var ikev2RemoteID: String?
+    var ikev2Username: String?
     /// Keychain account used to store this profile's credentials (if any).
     var keychainAccount: String
     var options: VPNProfileOptions
@@ -123,6 +128,9 @@ struct VPNProfile: Identifiable, Codable, Equatable, Sendable {
         selectedServerIndex: Int = 0,
         requiresCredentials: Bool = false,
         nativeServiceName: String? = nil,
+        ikev2Server: String? = nil,
+        ikev2RemoteID: String? = nil,
+        ikev2Username: String? = nil,
         keychainAccount: String? = nil,
         options: VPNProfileOptions = VPNProfileOptions(),
         createdAt: Date = Date()
@@ -135,6 +143,9 @@ struct VPNProfile: Identifiable, Codable, Equatable, Sendable {
         self.selectedServerIndex = selectedServerIndex
         self.requiresCredentials = requiresCredentials
         self.nativeServiceName = nativeServiceName
+        self.ikev2Server = ikev2Server
+        self.ikev2RemoteID = ikev2RemoteID
+        self.ikev2Username = ikev2Username
         self.keychainAccount = keychainAccount ?? "vpn.\(id.uuidString)"
         self.options = options
         self.createdAt = createdAt
