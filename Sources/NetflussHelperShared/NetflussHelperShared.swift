@@ -1,6 +1,12 @@
 import Foundation
 
 public enum NetflussHelperConstants {
+    /// Bump whenever the helper's behaviour changes. The app re-registers the
+    /// daemon when the bundled version differs from the last registered one, so
+    /// launchd picks up the new helper binary instead of keeping the old daemon
+    /// (SMAppService does not refresh an already-enabled daemon on its own).
+    public static let helperVersion = 2
+
     public static let appBundleIdentifier = "com.local.netfluss"
     public static let teamIdentifier = "D6P24X5377"
     public static let machServiceName = "com.local.netfluss.privilegedhelper"

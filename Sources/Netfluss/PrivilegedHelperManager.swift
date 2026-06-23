@@ -154,10 +154,26 @@ actor PrivilegedHelperManager {
         }
     }
 
+    private static let registeredHelperVersionKey = "registeredHelperVersion"
+
+    /// If the bundled helper is newer than the one we last registered, force a
+    /// re-registration so launchd runs the new binary. Without this, an already
+    /// `.enabled` daemon keeps serving stale code across app updates — which made
+    /// VPN fixes (e.g. --management-query-passwords) silently not take effect.
+    private func refreshHelperIfOutdated() {
+        let current = NetflussHelperConstants.helperVersion
+        guard UserDefaults.standard.integer(forKey: Self.registeredHelperVersionKey) != current else { return }
+        _ = repairRegistration()
+        if service.status == .enabled {
+            UserDefaults.standard.set(current, forKey: Self.registeredHelperVersionKey)
+        }
+    }
+
     private func performIfAvailable(
         _ invocation: @escaping (NetflussPrivilegedHelperProtocol, @escaping (Bool, String?) -> Void) -> Void
     ) async -> CommandResult? {
         guard Self.hasBundledHelper else { return nil }
+        refreshHelperIfOutdated()
         if let readinessFailure = ensureServiceReady() {
             return readinessFailure
         }
