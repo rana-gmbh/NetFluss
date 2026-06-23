@@ -214,7 +214,7 @@ final class VPNManager: ObservableObject {
         case .needCredentials:
             status.state = .failed("This VPN needs a username and password. Add them in the profile's settings and reconnect.")
         case .authFailed(let message):
-            status.state = .failed(enrichedFailure(message))
+            failWithReason(message)
         case .disconnected:
             handleUnexpectedStop()
         case .log:
@@ -231,7 +231,43 @@ final class VPNManager: ObservableObject {
             status = VPNRuntimeStatus(state: .idle, profileID: status.profileID)
             return
         }
-        status.state = .failed(enrichedFailure("The VPN connection stopped."))
+        failWithReason("The VPN connection stopped.")
+    }
+
+    /// Set a provisional failure, then refine it with the real reason read from
+    /// openvpn's (root-owned) log via the helper.
+    private func failWithReason(_ base: String) {
+        status.state = .failed(base)
+        guard let profileID = status.profileID,
+              let profile = profiles.first(where: { $0.id == profileID }) else { return }
+        let logPath = Self.managementLogPath(for: profile)
+        Task { [weak self] in
+            guard let self else { return }
+            let result = await self.helper.readVPNLog(path: logPath)
+            // Only refine if we're still showing the failure for this attempt.
+            guard self.status.profileID == profileID, case .failed = self.status.state else { return }
+            if let log = result?.stdout, !log.isEmpty, let summary = Self.summarizeLog(log) {
+                self.status.state = .failed(summary)
+            }
+        }
+    }
+
+    /// Pull the most telling line(s) out of an openvpn log tail.
+    private static func summarizeLog(_ log: String) -> String? {
+        let lines = log.split(whereSeparator: \.isNewline).map(String.init)
+        let notable = lines.filter {
+            let l = $0.lowercased()
+            return l.contains("error") || l.contains("fatal") || l.contains("cannot")
+                || l.contains("failed") || l.contains("must define") || l.contains("auth_")
+        }
+        let chosen = notable.isEmpty ? Array(lines.suffix(1)) : Array(notable.suffix(2))
+        // Strip openvpn's leading timestamp for brevity.
+        let cleaned = chosen.map { line -> String in
+            let parts = line.split(separator: " ", maxSplits: 2)
+            return parts.count == 3 && parts[0].allSatisfy({ $0.isNumber || $0 == "-" }) ? String(parts[2]) : line
+        }
+        let joined = cleaned.joined(separator: " — ")
+        return joined.isEmpty ? nil : joined
     }
 
     private func startNativeTunnel(_ profile: VPNProfile) async {
@@ -248,25 +284,6 @@ final class VPNManager: ObservableObject {
 
     private func nativeServiceName(for profile: VPNProfile) -> String {
         "Netfluss \(profile.name)"
-    }
-
-    /// Append the real openvpn error (from its log) to a generic failure, or a
-    /// hint if no log was produced (e.g. an outdated privileged helper).
-    private func enrichedFailure(_ message: String) -> String {
-        guard let profileID = status.profileID,
-              let profile = profiles.first(where: { $0.id == profileID }) else { return message }
-        let logPath = Self.managementLogPath(for: profile)
-        guard let log = try? String(contentsOfFile: logPath, encoding: .utf8), !log.isEmpty else {
-            return message + " (No openvpn log was produced — the privileged helper may be outdated: quit NetFluss, remove it from System Settings → General → Login Items, and relaunch.)"
-        }
-        // Surface the most telling lines (errors / fatal) from the tail.
-        let lines = log.split(whereSeparator: \.isNewline).map(String.init)
-        let notable = lines.filter {
-            let l = $0.lowercased()
-            return l.contains("error") || l.contains("fatal") || l.contains("cannot") || l.contains("failed") || l.contains("must define")
-        }
-        let detail = (notable.suffix(2).isEmpty ? lines.suffix(2) : notable.suffix(2)).joined(separator: " — ")
-        return detail.isEmpty ? message : detail
     }
 
     /// Unix socket path for the OpenVPN management interface. Kept short to stay

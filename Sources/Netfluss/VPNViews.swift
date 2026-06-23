@@ -99,6 +99,15 @@ struct VPNSectionView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
+
+            if vpn.status.profileID == profile.id, case .failed(let message) = vpn.status.state {
+                Text(message)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+                    .lineLimit(5)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
         }
     }
 
@@ -131,7 +140,7 @@ struct VPNSectionView: View {
         case .reconnecting: return L10n.text("Reconnecting…")
         case .disconnecting: return L10n.text("Disconnecting…")
         case .connected: return L10n.text("Connected")
-        case .failed(let message): return message
+        case .failed: return L10n.text("Failed")
         }
     }
 }
