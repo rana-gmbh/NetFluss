@@ -188,6 +188,7 @@ struct VPNPreferencesContent: View {
     @AppStorage("showVPN") private var showVPN: Bool = false
     @State private var importError: String?
     @State private var nativeServices: [NativeVPN.Service] = []
+    @State private var showAddIKEv2 = false
 
     var body: some View {
         Section {
@@ -216,12 +217,16 @@ struct VPNPreferencesContent: View {
                     }
                 } label: { LText("Add system VPN…") }
             }
+            Button { showAddIKEv2 = true } label: { LText("Add IKEv2 VPN…") }
             Button { installMobileconfig() } label: { LText("Install configuration profile (.mobileconfig)…") }
             Button { nativeServices = vpn.nativeServices() } label: { LText("Refresh system VPNs") }
         } header: {
             LText("System VPN (IKEv2 / IPsec / L2TP)")
         }
         .onAppear { nativeServices = vpn.nativeServices() }
+        .sheet(isPresented: $showAddIKEv2) {
+            AddIKEv2Sheet { nativeServices = vpn.nativeServices() }
+        }
 
         if !vpn.profiles.isEmpty {
             Section {
@@ -355,5 +360,109 @@ struct VPNProfileRow: View {
         )
         password = ""
         savedNote = true
+    }
+}
+
+// MARK: - Add IKEv2 sheet
+
+/// Form to enter IKEv2 (username/password) details, generate a .mobileconfig, and
+/// hand it to macOS to install. After approval the service appears under
+/// "Add system VPN…".
+struct AddIKEv2Sheet: View {
+    var onInstalled: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var name = ""
+    @State private var server = ""
+    @State private var remoteID = ""
+    @State private var username = ""
+    @State private var password = ""
+    @State private var caCertURL: URL?
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LText("Add IKEv2 VPN").font(.headline)
+
+            VStack(alignment: .leading, spacing: 8) {
+                field("Name", text: $name, placeholder: "My VPN")
+                field("Server (host or IP)", text: $server, placeholder: "vpn.example.com")
+                field("Remote ID", text: $remoteID, placeholder: "vpn.example.com")
+                field("Username", text: $username, placeholder: "")
+                secureField("Password", text: $password)
+                HStack {
+                    LText("CA certificate (optional)").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Spacer()
+                    Button(caCertURL?.lastPathComponent ?? L10n.text("Choose…")) { pickCert() }
+                        .controlSize(.small)
+                }
+            }
+
+            if let error {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+
+            LText("NetFluss creates a configuration profile. macOS will ask you to install it in System Settings; then add it here via “Add system VPN…”.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            HStack {
+                Spacer()
+                Button(L10n.text("Cancel")) { dismiss() }
+                Button(L10n.text("Create & Install")) { create() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(name.isEmpty || server.isEmpty || remoteID.isEmpty || username.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+    }
+
+    @ViewBuilder
+    private func field(_ label: String, text: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            LText(label).font(.system(size: 11)).foregroundStyle(.secondary)
+            TextField("", text: text, prompt: placeholder.isEmpty ? nil : Text(placeholder))
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.leading)
+                .labelsHidden()
+        }
+    }
+
+    @ViewBuilder
+    private func secureField(_ label: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            LText(label).font(.system(size: 11)).foregroundStyle(.secondary)
+            SecureField("", text: text)
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.leading)
+                .labelsHidden()
+        }
+    }
+
+    private func pickCert() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        var types: [UTType] = [.x509Certificate]
+        for ext in ["crt", "cer", "pem", "der"] { if let t = UTType(filenameExtension: ext) { types.append(t) } }
+        panel.allowedContentTypes = types
+        if panel.runModal() == .OK { caCertURL = panel.url }
+    }
+
+    private func create() {
+        error = nil
+        let caData = caCertURL.flatMap { try? Data(contentsOf: $0) }
+        let input = IKEv2ProfileGenerator.Input(
+            name: name, server: server, remoteID: remoteID,
+            username: username, password: password, caCertificate: caData
+        )
+        do {
+            let url = try IKEv2ProfileGenerator.makeMobileconfig(input)
+            NSWorkspace.shared.open(url)
+            onInstalled()
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 }
