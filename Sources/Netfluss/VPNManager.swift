@@ -107,6 +107,13 @@ final class VPNManager: ObservableObject {
         try? store.save(profiles)
     }
 
+    func rename(_ profile: VPNProfile, to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, var p = profiles.first(where: { $0.id == profile.id }), p.name != trimmed else { return }
+        p.name = trimmed
+        update(p)
+    }
+
     func selectServer(_ index: Int, for profile: VPNProfile) {
         guard var p = profiles.first(where: { $0.id == profile.id }) else { return }
         p.selectedServerIndex = index

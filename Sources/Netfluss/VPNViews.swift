@@ -235,6 +235,7 @@ struct VPNPreferencesContent: View {
 struct VPNProfileRow: View {
     let profile: VPNProfile
     @EnvironmentObject private var vpn: VPNManager
+    @State private var editedName = ""
     @State private var username = ""
     @State private var password = ""
     @State private var showCredentials = false
@@ -243,8 +244,12 @@ struct VPNProfileRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(profile.name)
+                VStack(alignment: .leading, spacing: 2) {
+                    TextField("", text: $editedName, prompt: Text(L10n.text("Name")))
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.leading)
+                        .labelsHidden()
+                        .onSubmit { vpn.rename(profile, to: editedName) }
                     Text(verbatim: "\(profile.kind.displayName) · \(profile.servers.count) server(s)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -269,14 +274,22 @@ struct VPNProfileRow: View {
 
             if profile.requiresCredentials {
                 DisclosureGroup(isExpanded: $showCredentials) {
-                    TextField(L10n.text("Username"), text: $username)
-                        .textFieldStyle(.roundedBorder)
-                    SecureField(L10n.text("Password"), text: $password)
-                        .textFieldStyle(.roundedBorder)
-                    HStack {
-                        Button { saveCredentials() } label: { LText("Save credentials") }
-                        if savedNote {
-                            LText("Saved").font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField("", text: $username, prompt: Text(L10n.text("Username")))
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.leading)
+                            .labelsHidden()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        SecureField("", text: $password, prompt: Text(L10n.text("Password")))
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.leading)
+                            .labelsHidden()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack {
+                            Button { saveCredentials() } label: { LText("Save credentials") }
+                            if savedNote {
+                                LText("Saved").font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 } label: {
@@ -287,6 +300,7 @@ struct VPNProfileRow: View {
             }
         }
         .padding(.vertical, 2)
+        .onAppear { editedName = profile.name }
     }
 
     private func saveCredentials() {
