@@ -61,6 +61,15 @@ final class VPNManager: ObservableObject {
     /// Liveness poll for WireGuard, which has no control-channel drop signal —
     /// we watch the tunnel interface and treat its disappearance as a drop.
     private var wgMonitorTask: Task<Void, Never>?
+    /// IKEv2 initial-connect retries. NEVPNManager frequently drops the very
+    /// first start right after (re)configuring the tunnel; a retry succeeds. We
+    /// retry the initial connect automatically (independent of auto-reconnect),
+    /// which is why a manual second attempt "just works".
+    private var ikev2InitialRetries = 0
+    private static let maxIKEv2InitialRetries = 3
+    /// A tunnel up at least this long counts as a real session; a drop sooner is
+    /// treated as an initial-connect failure (and auto-retried).
+    private static let ikev2StableThreshold: TimeInterval = 20
 
     init(
         helper: PrivilegedHelperManager = .shared,
@@ -227,11 +236,18 @@ final class VPNManager: ObservableObject {
     }
 
     /// Connect the profile marked connect-on-launch, if any. Called once at app
-    /// startup. A no-op if a tunnel is already active.
+    /// startup. A no-op if a tunnel is already active. Deferred a few seconds so
+    /// the network stack / VPN subsystem is ready (an immediate connect at launch
+    /// is unreliable, especially for IKEv2).
     func connectOnLaunchIfNeeded() {
         guard !status.state.isActive,
               let profile = profiles.first(where: { $0.options.connectOnLaunch }) else { return }
-        connect(profile)
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard let self, !self.status.state.isActive,
+                  self.profiles.contains(where: { $0.id == profile.id }) else { return }
+            self.connect(profile)
+        }
     }
 
     /// Enable/disable applying the profile's own DNS servers while connected.
@@ -255,6 +271,7 @@ final class VPNManager: ObservableObject {
         guard !status.state.isActive else { return }
         cancelPendingReconnect()
         reconnectAttempts = 0
+        ikev2InitialRetries = 0
         dispatchConnect(profile, endpoint: server ?? profile.selectedServer, reconnecting: false)
     }
 
@@ -284,6 +301,7 @@ final class VPNManager: ObservableObject {
         cancelPendingReconnect()
         stopWireGuardMonitor()
         reconnectAttempts = 0
+        ikev2InitialRetries = 0
         networkMonitor?.restoreVPNDNS()
         let previous = status
         status.state = .disconnecting
@@ -509,6 +527,9 @@ final class VPNManager: ObservableObject {
             self.status.state = .connected
             if self.status.connectedSince == nil { self.status.connectedSince = Date() }
             reconnectAttempts = 0
+            // Note: ikev2InitialRetries is NOT reset here — a brief connect that
+            // immediately drops shouldn't refill the retry budget (that would
+            // loop). It resets on a stable drop and on user connect/disconnect.
             refreshPublicIP()
             applyProfileDNSIfNeeded(self.status.profileID)
         case .reasserting:
@@ -520,13 +541,32 @@ final class VPNManager: ObservableObject {
             networkMonitor?.restoreVPNDNS()
             let profileID = self.status.profileID
             let isInvalid = (status == .invalid)
+            let serverID = self.status.serverID
+            // A tunnel that was only up briefly (or never) is an initial-connect
+            // failure, not an established drop — even if it flashed "connected".
+            let connectedFor = self.status.connectedSince.map { Date().timeIntervalSince($0) }
+            let wasStablyConnected = (connectedFor ?? 0) >= Self.ikev2StableThreshold
+            if wasStablyConnected { ikev2InitialRetries = 0 }
             // Surface why it dropped (auth/config/etc.) rather than silently idling.
             ikev2Controller.fetchLastError { [weak self] reason, code in
                 guard let self else { return }
-                // Auto-reconnect only transient drops — never config/auth/cert
-                // errors, which won't fix themselves on retry.
-                if !isInvalid, Self.ikev2DropIsRetryable(code),
-                   self.scheduleReconnectIfEnabled(profileID: profileID) {
+                let retryable = !isInvalid && Self.ikev2DropIsRetryable(code)
+                // Initial-connect quirk: NEVPNManager often drops the first start(s)
+                // right after (re)configuring; a retry succeeds. Retry the initial
+                // connect automatically, regardless of the auto-reconnect option,
+                // so the user doesn't have to press Connect twice.
+                if retryable, !wasStablyConnected,
+                   self.ikev2InitialRetries < Self.maxIKEv2InitialRetries,
+                   let profileID,
+                   let profile = self.profiles.first(where: { $0.id == profileID }),
+                   profile.kind == .ikev2, profile.ikev2Server != nil {
+                    self.ikev2InitialRetries += 1
+                    self.scheduleIKEv2InitialRetry(profile, serverID: serverID)
+                    return
+                }
+                // A stable tunnel dropped, or initial retries ran out — fall back
+                // to auto-reconnect if the profile opted in (bounded, with backoff).
+                if retryable, self.scheduleReconnectIfEnabled(profileID: profileID) {
                     return
                 }
                 self.status = VPNRuntimeStatus(state: reason.map { .failed($0) } ?? .idle, profileID: profileID)
@@ -534,6 +574,20 @@ final class VPNManager: ObservableObject {
             }
         @unknown default:
             break
+        }
+    }
+
+    /// Re-attempt an IKEv2 connect after the first start dropped immediately (a
+    /// common NEVPNManager quirk). The UI stays in "Connecting…" while waiting so
+    /// the retry is invisible to the user.
+    private func scheduleIKEv2InitialRetry(_ profile: VPNProfile, serverID: UUID?) {
+        cancelPendingReconnect()
+        status = VPNRuntimeStatus(state: .connecting, profileID: profile.id, serverID: serverID)
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard let self, !Task.isCancelled,
+                  self.status.profileID == profile.id, self.status.state == .connecting else { return }
+            await self.startIKEv2(profile)
         }
     }
 
