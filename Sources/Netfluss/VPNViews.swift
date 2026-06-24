@@ -286,6 +286,11 @@ struct VPNProfileRow: View {
         NetworkMonitor.allDNSPresets().filter { !$0.servers.isEmpty }
     }
 
+    /// This profile's position in the ordered list (for the move buttons).
+    private var profileIndex: Int? {
+        vpn.profiles.firstIndex(where: { $0.id == profile.id })
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -300,6 +305,20 @@ struct VPNProfileRow: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                if vpn.profiles.count > 1 {
+                    Button { vpn.moveProfile(profile, up: true) } label: {
+                        Image(systemName: "chevron.up")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled((profileIndex ?? 0) == 0)
+                    .help("Move up")
+                    Button { vpn.moveProfile(profile, up: false) } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled((profileIndex ?? 0) >= vpn.profiles.count - 1)
+                    .help("Move down")
+                }
                 Button(role: .destructive) { vpn.deleteProfile(profile) } label: {
                     Image(systemName: "trash")
                 }

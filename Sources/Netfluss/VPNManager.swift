@@ -212,6 +212,22 @@ final class VPNManager: ObservableObject {
         update(p)
     }
 
+    /// Move a profile one slot up or down. The stored order drives both the
+    /// Preferences list and the popover's profile dropdown.
+    func moveProfile(_ profile: VPNProfile, up: Bool) {
+        guard let idx = profiles.firstIndex(where: { $0.id == profile.id }) else { return }
+        let target = up ? idx - 1 : idx + 1
+        guard profiles.indices.contains(target) else { return }
+        profiles.swapAt(idx, target)
+        try? store.save(profiles)
+    }
+
+    /// Reorder profiles from a SwiftUI `onMove` (kept for List-based callers).
+    func moveProfiles(fromOffsets source: IndexSet, toOffset destination: Int) {
+        profiles.move(fromOffsets: source, toOffset: destination)
+        try? store.save(profiles)
+    }
+
     /// Enable/disable automatic reconnection for a profile.
     func setAutoReconnect(_ enabled: Bool, for profile: VPNProfile) {
         guard var p = profiles.first(where: { $0.id == profile.id }),
