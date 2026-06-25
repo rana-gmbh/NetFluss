@@ -21,8 +21,14 @@ import Foundation
 @MainActor
 final class StatisticsManager: ObservableObject {
     private enum Constants {
-        static let appSamplingInterval: TimeInterval = 5
-        static let lowPowerAppSamplingInterval: TimeInterval = 10
+        // App sampling spawns `netstat` and parses its (~185 KB) output, so it is
+        // the main background cost. Sample infrequently — these are historical
+        // rollups, not live data (the popover's live Top Apps uses its own path).
+        static let appSamplingInterval: TimeInterval = 20
+        static let lowPowerAppSamplingInterval: TimeInterval = 60
+        /// Skip an app sample unless at least this many bytes moved since the last
+        /// one, so idle periods spawn no netstat at all.
+        static let appSampleByteThreshold: UInt64 = 256 * 1024
     }
 
     @Published private(set) var report: StatisticsReport?
@@ -36,6 +42,8 @@ final class StatisticsManager: ObservableObject {
     private var previousAdapterSnapshot: [String: (downloadBytes: UInt64, uploadBytes: UInt64)] = [:]
     private var previousAppSnapshot: [String: ProcessConnectionSnapshot] = [:]
     private var previousAppSampleTime: Date?
+    /// Adapter bytes seen since the last app sample; gates the netstat spawn.
+    private var bytesSinceLastAppSample: UInt64 = 0
     private let appSamplingQueue = DispatchQueue(label: "com.local.netfluss.statistics.apps", qos: .utility)
     private var appSamplingTimer: DispatchSourceTimer?
     private var appSamplingInFlight = false
@@ -191,6 +199,7 @@ final class StatisticsManager: ObservableObject {
         }
 
         previousAdapterSnapshot = currentSnapshot
+        bytesSinceLastAppSample &+= deltas.reduce(UInt64(0)) { $0 &+ $1.downloadBytes &+ $1.uploadBytes }
         guard !deltas.isEmpty else { return }
 
         Task.detached(priority: .utility) { [store] in
@@ -226,6 +235,11 @@ final class StatisticsManager: ObservableObject {
 
     private func runAppSampleIfNeeded() {
         guard appStatisticsEnabled, !appSamplingInFlight else { return }
+        // Skip the netstat-spawning sample when traffic since the last one was
+        // negligible — idle periods then cost nothing. The counter accumulates
+        // across skips, so a quiet stretch still samples once it adds up.
+        guard bytesSinceLastAppSample >= Constants.appSampleByteThreshold else { return }
+        bytesSinceLastAppSample = 0
         appSamplingInFlight = true
 
         Task { [weak self] in
