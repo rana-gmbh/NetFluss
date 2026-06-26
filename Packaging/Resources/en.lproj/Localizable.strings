@@ -327,3 +327,34 @@
 
 "Apps to Hide…" = "Apps to Hide…";
 "Apps to Hide (%d)…" = "Apps to Hide (%d)…";
+
+
+/* VPN (v2.4) */
+"VPN" = "VPN";
+"Show VPN in popover" = "Show VPN in popover";
+"Import OpenVPN profile…" = "Import OpenVPN profile…";
+"Import WireGuard profile…" = "Import WireGuard profile…";
+"Import a single config file, or a folder or .zip of them (e.g. a provider's router profiles). Each config becomes a selectable server." = "Import a single config file, or a folder or .zip of them (e.g. a provider's router profiles). Each config becomes a selectable server.";
+"Add system VPN…" = "Add system VPN…";
+"Add IKEv2 VPN…" = "Add IKEv2 VPN…";
+"Install configuration profile (.mobileconfig)…" = "Install configuration profile (.mobileconfig)…";
+"Refresh system VPNs" = "Refresh system VPNs";
+"System VPN (IKEv2 / IPsec / L2TP)" = "System VPN (IKEv2 / IPsec / L2TP)";
+"No system VPNs found. Configure one in System Settings → VPN, or install a provider configuration profile below." = "No system VPNs found. Configure one in System Settings → VPN, or install a provider configuration profile below.";
+"Profiles" = "Profiles";
+"No VPN profiles. Add one in Preferences → VPN." = "No VPN profiles. Add one in Preferences → VPN.";
+"Not connected" = "Not connected";
+"Connected" = "Connected";
+"Connect" = "Connect";
+"Disconnect" = "Disconnect";
+"Disconnecting…" = "Disconnecting…";
+"Reconnecting…" = "Reconnecting…";
+"Name" = "Name";
+"Username" = "Username";
+"Save credentials" = "Save credentials";
+"Saved" = "Saved";
+"Move up" = "Move up";
+"Move down" = "Move down";
+"Add IKEv2 VPN" = "Add IKEv2 VPN";
+"Add" = "Add";
+"Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first." = "Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first.";

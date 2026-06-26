@@ -327,3 +327,34 @@
 
 "Apps to Hide…" = "Auszublendende Apps…";
 "Apps to Hide (%d)…" = "Auszublendende Apps (%d)…";
+
+
+/* VPN (v2.4) */
+"VPN" = "VPN";
+"Show VPN in popover" = "VPN im Popover anzeigen";
+"Import OpenVPN profile…" = "OpenVPN-Profil importieren…";
+"Import WireGuard profile…" = "WireGuard-Profil importieren…";
+"Import a single config file, or a folder or .zip of them (e.g. a provider's router profiles). Each config becomes a selectable server." = "Importiere eine einzelne Konfigurationsdatei oder einen Ordner bzw. eine .zip-Datei davon (z. B. die Router-Profile eines Anbieters). Jede Konfiguration wird zu einem auswählbaren Server.";
+"Add system VPN…" = "System-VPN hinzufügen…";
+"Add IKEv2 VPN…" = "IKEv2-VPN hinzufügen…";
+"Install configuration profile (.mobileconfig)…" = "Konfigurationsprofil installieren (.mobileconfig)…";
+"Refresh system VPNs" = "System-VPNs aktualisieren";
+"System VPN (IKEv2 / IPsec / L2TP)" = "System-VPN (IKEv2 / IPsec / L2TP)";
+"No system VPNs found. Configure one in System Settings → VPN, or install a provider configuration profile below." = "Keine System-VPNs gefunden. Richte eines in den Systemeinstellungen → VPN ein oder installiere unten ein Konfigurationsprofil eines Anbieters.";
+"Profiles" = "Profile";
+"No VPN profiles. Add one in Preferences → VPN." = "Keine VPN-Profile. Füge eines unter Einstellungen → VPN hinzu.";
+"Not connected" = "Nicht verbunden";
+"Connected" = "Verbunden";
+"Connect" = "Verbinden";
+"Disconnect" = "Trennen";
+"Disconnecting…" = "Trennen…";
+"Reconnecting…" = "Erneut verbinden…";
+"Name" = "Name";
+"Username" = "Benutzername";
+"Save credentials" = "Zugangsdaten speichern";
+"Saved" = "Gespeichert";
+"Move up" = "Nach oben verschieben";
+"Move down" = "Nach unten verschieben";
+"Add IKEv2 VPN" = "IKEv2-VPN hinzufügen";
+"Add" = "Hinzufügen";
+"Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first." = "Erstellt ein IKEv2-Profil, mit dem sich NetFluss direkt verbindet (Benutzername/Passwort). Das Passwort wird in deinem Schlüsselbund gespeichert. Verwendet der Server eine private CA, vertraue zuerst deren Zertifikat in der Schlüsselbundverwaltung.";

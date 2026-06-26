@@ -87,7 +87,7 @@ struct VPNSectionView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer()
-                Button(isActive(profile) ? "Disconnect" : "Connect") {
+                Button(L10n.text(isActive(profile) ? "Disconnect" : "Connect")) {
                     if isActive(profile) { vpn.disconnect() } else { vpn.connect(profile) }
                 }
                 .controlSize(.small)

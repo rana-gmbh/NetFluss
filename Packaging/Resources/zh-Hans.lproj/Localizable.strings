@@ -327,3 +327,34 @@
 
 "Apps to Hide…" = "要隐藏的应用…";
 "Apps to Hide (%d)…" = "要隐藏的应用 (%d)…";
+
+
+/* VPN (v2.4) */
+"VPN" = "VPN";
+"Show VPN in popover" = "在弹出窗口中显示 VPN";
+"Import OpenVPN profile…" = "导入 OpenVPN 配置文件…";
+"Import WireGuard profile…" = "导入 WireGuard 配置文件…";
+"Import a single config file, or a folder or .zip of them (e.g. a provider's router profiles). Each config becomes a selectable server." = "导入单个配置文件，或包含多个配置文件的文件夹或 .zip（例如提供商的路由器配置）。每个配置都会成为一个可选服务器。";
+"Add system VPN…" = "添加系统 VPN…";
+"Add IKEv2 VPN…" = "添加 IKEv2 VPN…";
+"Install configuration profile (.mobileconfig)…" = "安装配置描述文件 (.mobileconfig)…";
+"Refresh system VPNs" = "刷新系统 VPN";
+"System VPN (IKEv2 / IPsec / L2TP)" = "系统 VPN (IKEv2 / IPsec / L2TP)";
+"No system VPNs found. Configure one in System Settings → VPN, or install a provider configuration profile below." = "未找到系统 VPN。请在“系统设置 → VPN”中配置一个，或在下方安装提供商的配置描述文件。";
+"Profiles" = "配置文件";
+"No VPN profiles. Add one in Preferences → VPN." = "没有 VPN 配置文件。请在“设置 → VPN”中添加一个。";
+"Not connected" = "未连接";
+"Connected" = "已连接";
+"Connect" = "连接";
+"Disconnect" = "断开";
+"Disconnecting…" = "正在断开…";
+"Reconnecting…" = "正在重新连接…";
+"Name" = "名称";
+"Username" = "用户名";
+"Save credentials" = "保存凭据";
+"Saved" = "已保存";
+"Move up" = "上移";
+"Move down" = "下移";
+"Add IKEv2 VPN" = "添加 IKEv2 VPN";
+"Add" = "添加";
+"Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first." = "创建一个 NetFluss 直接连接的 IKEv2 配置文件（用户名/密码）。密码存储在你的钥匙串中。如果服务器使用私有 CA，请先在“钥匙串访问”中信任其证书。";
