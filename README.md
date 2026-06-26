@@ -6,7 +6,30 @@
 
 A native macOS menubar app showing real-time upload and download rates, router-wide bandwidth, historical traffic statistics, and built-in speed testing.
 
-Latest release: **NetFluss 2.3**
+Latest release: **NetFluss 2.4**
+
+## New in 2.4
+
+- **Built-in VPN client** — NetFluss now ships with a lean VPN client. Many VPN providers offer profiles for routers; you can now import them straight into NetFluss and connect from the menu bar, so you are no longer dependent on the provider's own client software. NetFluss supports the **OpenVPN** protocol, **WireGuard**, and native **IKEv2 / IPsec / L2TP**.
+  - Pick a profile and server, connect/disconnect, and see the connection status, exit country & flag, and public IP — right from the popover.
+  - **Per-profile DNS** — apply one of your NetFluss DNS presets while a VPN is connected; the previous resolver is restored automatically on disconnect.
+  - **Auto-reconnect** — automatically re-establish a tunnel that drops, with exponential backoff.
+  - **Connect on launch** — bring a chosen profile up when NetFluss starts.
+  - Import, rename, reorder, and delete profiles in Preferences → VPN; credentials are stored in the macOS Keychain.
+
+<p align="center">
+  <img src="Screenshots/NetFluss%20VPN%20Popover.webp" width="420" alt="NetFluss VPN in the popover">
+</p>
+
+<p align="center">
+  <img src="Screenshots/NetFluss%20VPN%20settings.webp" width="820" alt="NetFluss VPN settings">
+</p>
+
+- **Much lower energy use** — background sampling was reworked so NetFluss's Activity Monitor energy impact drops back to normal menu-bar-app levels (no more heavyweight per-process sampling running every few seconds).
+
+- **Accurate download rate in every scenario** — the macOS 26.5 fix for the frozen `ifi_ibytes` inbound counter now reads a lightweight kernel-statistics source, so the download number and Bandwidth Statistics history stay correct without the earlier CPU cost.
+
+- **"System default" menu bar color** — a new colour choice that follows the menu bar appearance automatically, staying legible when the wallpaper switches between light and dark. (Thanks to [@mvanhorn](https://github.com/mvanhorn).)
 
 ## New in 2.3
 
@@ -82,6 +105,18 @@ Latest release: **NetFluss 2.3**
 - **Scrollable popover** — the popover is scrollable and resizable for smaller screens, preventing overflow when many adapters or sections are active
 - **Edge-aware popover positioning** — keeps the popover fully visible when the menu bar icon sits near the left or right screen border
 - **Footer** — quick access to Preferences, About, and Quit
+
+### VPN
+
+- **Lean built-in VPN client** — connect to your VPN without installing the provider's own client app
+- **Import provider profiles** — single config files, a folder of them, or a `.zip` bundle (e.g. a provider's router profiles); each config becomes a selectable server
+  - **OpenVPN** (`.ovpn`) and **WireGuard** (`.conf`) run via bundled, signed binaries through the NetFluss privileged helper
+  - **IKEv2 / IPsec / L2TP** via the native macOS VPN stack (username/password / EAP)
+- **Popover controls** — choose a profile and server, connect/disconnect, and see the live status, exit-node country & flag, and public IP
+- **Per-profile DNS** — apply a DNS preset while connected; the previous resolver is restored on disconnect
+- **Auto-reconnect** — automatically re-establish a dropped tunnel, with exponential backoff
+- **Connect on launch** — start a chosen profile automatically when NetFluss launches
+- **Profile management** — import, rename, reorder, and delete profiles in Preferences → VPN; credentials stored securely in the macOS Keychain
 
 ### Statistics
 
@@ -164,7 +199,7 @@ Latest release: **NetFluss 2.3**
 
 ## Install
 
-Download `NetFluss-2.3.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
+Download `NetFluss-2.4.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
 
 NetFluss is notarized and signed with a Developer ID certificate, so Gatekeeper should clear it automatically on first launch.
 
