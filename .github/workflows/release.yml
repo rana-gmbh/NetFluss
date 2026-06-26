@@ -6,41 +6,13 @@ on:
       - 'v*'
 
 jobs:
-  # Build the x86_64 VPN toolchains on an Intel runner (deployment target = the
-  # runner's macOS), so the Intel slices run on real Intel Macs. Apple Silicon
-  # can't produce usable Intel binaries (no Homebrew bottle; a from-source build
-  # there targets the newest macOS).
-  intel-vpn:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build Intel openvpn + WireGuard tools
-        run: |
-          brew install openvpn wireguard-go wireguard-tools bash
-          P="$(brew --prefix)"
-          MIR="$RUNNER_TEMP/intel-brew"
-          # openvpn closure mirror (fixed list, consumed via X86_BREW)
-          mkdir -p "$MIR/opt/openvpn/sbin" "$MIR/opt/lzo/lib" "$MIR/opt/lz4/lib" \
-                   "$MIR/opt/pkcs11-helper/lib" "$MIR/opt/openssl@3/lib"
-          cp -L "$P/opt/openvpn/sbin/openvpn" "$MIR/opt/openvpn/sbin/openvpn"
-          cp -L "$P/opt/lzo/lib/liblzo2.2.dylib" "$MIR/opt/lzo/lib/"
-          cp -L "$P/opt/lz4/lib/liblz4.1.dylib" "$MIR/opt/lz4/lib/"
-          cp -L "$P/opt/pkcs11-helper/lib/libpkcs11-helper.1.dylib" "$MIR/opt/pkcs11-helper/lib/"
-          cp -L "$P/opt/openssl@3/lib/libssl.3.dylib" "$MIR/opt/openssl@3/lib/"
-          cp -L "$P/opt/openssl@3/lib/libcrypto.3.dylib" "$MIR/opt/openssl@3/lib/"
-          lipo -archs "$MIR/opt/openvpn/sbin/openvpn"
-          # WireGuard set: recursive closure resolved here, rewritten thin set
-          STAGE_ONLY=1 ./Packaging/VPN/bundle-wireguard.sh "$MIR/wg-x86"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: intel-vpn
-          path: ${{ runner.temp }}/intel-brew
-
+  # NOTE: the bundled VPN binaries (OpenVPN/WireGuard) are Apple-Silicon-only.
+  # GitHub retired the free macos-13 Intel runner, so the x86_64 VPN slice can no
+  # longer be built on free CI. The app itself stays universal (runs on Intel);
+  # only the VPN tools are arm64. To restore a universal VPN build, add an Intel
+  # job back on a paid macos-*-large runner and lipo its slice in here.
   notarize:
     runs-on: macos-15
-    needs: intel-vpn
     permissions:
       contents: write
 
@@ -84,20 +56,12 @@ jobs:
           security list-keychains -d user -s build.keychain
           security set-key-partition-list -S apple-tool:,apple: -s -k "ci" build.keychain
 
-      - name: Download Intel VPN tools
-        uses: actions/download-artifact@v4
-        with:
-          name: intel-vpn
-          path: ${{ runner.temp }}/intel-brew
-
-      - name: Bundle VPN tools (universal)
+      - name: Bundle VPN tools (arm64)
         run: |
           brew install openvpn wireguard-go wireguard-tools bash
           ID="Developer ID Application: Rana GmbH (D6P24X5377)"
-          X86_BREW="$RUNNER_TEMP/intel-brew" \
-            ./Packaging/VPN/bundle-openvpn.sh NetFluss.app/Contents/Library/VPN "$ID"
-          X86_THIN_DIR="$RUNNER_TEMP/intel-brew/wg-x86" \
-            ./Packaging/VPN/bundle-wireguard.sh NetFluss.app/Contents/Library/VPN "$ID"
+          ./Packaging/VPN/bundle-openvpn.sh NetFluss.app/Contents/Library/VPN "$ID"
+          ./Packaging/VPN/bundle-wireguard.sh NetFluss.app/Contents/Library/VPN "$ID"
           xattr -cr NetFluss.app
           echo "openvpn:"; lipo -archs NetFluss.app/Contents/Library/VPN/openvpn
           echo "wg:"; lipo -archs NetFluss.app/Contents/Library/VPN/wg
