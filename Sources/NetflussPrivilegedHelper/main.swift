@@ -7,6 +7,16 @@ private struct HelperCommandResult {
     let message: String?
 }
 
+/// Thread-safe accumulator for a child process's piped output. The pipe's
+/// readability handler and the process's termination handler run on different
+/// queues, so appends must be serialised.
+private final class CapturedOutput {
+    private let lock = NSLock()
+    private var buffer = Data()
+    func append(_ data: Data) { lock.lock(); buffer.append(data); lock.unlock() }
+    var data: Data { lock.lock(); defer { lock.unlock() }; return buffer }
+}
+
 private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelperProtocol {
     func setDNS(service: String, servers: [String], withReply reply: @escaping (Bool, String?) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
@@ -113,6 +123,23 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = args
         process.currentDirectoryURL = URL(fileURLWithPath: configPath).deletingLastPathComponent()
+
+        // Capture openvpn's stdout/stderr. Fatal early-init and option-parse
+        // errors (bad directive, unreadable cert, dyld/exec failure) are printed
+        // here and openvpn exits BEFORE its `--log` file is usable, so without
+        // this the app only ever sees the generic "couldn't reach the management
+        // interface" error. We drain the pipe continuously (so it can't fill and
+        // stall openvpn) and, on exit, append what we captured to the log file so
+        // the existing `readVPNLog` path surfaces the real reason.
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
+        let captured = CapturedOutput()
+        outputPipe.fileHandleForReading.readabilityHandler = { fh in
+            let data = fh.availableData
+            if data.isEmpty { fh.readabilityHandler = nil } else { captured.append(data) }
+        }
+
         do {
             try process.run()
         } catch {
@@ -121,7 +148,11 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         }
         let handle = String(process.processIdentifier)
         tunnelsQueue.sync { tunnels[handle] = process }
-        process.terminationHandler = { [weak self] _ in
+        process.terminationHandler = { [weak self] proc in
+            let tail = outputPipe.fileHandleForReading.availableData
+            if !tail.isEmpty { captured.append(tail) }
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            Self.appendCapturedOutput(captured.data, terminationStatus: proc.terminationStatus, to: logPath)
             self?.tunnelsQueue.sync { self?.tunnels[handle] = nil }
         }
         reply(true, handle)
@@ -281,6 +312,30 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         let dir = (libraryDir as NSString).appendingPathComponent("VPN")
         var isDir: ObjCBool = false
         return (FileManager.default.fileExists(atPath: dir, isDirectory: &isDir) && isDir.boolValue) ? dir : nil
+    }
+
+    /// Append openvpn's captured stdout/stderr (plus its exit status) to the
+    /// tunnel log so `readVPNLog` can surface the real failure reason. openvpn
+    /// exited by the time this runs, so it has released its own `--log` handle —
+    /// appending is safe. A no-op when there's nothing useful to record.
+    private static func appendCapturedOutput(_ data: Data, terminationStatus: Int32, to logPath: String) {
+        var text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // A silent early exit (no output) still tells the user something via its
+        // non-zero status; a clean exit (0) with no output is noise — skip it.
+        if terminationStatus != 0 {
+            if !text.isEmpty { text += "\n" }
+            text += "openvpn exited with status \(terminationStatus)."
+        }
+        guard !text.isEmpty else { return }
+        let payload = Data(("\n----- openvpn process output -----\n" + text + "\n").utf8)
+        let url = URL(fileURLWithPath: logPath)
+        if let fh = try? FileHandle(forWritingTo: url) {
+            defer { try? fh.close() }
+            _ = try? fh.seekToEnd()
+            try? fh.write(contentsOf: payload)
+        } else {
+            try? payload.write(to: url)
+        }
     }
 
     private static func bundledVPNBinaryPath(kind: String) -> String? {

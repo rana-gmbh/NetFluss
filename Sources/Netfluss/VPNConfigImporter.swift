@@ -37,6 +37,9 @@ enum VPNConfigImporter {
         var endpoints: [VPNServerEndpoint]
         var primaryFileName: String
         var requiresCredentials: Bool
+        /// Non-fatal notes surfaced to the user after a successful import (e.g. the
+        /// config uses an option the bundled OpenVPN can't support).
+        var warnings: [String] = []
     }
 
     enum ImportError: LocalizedError {
@@ -63,7 +66,7 @@ enum VPNConfigImporter {
     // MARK: - Entry points
 
     static func importOpenVPN(from url: URL) throws -> ImportResult {
-        try importConfigs(from: url, ext: "ovpn", collectSidecars: true, parse: parseOpenVPN)
+        try importConfigs(from: url, ext: "ovpn", collectSidecars: true, parse: parseOpenVPN, detectUnsupported: unsupportedDirectives)
     }
 
     static func importWireGuard(from url: URL) throws -> ImportResult {
@@ -76,7 +79,8 @@ enum VPNConfigImporter {
         from url: URL,
         ext: String,
         collectSidecars: Bool,
-        parse: (String) -> Parsed
+        parse: (String) -> Parsed,
+        detectUnsupported: (String) -> [String] = { _ in [] }
     ) throws -> ImportResult {
         let fm = FileManager.default
         var isDir: ObjCBool = false
@@ -85,15 +89,15 @@ enum VPNConfigImporter {
         }
 
         if url.pathExtension.lowercased() == "zip" {
-            return try importTree(root: try extractZip(url), ext: ext, suggestedName: url.deletingPathExtension().lastPathComponent, parse: parse)
+            return try importTree(root: try extractZip(url), ext: ext, suggestedName: url.deletingPathExtension().lastPathComponent, parse: parse, detectUnsupported: detectUnsupported)
         }
         if isDir.boolValue {
-            return try importTree(root: url, ext: ext, suggestedName: url.lastPathComponent, parse: parse)
+            return try importTree(root: url, ext: ext, suggestedName: url.lastPathComponent, parse: parse, detectUnsupported: detectUnsupported)
         }
-        return try importSingle(url, collectSidecars: collectSidecars, parse: parse)
+        return try importSingle(url, collectSidecars: collectSidecars, parse: parse, detectUnsupported: detectUnsupported)
     }
 
-    private static func importSingle(_ url: URL, collectSidecars: Bool, parse: (String) -> Parsed) throws -> ImportResult {
+    private static func importSingle(_ url: URL, collectSidecars: Bool, parse: (String) -> Parsed, detectUnsupported: (String) -> [String] = { _ in [] }) throws -> ImportResult {
         guard let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) else {
             throw ImportError.unreadable(url.lastPathComponent)
         }
@@ -116,10 +120,11 @@ enum VPNConfigImporter {
             label: baseName, host: parsed.host ?? baseName, port: parsed.port,
             transport: parsed.transport, configFileName: name
         )
-        return ImportResult(suggestedName: baseName, files: files, endpoints: [endpoint], primaryFileName: name, requiresCredentials: parsed.requiresCredentials)
+        let warnings = warningMessages(forUnsupported: detectUnsupported(text))
+        return ImportResult(suggestedName: baseName, files: files, endpoints: [endpoint], primaryFileName: name, requiresCredentials: parsed.requiresCredentials, warnings: warnings)
     }
 
-    private static func importTree(root: URL, ext: String, suggestedName: String, parse: (String) -> Parsed) throws -> ImportResult {
+    private static func importTree(root: URL, ext: String, suggestedName: String, parse: (String) -> Parsed, detectUnsupported: (String) -> [String] = { _ in [] }) throws -> ImportResult {
         let fm = FileManager.default
         guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey]) else {
             throw ImportError.noConfigsFound(ext)
@@ -140,17 +145,19 @@ enum VPNConfigImporter {
         let byName = Dictionary(uniqueKeysWithValues: files.map { ($0.name, $0.data) })
         var endpoints: [VPNServerEndpoint] = []
         var requiresCredentials = false
+        var unsupported: [String] = []
         for rel in configRelPaths.sorted() {
             let text = byName[rel].flatMap { String(data: $0, encoding: .utf8) } ?? ""
             let parsed = parse(text)
             requiresCredentials = requiresCredentials || parsed.requiresCredentials
+            for d in detectUnsupported(text) where !unsupported.contains(d) { unsupported.append(d) }
             let label = ((rel as NSString).lastPathComponent as NSString).deletingPathExtension
             endpoints.append(
                 VPNServerEndpoint(label: label, host: parsed.host ?? label, port: parsed.port, transport: parsed.transport, configFileName: rel)
             )
         }
 
-        return ImportResult(suggestedName: suggestedName, files: files, endpoints: endpoints, primaryFileName: configRelPaths.sorted().first!, requiresCredentials: requiresCredentials)
+        return ImportResult(suggestedName: suggestedName, files: files, endpoints: endpoints, primaryFileName: configRelPaths.sorted().first!, requiresCredentials: requiresCredentials, warnings: warningMessages(forUnsupported: unsupported))
     }
 
     private static func relativePath(of url: URL, under root: URL) -> String {
@@ -179,6 +186,31 @@ enum VPNConfigImporter {
             refs.append(ref)
         }
         return refs
+    }
+
+    /// OpenVPN directives that exist only in third-party *patched* builds — the
+    /// bundled upstream openvpn rejects them and exits during parsing (issue #49).
+    /// `scramble` is the XOR/obfuscation patch some providers ship.
+    private static let unsupportedDirectiveSet: Set<String> = ["scramble"]
+
+    /// The patched-only directives present in a config (lowercased, de-duplicated,
+    /// in first-seen order), so import can warn the user up front.
+    private static func unsupportedDirectives(in text: String) -> [String] {
+        var found: [String] = []
+        for rawLine in text.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix(";"), !line.hasPrefix("<") else { continue }
+            let directive = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map { $0.lowercased() } ?? ""
+            if unsupportedDirectiveSet.contains(directive), !found.contains(directive) { found.append(directive) }
+        }
+        return found
+    }
+
+    private static func warningMessages(forUnsupported directives: [String]) -> [String] {
+        guard !directives.isEmpty else { return [] }
+        let list = directives.map { "“\($0)”" }.joined(separator: ", ")
+        let noun = directives.count == 1 ? "option, which is" : "options, which are"
+        return ["This config uses the \(list) \(noun) part of a third-party patched OpenVPN (used by some providers for obfuscation). The bundled OpenVPN doesn't support it, so this profile won't connect. Ask your provider for a standard OpenVPN or WireGuard config."]
     }
 
     private static func parseOpenVPN(_ text: String) -> Parsed {

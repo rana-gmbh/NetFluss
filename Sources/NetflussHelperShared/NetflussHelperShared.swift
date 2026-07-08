@@ -5,7 +5,7 @@ public enum NetflussHelperConstants {
     /// daemon when the bundled version differs from the last registered one, so
     /// launchd picks up the new helper binary instead of keeping the old daemon
     /// (SMAppService does not refresh an already-enabled daemon on its own).
-    public static let helperVersion = 6
+    public static let helperVersion = 7
 
     public static let appBundleIdentifier = "com.local.netfluss"
     public static let teamIdentifier = "D6P24X5377"

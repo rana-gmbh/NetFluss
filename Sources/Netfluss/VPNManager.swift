@@ -92,7 +92,7 @@ final class VPNManager: ObservableObject {
     /// `.ovpn` becomes a selectable server. Optional `name` overrides the
     /// suggested name derived from the source.
     @discardableResult
-    func importOpenVPNProfile(from source: URL, name: String? = nil) throws -> VPNProfile {
+    func importOpenVPNProfile(from source: URL, name: String? = nil) throws -> (profile: VPNProfile, warnings: [String]) {
         let result = try VPNConfigImporter.importOpenVPN(from: source)
         let id = UUID()
         try store.writeConfigFiles(result.files, profileID: id)
@@ -106,7 +106,7 @@ final class VPNManager: ObservableObject {
         )
         profiles.append(profile)
         try store.save(profiles)
-        return profile
+        return (profile, result.warnings)
     }
 
     func hasStoredCredentials(_ profile: VPNProfile) -> Bool {
@@ -479,11 +479,19 @@ final class VPNManager: ObservableObject {
         let logPath = Self.managementLogPath(for: profile)
         Task { [weak self] in
             guard let self else { return }
-            let result = await self.helper.readVPNLog(path: logPath)
-            // Only refine if we're still showing the failure for this attempt.
-            guard self.status.profileID == profileID, case .failed = self.status.state else { return }
-            if let log = result?.stdout, !log.isEmpty, let summary = Self.summarizeLog(log) {
-                self.status.state = .failed(summary)
+            // openvpn writes its own log and the helper appends the process's
+            // captured stderr on exit; both can land a beat after we give up on
+            // the management socket, so retry briefly before settling for the
+            // generic message.
+            for attempt in 0..<3 {
+                if attempt > 0 { try? await Task.sleep(nanoseconds: 400_000_000) }
+                let result = await self.helper.readVPNLog(path: logPath)
+                // Only refine if we're still showing the failure for this attempt.
+                guard self.status.profileID == profileID, case .failed = self.status.state else { return }
+                if let log = result?.stdout, !log.isEmpty, let summary = Self.summarizeLog(log) {
+                    self.status.state = .failed(summary)
+                    return
+                }
             }
         }
     }

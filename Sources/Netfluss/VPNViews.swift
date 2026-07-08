@@ -187,6 +187,7 @@ struct VPNPreferencesContent: View {
     @EnvironmentObject private var vpn: VPNManager
     @AppStorage("showVPN") private var showVPN: Bool = false
     @State private var importError: String?
+    @State private var importWarning: String?
     @State private var nativeServices: [NativeVPN.Service] = []
     @State private var showAddIKEv2 = false
 
@@ -200,6 +201,9 @@ struct VPNPreferencesContent: View {
                 .foregroundStyle(.secondary)
             if let importError {
                 Text(importError).font(.caption).foregroundStyle(.red)
+            }
+            if let importWarning {
+                Text(importWarning).font(.caption).foregroundStyle(.orange)
             }
         } header: {
             LText("VPN")
@@ -250,6 +254,7 @@ struct VPNPreferencesContent: View {
 
     private func importProfile(kind: VPNProtocolKind) {
         importError = nil
+        importWarning = nil
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
@@ -261,7 +266,7 @@ struct VPNPreferencesContent: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             switch kind {
-            case .openVPN: try vpn.importOpenVPNProfile(from: url)
+            case .openVPN: importWarning = try vpn.importOpenVPNProfile(from: url).warnings.first
             case .wireGuard: try vpn.importWireGuardProfile(from: url)
             case .ikev2: break
             }
