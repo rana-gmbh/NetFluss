@@ -56,16 +56,22 @@ jobs:
           security list-keychains -d user -s build.keychain
           security set-key-partition-list -S apple-tool:,apple: -s -k "ci" build.keychain
 
-      - name: Bundle VPN tools (arm64)
+      # Universal (arm64 + x86_64) VPN toolchain. The Intel slice is assembled
+      # from pinned x86_64 *ventura* Homebrew bottles downloaded straight from
+      # ghcr.io (see build-vpn-bundle.sh) — no Intel runner needed. Hard-gated:
+      # the build fails if either slice is missing, so a release can never ship
+      # arm64-only VPN by accident (issue #48).
+      - name: Bundle VPN tools (universal)
         run: |
-          brew install openvpn wireguard-go wireguard-tools bash
           ID="Developer ID Application: Rana GmbH (D6P24X5377)"
-          ./Packaging/VPN/bundle-openvpn.sh NetFluss.app/Contents/Library/VPN "$ID"
-          ./Packaging/VPN/bundle-wireguard.sh NetFluss.app/Contents/Library/VPN "$ID"
+          ./Packaging/VPN/build-vpn-bundle.sh NetFluss.app/Contents/Library/VPN "$ID"
           xattr -cr NetFluss.app
-          echo "openvpn:"; lipo -archs NetFluss.app/Contents/Library/VPN/openvpn
-          echo "wg:"; lipo -archs NetFluss.app/Contents/Library/VPN/wg
-          echo "bash:"; lipo -archs NetFluss.app/Contents/Library/VPN/bash
+          for t in openvpn wg wireguard-go bash; do
+            archs="$(lipo -archs "NetFluss.app/Contents/Library/VPN/$t")"
+            echo "$t: $archs"
+            echo "$archs" | grep -qw x86_64 || { echo "::error::$t is missing its x86_64 slice"; exit 1; }
+            echo "$archs" | grep -qw arm64  || { echo "::error::$t is missing its arm64 slice";  exit 1; }
+          done
 
       # The app is signed with the Personal VPN entitlement (allow-vpn) so IKEv2
       # works. That entitlement is restricted and authorized only by an embedded
