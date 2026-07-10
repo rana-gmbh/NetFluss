@@ -64,20 +64,25 @@ final class VPNDiagnosticsLog {
     /// Record a one-time environment snapshot at the start of a connection attempt
     /// — the single most useful thing for diagnosing arch / stale-helper issues.
     func logEnvironment(registeredHelperPath: String?, registeredHelperVersion: Int) {
-        var lines: [String] = []
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
-        lines.append("NetFluss \(short) (build \(build)), helperVersion \(NetflussHelperConstants.helperVersion)")
-        lines.append("macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
-        lines.append("app process arch: \(Self.runningArch)")
-        lines.append("app bundle: \(Bundle.main.bundlePath)")
-        lines.append("helper registered from: \(registeredHelperPath ?? "(unknown)") [v\(registeredHelperVersion)]")
-        let vpnDir = Bundle.main.bundlePath + "/Contents/Library/VPN"
-        for tool in ["openvpn", "wireguard-go", "wg", "bash"] {
-            lines.append("  \(tool): \(Self.fileArch(vpnDir + "/" + tool))")
+        let bundlePath = Bundle.main.bundlePath
+        // Run the `file` architecture probes off the main thread.
+        queue.async { [self] in
+            var lines: [String] = []
+            lines.append("NetFluss \(short) (build \(build)), helperVersion \(NetflussHelperConstants.helperVersion)")
+            lines.append("macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
+            lines.append("app process arch: \(Self.runningArch)")
+            lines.append("app bundle: \(bundlePath)")
+            lines.append("helper registered from: \(registeredHelperPath ?? "(unknown)") [v\(registeredHelperVersion)]")
+            let vpnDir = bundlePath + "/Contents/Library/VPN"
+            for tool in ["openvpn", "wireguard-go", "wg", "bash"] {
+                lines.append("  \(tool): \(Self.fileArch(vpnDir + "/" + tool))")
+            }
+            let body = lines.joined(separator: "\n")
+            append("[\(Self.timestamp())] ── environment ──\n\(body)\n──────────\n")
         }
-        logBlock("environment", lines.joined(separator: "\n"))
     }
 
     func readAll() -> String {
