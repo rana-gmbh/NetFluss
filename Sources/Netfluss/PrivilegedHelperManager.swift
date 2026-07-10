@@ -59,6 +59,13 @@ actor PrivilegedHelperManager {
             return .unavailable(message: "The bundled helper executable is missing.")
         }
 
+        // Repair a stale registration first: an already-`.enabled` daemon left by
+        // a previous install (possibly at a different path, with arm64-only VPN
+        // tools next to it) would otherwise make this button a no-op. This
+        // re-points the daemon at the current bundle when the version or path
+        // changed, so "Install helper" reliably fixes a wrong/old registration.
+        refreshHelperIfOutdated()
+
         switch service.status {
         case .enabled:
             return .alreadyEnabled
