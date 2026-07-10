@@ -288,7 +288,14 @@ final class VPNManager: ObservableObject {
         cancelPendingReconnect()
         reconnectAttempts = 0
         ikev2InitialRetries = 0
-        dispatchConnect(profile, endpoint: server ?? profile.selectedServer, reconnecting: false)
+        let endpoint = server ?? profile.selectedServer
+        let defaults = UserDefaults.standard
+        VPNDiagnosticsLog.shared.log("Connect requested: \"\(profile.name)\" [\(profile.kind.rawValue)] server=\(endpoint?.label ?? "-")")
+        VPNDiagnosticsLog.shared.logEnvironment(
+            registeredHelperPath: defaults.string(forKey: PrivilegedHelperManager.registeredHelperBundlePathKey),
+            registeredHelperVersion: defaults.integer(forKey: PrivilegedHelperManager.registeredHelperVersionKey)
+        )
+        dispatchConnect(profile, endpoint: endpoint, reconnecting: false)
     }
 
     /// Start the backend for a profile. Shared by the user-facing `connect` and
@@ -363,20 +370,26 @@ final class VPNManager: ObservableObject {
         )
 
         guard let result, result.success else {
-            status.state = .failed(result?.stderr ?? "Could not start the VPN helper.")
+            let reason = result?.stderr ?? "Could not start the VPN helper."
+            VPNDiagnosticsLog.shared.log("Helper start FAILED (\(profile.kind.rawValue)): \(reason)")
+            captureToolLog(for: profile)
+            status.state = .failed(reason)
             return
         }
         activeTunnelHandle = result.stdout   // helper returns the handle in stdout
+        VPNDiagnosticsLog.shared.log("Helper started \(profile.kind.rawValue), handle=\(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines))")
 
         guard profile.kind == .openVPN else {
             // WireGuard: wg-quick brought the tunnel up synchronously, so a
             // successful helper reply means we're connected.
             let iface = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            captureToolLog(for: profile)   // record the full wg-quick output either way
             status.state = .connected
             status.connectedSince = Date()
             status.tunnelInterface = iface
             status.assignedIP = wireGuardAddress(for: profile, endpoint: endpoint)
             reconnectAttempts = 0
+            VPNDiagnosticsLog.shared.log("WireGuard connected: interface=\(iface)")
             startWireGuardMonitor(interface: iface, profileID: profile.id)
             refreshPublicIP()
             applyProfileDNSIfNeeded(profile.id)
@@ -404,6 +417,7 @@ final class VPNManager: ObservableObject {
         case .state(let state, let assignedIP):
             switch state {
             case "CONNECTED":
+                VPNDiagnosticsLog.shared.log("OpenVPN connected\(assignedIP.map { " (\($0))" } ?? "")")
                 status.state = .connected
                 if status.connectedSince == nil { status.connectedSince = Date() }
                 if let assignedIP { status.assignedIP = assignedIP }
@@ -473,6 +487,7 @@ final class VPNManager: ObservableObject {
     /// Set a provisional failure, then refine it with the real reason read from
     /// openvpn's (root-owned) log via the helper.
     private func failWithReason(_ base: String) {
+        VPNDiagnosticsLog.shared.log("VPN failed: \(base)")
         status.state = .failed(base)
         guard let profileID = status.profileID,
               let profile = profiles.first(where: { $0.id == profileID }) else { return }
@@ -489,7 +504,27 @@ final class VPNManager: ObservableObject {
                 // Only refine if we're still showing the failure for this attempt.
                 guard self.status.profileID == profileID, case .failed = self.status.state else { return }
                 if let log = result?.stdout, !log.isEmpty, let summary = Self.summarizeLog(log) {
+                    VPNDiagnosticsLog.shared.logBlock("openvpn log", log)
                     self.status.state = .failed(summary)
+                    return
+                }
+            }
+        }
+    }
+
+    /// Read the helper-written tunnel log (openvpn stderr / wg-quick output) and
+    /// append it to the VPN diagnostics log, so a user can send us exactly what
+    /// the bundled tool did — success or failure.
+    private func captureToolLog(for profile: VPNProfile) {
+        let logPath = Self.managementLogPath(for: profile)
+        Task { [weak self] in
+            guard let self else { return }
+            // wg-quick's log is written synchronously before the helper replies;
+            // a short retry covers the openvpn case where it lands a beat later.
+            for attempt in 0..<3 {
+                if attempt > 0 { try? await Task.sleep(nanoseconds: 300_000_000) }
+                if let log = await self.helper.readVPNLog(path: logPath)?.stdout, !log.isEmpty {
+                    VPNDiagnosticsLog.shared.logBlock("\(profile.kind.rawValue) tool log", log)
                     return
                 }
             }

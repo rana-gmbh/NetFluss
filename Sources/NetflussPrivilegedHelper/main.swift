@@ -92,7 +92,7 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             case "openVPN":
                 self.startOpenVPN(configPath: configPath, managementSocketPath: managementSocketPath, socketOwner: socketOwner, reply: reply)
             case "wireGuard":
-                self.startWireGuard(configPath: configPath, reply: reply)
+                self.startWireGuard(configPath: configPath, managementSocketPath: managementSocketPath, reply: reply)
             default:
                 reply(false, "Unsupported VPN kind '\(kind)'.")
             }
@@ -158,8 +158,13 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         reply(true, handle)
     }
 
-    private func startWireGuard(configPath: String, reply: @escaping (Bool, String?) -> Void) {
+    private func startWireGuard(configPath: String, managementSocketPath: String, reply: @escaping (Bool, String?) -> Void) {
+        // Diagnostics log the app can read back (see readVPNLog): records the tools,
+        // their architecture, the exact command, and wg-quick's full output — so a
+        // failed bring-up produces an actionable report instead of a bare errno.
+        let logPath = (managementSocketPath as NSString).deletingPathExtension + ".log"
         guard let toolsDir = Self.vpnToolsDir() else {
+            Self.writeVPNLog("Missing bundled WireGuard tools (no VPN tools dir).", to: logPath)
             reply(false, "Missing bundled WireGuard tools.")
             return
         }
@@ -167,6 +172,7 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         let wgQuick = toolsDir + "/wg-quick"
         guard FileManager.default.isExecutableFile(atPath: bashPath),
               FileManager.default.fileExists(atPath: wgQuick) else {
+            Self.writeVPNLog("Missing bundled WireGuard tools at \(toolsDir).", to: logPath)
             reply(false, "Missing bundled WireGuard tools.")
             return
         }
@@ -178,11 +184,27 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
             try data.write(to: URL(fileURLWithPath: tmpConf), options: .atomic)
         } catch {
+            Self.writeVPNLog("Could not stage config: \(error.localizedDescription)", to: logPath)
             reply(false, error.localizedDescription)
             return
         }
-        let env = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "WG_QUICK_USERSPACE_IMPLEMENTATION": "wireguard-go"]
+        // wg-quick needs this dir for its control socket; create it up front so a
+        // missing /var/run/wireguard can't be the failure. Put the tools dir first
+        // on PATH so wg-quick always finds our wireguard-go/wg (not a stray copy).
+        try? FileManager.default.createDirectory(atPath: "/var/run/wireguard", withIntermediateDirectories: true)
+        let env = ["PATH": "\(toolsDir):/usr/bin:/bin:/usr/sbin:/sbin",
+                   "WG_QUICK_USERSPACE_IMPLEMENTATION": "wireguard-go"]
+
+        var header = "NetFluss WireGuard bring-up\n"
+        header += "toolsDir: \(toolsDir)\n"
+        header += "bash:         \(Self.fileArch(bashPath))\n"
+        header += "wireguard-go: \(Self.fileArch(toolsDir + "/wireguard-go"))\n"
+        header += "wg:           \(Self.fileArch(toolsDir + "/wg"))\n"
+        header += "command: bash wg-quick up \(tmpConf)\n"
+
         let result = Self.runProcess(bashPath, [wgQuick, "up", tmpConf], env: env)
+        Self.writeVPNLog(header + "\n--- wg-quick output ---\n" + (result.message ?? "(no output)")
+            + "\n\nresult: \(result.success ? "success" : "FAILED")", to: logPath)
         if result.success {
             tunnelsQueue.sync { wgTunnels[name] = tmpConf }
             reply(true, name)
@@ -190,6 +212,19 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             try? FileManager.default.removeItem(atPath: tmpConf)
             reply(false, result.message ?? "wg-quick up failed.")
         }
+    }
+
+    /// `file -b <path>` — a concise architecture line for the diagnostics log.
+    private static func fileArch(_ path: String) -> String {
+        guard FileManager.default.fileExists(atPath: path) else { return "(missing)" }
+        let r = runProcess("/usr/bin/file", ["-b", path], env: nil)
+        return (r.message ?? "").isEmpty ? "(unknown)" : (r.message ?? "")
+    }
+
+    /// Overwrite a tunnel diagnostics log the app can read via `readVPNLog`
+    /// (restricted to /tmp/netfluss-vpn-*.log there).
+    private static func writeVPNLog(_ text: String, to path: String) {
+        try? text.write(toFile: path, atomically: true, encoding: .utf8)
     }
 
     func stopVPNTunnel(handle: String, withReply reply: @escaping (Bool, String?) -> Void) {
