@@ -180,8 +180,8 @@ actor PrivilegedHelperManager {
         }
     }
 
-    private static let registeredHelperVersionKey = "registeredHelperVersion"
-    private static let registeredHelperBundlePathKey = "registeredHelperBundlePath"
+    static let registeredHelperVersionKey = "registeredHelperVersion"
+    static let registeredHelperBundlePathKey = "registeredHelperBundlePath"
 
     /// Force a re-registration when either the bundled helper version changed OR
     /// the app moved since we last registered.
