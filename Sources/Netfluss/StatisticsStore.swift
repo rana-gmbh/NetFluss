@@ -128,7 +128,8 @@ actor StatisticsStore {
         for range: StatisticsRange,
         now: Date,
         customAdapterNames: [String: String],
-        hiddenApps: Set<String>
+        hiddenApps: Set<String>,
+        excludeTunnels: Bool
     ) -> StatisticsReport {
         let adapterSource: [String: [String: StatisticsTrafficAmounts]]
         let appSource: [String: [String: StatisticsTrafficAmounts]]
@@ -180,7 +181,8 @@ actor StatisticsStore {
             appSource: appSource,
             relevantKeys: relevantKeys,
             customAdapterNames: customAdapterNames,
-            hiddenApps: hiddenApps
+            hiddenApps: hiddenApps,
+            excludeTunnels: excludeTunnels
         )
     }
 
@@ -189,7 +191,8 @@ actor StatisticsStore {
         customEnd: Date,
         now: Date,
         customAdapterNames: [String: String],
-        hiddenApps: Set<String>
+        hiddenApps: Set<String>,
+        excludeTunnels: Bool
     ) -> StatisticsReport {
         let boundedEnd = min(max(customStart, customEnd), now)
         let boundedStart = min(customStart, boundedEnd)
@@ -231,16 +234,17 @@ actor StatisticsStore {
             appSource: appSource,
             relevantKeys: relevantKeys,
             customAdapterNames: customAdapterNames,
-            hiddenApps: hiddenApps
+            hiddenApps: hiddenApps,
+            excludeTunnels: excludeTunnels
         )
     }
 
     /// Calendar-aligned "today" (since midnight) and "this month" (since the
-    /// 1st) totals summed across ALL adapters from the daily rollups. Matches
-    /// the Statistics window's totals, which likewise count every adapter
-    /// (including tunnels/VPN). Cheap — sums at most ~31 daily buckets — so it
-    /// is safe to call on every refresh tick.
-    func usageSummary(now: Date) -> StatisticsUsageSummary {
+    /// 1st) totals from the daily rollups. `excludeTunnels` drops VPN/tunnel
+    /// adapters (utun/ipsec/ppp/tun/tap) so the popover's Data Usage total agrees
+    /// with the live Download/Upload totals when that preference is on. Cheap —
+    /// sums at most ~31 daily buckets — safe to call on every refresh tick.
+    func usageSummary(now: Date, excludeTunnels: Bool) -> StatisticsUsageSummary {
         let todayStart = calendar.startOfDay(for: now)
         let monthStart = calendar.dateInterval(of: .month, for: now)?.start ?? todayStart
         let todayKeys = Self.dayKeys(from: todayStart, to: now, calendar: calendar)
@@ -248,6 +252,7 @@ actor StatisticsStore {
 
         func total(for keys: [String]) -> StatisticsTrafficAmounts {
             aggregate(items: archive.adapterDaily, keys: keys)
+                .filter { !(excludeTunnels && AdapterClassifier.isTunnelInterface(named: $0.key)) }
                 .values
                 .reduce(into: StatisticsTrafficAmounts()) { $0.merge($1) }
         }
@@ -266,12 +271,21 @@ actor StatisticsStore {
         appSource: [String: [String: StatisticsTrafficAmounts]],
         relevantKeys: [String],
         customAdapterNames: [String: String],
-        hiddenApps: Set<String>
+        hiddenApps: Set<String>,
+        excludeTunnels: Bool
     ) -> StatisticsReport {
         let coverageStart = earliestCoverageDate()
+        // Full per-adapter aggregate — feeds the adapter list, which always shows
+        // every adapter (tunnels included, per the setting's documented behaviour).
         let adapterTotals = aggregate(items: adapterSource, keys: relevantKeys)
+        // When excluding tunnels, drop those adapters once at the source so the
+        // headline totals and the timeline chart agree; the adapter list is untouched.
+        let totalsSource = excludeTunnels
+            ? adapterSource.mapValues { $0.filter { !AdapterClassifier.isTunnelInterface(named: $0.key) } }
+            : adapterSource
+        let totalsAmounts = aggregate(items: totalsSource, keys: relevantKeys)
         let appTotals = aggregate(items: appSource, keys: relevantKeys)
-        let timeline = timelinePoints(granularity: timelineGranularity, source: adapterSource, keys: relevantKeys)
+        let timeline = timelinePoints(granularity: timelineGranularity, source: totalsSource, keys: relevantKeys)
 
         let adapters = topAdapters(from: adapterTotals, customAdapterNames: customAdapterNames)
         let topDownloadApps = appRows(
@@ -296,8 +310,8 @@ actor StatisticsStore {
             coverageStart: coverageStart,
             lastAdapterSampleAt: archive.lastAdapterSampleAt,
             lastAppSampleAt: archive.lastAppSampleAt,
-            totalDownloadBytes: adapterTotals.values.reduce(0) { $0 + $1.downloadBytes },
-            totalUploadBytes: adapterTotals.values.reduce(0) { $0 + $1.uploadBytes },
+            totalDownloadBytes: totalsAmounts.values.reduce(0) { $0 + $1.downloadBytes },
+            totalUploadBytes: totalsAmounts.values.reduce(0) { $0 + $1.uploadBytes },
             timeline: timeline,
             adapters: adapters,
             topDownloadApps: topDownloadApps,
