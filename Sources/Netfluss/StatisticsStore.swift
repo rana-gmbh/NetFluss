@@ -235,6 +235,26 @@ actor StatisticsStore {
         )
     }
 
+    /// Calendar-aligned "today" (since midnight) and "this month" (since the
+    /// 1st) totals summed across ALL adapters from the daily rollups. Matches
+    /// the Statistics window's totals, which likewise count every adapter
+    /// (including tunnels/VPN). Cheap — sums at most ~31 daily buckets — so it
+    /// is safe to call on every refresh tick.
+    func usageSummary(now: Date) -> StatisticsUsageSummary {
+        let todayStart = calendar.startOfDay(for: now)
+        let monthStart = calendar.dateInterval(of: .month, for: now)?.start ?? todayStart
+        let todayKeys = Self.dayKeys(from: todayStart, to: now, calendar: calendar)
+        let monthKeys = Self.dayKeys(from: monthStart, to: now, calendar: calendar)
+
+        func total(for keys: [String]) -> StatisticsTrafficAmounts {
+            aggregate(items: archive.adapterDaily, keys: keys)
+                .values
+                .reduce(into: StatisticsTrafficAmounts()) { $0.merge($1) }
+        }
+
+        return StatisticsUsageSummary(today: total(for: todayKeys), month: total(for: monthKeys))
+    }
+
     private func makeReport(
         range: StatisticsRange,
         displayTitle: String,

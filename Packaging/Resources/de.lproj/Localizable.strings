@@ -208,6 +208,12 @@
 "Hourly Traffic" = "Stündlicher Datenverkehr";
 "Daily Traffic" = "Täglicher Datenverkehr";
 "Monthly Traffic" = "Monatlicher Datenverkehr";
+"Data Usage" = "Datennutzung";
+"Today" = "Heute";
+"This Month" = "Dieser Monat";
+"Total" = "Gesamt";
+"Display usage summary on popover" = "Nutzungsübersicht im Popover anzeigen";
+"Shows today's and this month's upload, download, and total data in the popover. Requires historical statistics collection." = "Zeigt Upload, Download und Gesamtvolumen für heute und diesen Monat im Popover an. Erfordert die Erfassung historischer Statistiken.";
 "Run Test" = "Test starten";
 "Run Again" = "Erneut starten";
 "Connection Details" = "Verbindungsdetails";

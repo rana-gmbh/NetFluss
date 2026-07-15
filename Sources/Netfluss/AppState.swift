@@ -72,6 +72,7 @@ final class AppState {
             "wifiLimitCount": 10,
             "showTotalsHeader": true,
             "showAdapterList": true,
+            "showUsageSummary": false,
             "popoverSectionOrder": PopoverSection.defaultOrder.map(\.rawValue),
             "lastConnectionStatusMode": "flow",
             "customDNSPresets": Data(),
