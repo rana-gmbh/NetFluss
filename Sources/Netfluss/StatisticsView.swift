@@ -28,6 +28,7 @@ struct StatisticsView: View {
     @EnvironmentObject private var monitor: NetworkMonitor
     @AppStorage("collectStatistics") private var collectStatistics: Bool = false
     @AppStorage("collectAppStatistics") private var collectAppStatistics: Bool = true
+    @AppStorage("excludeTunnelAdaptersFromTotals") private var excludeTunnelAdapters: Bool = false
 
     @State private var range: StatisticsRange = .last24Hours
     @State private var customRangeActive = false
@@ -67,6 +68,9 @@ struct StatisticsView: View {
             statisticsManager.refreshCurrentReport()
         }
         .onChange(of: collectAppStatistics) { _ in
+            statisticsManager.refreshCurrentReport()
+        }
+        .onChange(of: excludeTunnelAdapters) { _ in
             statisticsManager.refreshCurrentReport()
         }
         .onReceive(refreshTimer) { _ in

@@ -116,10 +116,6 @@ struct UsageSummarySection: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 10)
         }
-        // Refresh when the section becomes visible so the numbers are current
-        // even after an idle stretch with no new adapter deltas. Live updates
-        // while the popover stays open are driven by StatisticsManager.
-        .onAppear { statisticsManager.refreshUsageSummary() }
     }
 
     private func columnHeader(_ key: String) -> some View {
@@ -141,11 +137,15 @@ struct UsageSummarySection: View {
         let weight: Font.Weight = emphasized ? .semibold : .regular
         GridRow {
             HStack(spacing: 6) {
-                Image(systemName: icon ?? "circle")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(color)
-                    .frame(width: 12)
-                    .opacity(icon == nil ? 0 : 1)
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(color)
+                        .frame(width: 12)
+                        .accessibilityHidden(true)
+                } else {
+                    Color.clear.frame(width: 12, height: 1)
+                }
                 Text(LocalizedStringKey(titleKey))
                     .font(.system(size: 11, weight: weight))
                     .foregroundStyle(emphasized ? Color.primary : Color.secondary)
@@ -157,5 +157,6 @@ struct UsageSummarySection: View {
                 .font(.system(size: 11, weight: weight))
                 .monospacedDigit()
         }
+        .accessibilityElement(children: .combine)
     }
 }
