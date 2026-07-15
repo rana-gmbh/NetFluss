@@ -25,6 +25,7 @@ struct MenuBarView: View {
     let onTogglePin: () -> Void
 
     @EnvironmentObject private var monitor: NetworkMonitor
+    @EnvironmentObject private var statisticsManager: StatisticsManager
     @AppStorage("showInactive") private var showInactive: Bool = false
     @AppStorage("adapterGracePeriodEnabled") private var adapterGracePeriodEnabled: Bool = false
     @AppStorage("showOtherAdapters") private var showOtherAdapters: Bool = false
@@ -46,6 +47,8 @@ struct MenuBarView: View {
     @AppStorage("opnsenseEnabled") private var opnsenseEnabled: Bool = false
     @AppStorage("showTotalsHeader") private var showTotalsHeader: Bool = true
     @AppStorage("showAdapterList") private var showAdapterList: Bool = true
+    @AppStorage("showUsageSummary") private var showUsageSummary: Bool = false
+    @AppStorage("collectStatistics") private var collectStatistics: Bool = false
 
     private static let cardSpacing: CGFloat = 6   // VStack spacing between cards
     @State private var contentHeight: CGFloat = 0
@@ -144,6 +147,7 @@ struct MenuBarView: View {
     private func isSectionVisible(_ section: PopoverSection) -> Bool {
         switch section {
         case .totals: return showTotalsHeader
+        case .usage: return showUsageSummary && collectStatistics
         case .adapters: return showAdapterList
         case .connection: return connectionStatusMode != "none"
         case .dns: return showDNSSwitcher
@@ -165,6 +169,9 @@ struct MenuBarView: View {
         switch section {
         case .totals:
             TotalRatesHeader(totals: headerTotals, useBits: useBits)
+
+        case .usage:
+            UsageSummarySection()
 
         case .adapters:
             if adapters.isEmpty {

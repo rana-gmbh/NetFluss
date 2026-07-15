@@ -198,6 +198,7 @@ struct WifiNetwork: Identifiable, Equatable, Sendable {
 /// canonical visibility keys (see PopoverSection.visibilityKey).
 enum PopoverSection: String, CaseIterable, Identifiable, Sendable {
     case totals
+    case usage
     case adapters
     case connection
     case dns
@@ -209,12 +210,13 @@ enum PopoverSection: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
 
     static let defaultOrder: [PopoverSection] = [
-        .totals, .adapters, .connection, .dns, .router, .wifi, .vpn, .topApps
+        .totals, .adapters, .connection, .dns, .router, .wifi, .vpn, .topApps, .usage
     ]
 
     var displayName: String {
         switch self {
         case .totals: return "Download / Upload"
+        case .usage: return "Data Usage"
         case .adapters: return "Network adapters"
         case .connection: return "Network flow"
         case .dns: return "DNS"
@@ -228,6 +230,7 @@ enum PopoverSection: String, CaseIterable, Identifiable, Sendable {
     var systemImage: String {
         switch self {
         case .totals: return "arrow.up.arrow.down"
+        case .usage: return "chart.bar.doc.horizontal"
         case .adapters: return "network"
         case .connection: return "globe"
         case .dns: return "server.rack"

@@ -34,6 +34,7 @@ final class StatisticsManager: ObservableObject {
     @Published private(set) var report: StatisticsReport?
     @Published private(set) var isLoading = false
     @Published private(set) var isShowingSampleData = false
+    @Published private(set) var usageSummary: StatisticsUsageSummary = .empty
 
     private let monitor: NetworkMonitor
     private let store: StatisticsStore
@@ -81,6 +82,7 @@ final class StatisticsManager: ObservableObject {
 
         if !statisticsEnabled {
             previousAdapterSnapshot = snapshotMap(from: monitor.adapters)
+            usageSummary = .empty
         }
         if !appStatisticsEnabled {
             previousAppSnapshot = [:]
@@ -144,6 +146,22 @@ final class StatisticsManager: ObservableObject {
         }
     }
 
+    /// Recompute the popover "Data Usage" summary on demand (e.g. when the
+    /// section appears) so it is current even after an idle stretch with no new
+    /// adapter deltas. Resets to empty when collection is off.
+    func refreshUsageSummary() {
+        guard statisticsEnabled else {
+            usageSummary = .empty
+            return
+        }
+        Task { [store] in
+            let summary = await store.usageSummary(now: Date())
+            await MainActor.run {
+                self.usageSummary = summary
+            }
+        }
+    }
+
     func enableSampleData() {
         sampleStore = StatisticsStore(archive: StatisticsDemoData.makeArchive(now: Date()))
         isShowingSampleData = true
@@ -174,6 +192,12 @@ final class StatisticsManager: ObservableObject {
         statisticsEnabled && UserDefaults.standard.bool(forKey: "collectAppStatistics")
     }
 
+    /// True only when history collection is on AND the popover section is
+    /// enabled. Gates the per-tick summary recompute so a hidden section is free.
+    private var usageSummaryEnabled: Bool {
+        statisticsEnabled && UserDefaults.standard.bool(forKey: "showUsageSummary")
+    }
+
     private func ingestAdapterSnapshot(_ adapters: [AdapterStatus]) {
         let currentSnapshot = snapshotMap(from: adapters)
         guard statisticsEnabled else {
@@ -202,8 +226,16 @@ final class StatisticsManager: ObservableObject {
         bytesSinceLastAppSample &+= deltas.reduce(UInt64(0)) { $0 &+ $1.downloadBytes &+ $1.uploadBytes }
         guard !deltas.isEmpty else { return }
 
-        Task.detached(priority: .utility) { [store] in
-            await store.recordAdapterDeltas(deltas, at: Date())
+        // Keep the popover's "Data Usage" summary live while that section is on.
+        // Recomputed in the same task right after recording so it reflects these
+        // deltas; gated on `usageSummaryEnabled` so a hidden section costs nothing.
+        let refreshSummary = usageSummaryEnabled
+        Task.detached(priority: .utility) { [store, weak self] in
+            let sampleDate = Date()
+            await store.recordAdapterDeltas(deltas, at: sampleDate)
+            guard refreshSummary else { return }
+            let summary = await store.usageSummary(now: sampleDate)
+            await MainActor.run { [weak self] in self?.usageSummary = summary }
         }
     }
 
