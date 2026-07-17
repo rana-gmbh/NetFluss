@@ -31,6 +31,8 @@ Latest release: **NetFluss 2.4**
 
 - **"System default" menu bar color** — a new colour choice that follows the menu bar appearance automatically, staying legible when the wallpaper switches between light and dark. (Thanks to [@mvanhorn](https://github.com/mvanhorn).)
 
+- **Data Usage summary in the popover** — an optional section showing today's and this month's upload, download, and total data, read from the statistics NetFluss already collects. Enable it under Preferences → Statistics. (Thanks to [@truekasun](https://github.com/truekasun).)
+
 ## New in 2.3
 
 - **Wi-Fi manager in the popover** — see every nearby Wi-Fi network, switch with a click, pin SSIDs to the top of the list, and have temporarily out-of-range pinned networks stay visible until you unpin them. Passwords entered through NetFluss are written into macOS's Known Networks via the privileged helper, so the standard macOS Wi-Fi menu will reuse them later — even if NetFluss isn't running. Especially handy on travel or in environments with many SSIDs.
