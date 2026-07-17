@@ -253,6 +253,8 @@ struct VPNPreferencesContent: View {
             LText("VPN Diagnostics")
         }
 
+        DefguardSection()
+
         if !vpn.profiles.isEmpty {
             Section {
                 ForEach(vpn.profiles) { profile in

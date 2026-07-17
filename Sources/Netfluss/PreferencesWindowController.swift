@@ -39,6 +39,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
             PreferencesView()
                 .environmentObject(monitor)
                 .environmentObject(VPNManager.shared)
+                .environmentObject(DefguardManager.shared)
         }
         let hosting = NSHostingController(rootView: view)
         hosting.sizingOptions = []

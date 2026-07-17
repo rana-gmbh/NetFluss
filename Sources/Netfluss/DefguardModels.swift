@@ -109,6 +109,15 @@ struct DefguardMFAResult: Sendable {
     var ttlSeconds: Int?
 }
 
+/// A persisted, enrolled Defguard instance and the locations it provisioned. The
+/// device private key is NOT here — it lives in the Keychain under
+/// `instance.keychainAccount`.
+struct DefguardProfile: Identifiable, Codable, Equatable, Sendable {
+    var instance: DefguardInstance
+    var locations: [DefguardLocation]
+    var id: UUID { instance.id }
+}
+
 enum DefguardError: LocalizedError {
     case enrollmentFailed(String)
     case mfaFailed(String)
