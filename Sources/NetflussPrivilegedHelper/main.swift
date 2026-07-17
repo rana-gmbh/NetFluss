@@ -203,15 +203,31 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         header += "command: bash wg-quick up \(tmpConf)\n"
 
         let result = Self.runProcess(bashPath, [wgQuick, "up", tmpConf], env: env)
-        Self.writeVPNLog(header + "\n--- wg-quick output ---\n" + (result.message ?? "(no output)")
+        // On macOS the WireGuard device is a utunN, NOT the config name — wg-quick
+        // records the mapping in /var/run/wireguard/<name>.name. Return the REAL
+        // interface so the app monitors/displays the right one; monitoring the
+        // config name (which never exists as an interface) made the liveness poll
+        // false-detect a drop after 5s → "stopped" in the UI and piled-up utuns.
+        let iface = Self.wireGuardRealInterface(configName: name) ?? name
+        Self.writeVPNLog(header + "interface: \(iface)\n\n--- wg-quick output ---\n"
+            + (result.message ?? "(no output)")
             + "\n\nresult: \(result.success ? "success" : "FAILED")", to: logPath)
         if result.success {
-            tunnelsQueue.sync { wgTunnels[name] = tmpConf }
-            reply(true, name)
+            tunnelsQueue.sync { wgTunnels[iface] = tmpConf }
+            reply(true, iface)
         } else {
             try? FileManager.default.removeItem(atPath: tmpConf)
             reply(false, result.message ?? "wg-quick up failed.")
         }
+    }
+
+    /// The real utunN device wg-quick created for a config, from the mapping file
+    /// it writes at /var/run/wireguard/<configName>.name. nil if not available.
+    private static func wireGuardRealInterface(configName: String) -> String? {
+        let path = "/var/run/wireguard/\(configName).name"
+        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        let iface = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return iface.isEmpty ? nil : iface
     }
 
     /// `file -b <path>` — a concise architecture line for the diagnostics log.
