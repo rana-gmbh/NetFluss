@@ -208,6 +208,12 @@
 "Hourly Traffic" = "小時流量";
 "Daily Traffic" = "每日流量";
 "Monthly Traffic" = "每月流量";
+"Data Usage" = "數據用量";
+"Today" = "今天";
+"This Month" = "本月";
+"Total" = "總計";
+"Display usage summary on popover" = "在彈出視窗中顯示用量摘要";
+"Shows today's and this month's upload, download, and total data in the popover. Requires historical statistics collection." = "在彈出視窗中顯示今天和本月的上傳、下載和總數據量。需要開啟歷史統計收集。";
 "Run Test" = "執行測試";
 "Run Again" = "再次執行";
 "Connection Details" = "連線詳細資訊";

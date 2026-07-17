@@ -208,6 +208,12 @@
 "Hourly Traffic" = "Hourly Traffic";
 "Daily Traffic" = "Daily Traffic";
 "Monthly Traffic" = "Monthly Traffic";
+"Data Usage" = "Data Usage";
+"Today" = "Today";
+"This Month" = "This Month";
+"Total" = "Total";
+"Display usage summary on popover" = "Display usage summary on popover";
+"Shows today's and this month's upload, download, and total data in the popover. Requires historical statistics collection." = "Shows today's and this month's upload, download, and total data in the popover. Requires historical statistics collection.";
 "Run Test" = "Run Test";
 "Run Again" = "Run Again";
 "Connection Details" = "Connection Details";
