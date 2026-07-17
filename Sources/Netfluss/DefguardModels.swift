@@ -36,17 +36,21 @@ struct DefguardInstance: Identifiable, Codable, Equatable, Sendable {
     /// The public proxy ("Edge") gRPC endpoint the client actually dials for
     /// enrollment and MFA; returned by enrollment.
     var proxyURL: String
+    /// This device's WireGuard public key (not secret; needed to identify the
+    /// peer in client-MFA requests). The matching private key is in the Keychain.
+    var devicePublicKey: String
     /// Keychain account holding this device's WireGuard private key (never stored
     /// on disk in plaintext).
     var keychainAccount: String
     var createdAt: Date
 
     init(id: UUID = UUID(), name: String, instanceURL: String, proxyURL: String,
-         keychainAccount: String, createdAt: Date = Date()) {
+         devicePublicKey: String, keychainAccount: String, createdAt: Date = Date()) {
         self.id = id
         self.name = name
         self.instanceURL = instanceURL
         self.proxyURL = proxyURL
+        self.devicePublicKey = devicePublicKey
         self.keychainAccount = keychainAccount
         self.createdAt = createdAt
     }

@@ -35,6 +35,7 @@ struct DefguardMockControlClient: DefguardControlClient {
             name: URL(string: instanceURL)?.host ?? "Defguard",
             instanceURL: instanceURL,
             proxyURL: instanceURL,
+            devicePublicKey: "mockDevicePublicKey0000000000000000000000000=",
             keychainAccount: "defguard-device-\(UUID().uuidString.prefix(8))"
         )
         let location = DefguardLocation(

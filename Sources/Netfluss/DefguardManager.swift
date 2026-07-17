@@ -54,11 +54,15 @@ final class DefguardManager: ObservableObject {
     private var pendingLocation: DefguardLocation?
 
     init(
-        client: DefguardControlClient = DefguardMockControlClient(),
+        client: DefguardControlClient? = nil,
         store: DefguardProfileStore = DefguardProfileStore(),
         credentials: VPNCredentialStore = VPNCredentialStore()
     ) {
-        self.client = client
+        // The REST client is pure Swift but still UNVALIDATED against a live
+        // server; default to the mock and let a hidden flag flip a test build to
+        // the real endpoint (so Stephan can validate without a rebuild).
+        self.client = client ?? (UserDefaults.standard.bool(forKey: "defguardUseLiveClient")
+            ? DefguardRESTClient() : DefguardMockControlClient())
         self.store = store
         self.credentials = credentials
         self.profiles = (try? store.load()) ?? []
