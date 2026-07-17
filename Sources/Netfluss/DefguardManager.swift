@@ -40,23 +40,27 @@ final class DefguardManager: ObservableObject {
         case starting(profileID: UUID)
         case awaitingCode(profileID: UUID, method: DefguardMFAMethod)
         case verifying(profileID: UUID)
-        /// Phase 1 terminal success: we hold the pre-shared key; tunnel bring-up TBD.
-        case authenticated(profileID: UUID)
+        case connecting(profileID: UUID)
+        case connected(profileID: UUID, interface: String)
         case failed(String)
     }
 
     private let client: DefguardControlClient
     private let store: DefguardProfileStore
     private let credentials: VPNCredentialStore
+    private let helper: PrivilegedHelperManager
 
     /// Carries the active challenge between `startMFA` and the code submission.
     private var pendingChallenge: DefguardMFAChallenge?
     private var pendingLocation: DefguardLocation?
+    /// Helper-side handle (utun interface) of the active Defguard tunnel.
+    private var activeTunnelHandle: String?
 
     init(
         client: DefguardControlClient? = nil,
         store: DefguardProfileStore = DefguardProfileStore(),
-        credentials: VPNCredentialStore = VPNCredentialStore()
+        credentials: VPNCredentialStore = VPNCredentialStore(),
+        helper: PrivilegedHelperManager = .shared
     ) {
         // The REST client is pure Swift but still UNVALIDATED against a live
         // server; default to the mock and let a hidden flag flip a test build to
@@ -65,6 +69,7 @@ final class DefguardManager: ObservableObject {
             ? DefguardRESTClient() : DefguardMockControlClient())
         self.store = store
         self.credentials = credentials
+        self.helper = helper
         self.profiles = (try? store.load()) ?? []
     }
 
@@ -101,16 +106,16 @@ final class DefguardManager: ObservableObject {
         try? store.save(profiles)
     }
 
-    // MARK: - Connect / MFA (Phase 1: stops at "authenticated")
+    // MARK: - Connect / MFA / tunnel
 
     /// Begin connecting a location. For MFA locations this starts an MFA session
     /// and moves to `.awaitingCode`; the UI then collects a TOTP code and calls
-    /// `submitCode`. Non-MFA locations skip straight through (no code needed).
+    /// `submitCode`. Non-MFA locations bring the tunnel up directly (no PSK).
     func connect(_ profile: DefguardProfile, location: DefguardLocation) {
         pendingChallenge = nil
         pendingLocation = location
         guard location.requiresMFA else {
-            mfa = .authenticated(profileID: profile.id)   // plain WireGuard: no per-session MFA
+            bringUpTunnel(profile, location: location, presharedKey: nil)
             return
         }
         mfa = .starting(profileID: profile.id)
@@ -125,7 +130,8 @@ final class DefguardManager: ObservableObject {
         }
     }
 
-    /// Submit the TOTP code for the pending MFA session.
+    /// Submit the TOTP code for the pending MFA session; on success the returned
+    /// pre-shared key authorizes the peer and the tunnel is brought up.
     func submitCode(_ code: String, for profile: DefguardProfile) {
         guard let challenge = pendingChallenge, let location = pendingLocation else {
             mfa = .failed("No MFA session in progress.")
@@ -136,21 +142,88 @@ final class DefguardManager: ObservableObject {
             do {
                 let result = try await client.finishMFA(instance: profile.instance, location: location,
                                                         challenge: challenge, code: code)
-                // TODO(agent): inject result.presharedKey into the WireGuard config and
-                // bring the tunnel up via the existing helper; schedule re-auth at
-                // ~result.ttlSeconds. Phase 1 stops here.
-                _ = result
-                mfa = .authenticated(profileID: profile.id)
+                bringUpTunnel(profile, location: location, presharedKey: result.presharedKey)
             } catch {
                 mfa = .failed((error as? DefguardError)?.localizedDescription ?? error.localizedDescription)
             }
         }
     }
 
+    /// Write the WireGuard config (device key from the Keychain + MFA pre-shared
+    /// key) and bring the tunnel up through the privileged helper — the same
+    /// WireGuard path the built-in client uses.
+    private func bringUpTunnel(_ profile: DefguardProfile, location: DefguardLocation, presharedKey: String?) {
+        mfa = .connecting(profileID: profile.id)
+        guard let privateKey = credentials.load(account: profile.instance.keychainAccount)?.password, !privateKey.isEmpty else {
+            mfa = .failed("This device's key is missing — remove and re-enroll the instance.")
+            return
+        }
+        let config = Self.wireGuardConfig(privateKey: privateKey, presharedKey: presharedKey, location: location)
+        let configPath = Self.tunnelConfigPath(for: profile.instance)
+        do {
+            try FileManager.default.createDirectory(atPath: (configPath as NSString).deletingLastPathComponent,
+                                                    withIntermediateDirectories: true)
+            guard FileManager.default.createFile(atPath: configPath, contents: Data(config.utf8),
+                                                 attributes: [.posixPermissions: 0o600]) else {
+                throw DefguardError.mfaFailed("could not write tunnel config")
+            }
+        } catch {
+            mfa = .failed(error.localizedDescription)
+            return
+        }
+        let socketPath = "/tmp/netfluss-vpn-dg\(profile.instance.id.uuidString.prefix(8)).sock"
+        Task {
+            let result = await helper.startVPNTunnel(kind: "wireGuard", configPath: configPath,
+                                                     managementSocketPath: socketPath, socketOwner: NSUserName())
+            guard let result, result.terminationStatus == 0 else {
+                mfa = .failed(result?.stderr.isEmpty == false ? result!.stderr : "Could not start the tunnel.")
+                return
+            }
+            let iface = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            activeTunnelHandle = iface
+            mfa = .connected(profileID: profile.id, interface: iface)
+        }
+    }
+
+    /// Tear down the active Defguard tunnel.
+    func disconnect() {
+        pendingChallenge = nil
+        pendingLocation = nil
+        guard let handle = activeTunnelHandle else { mfa = .idle; return }
+        activeTunnelHandle = nil
+        Task {
+            _ = await helper.stopVPNTunnel(handle: handle)
+            mfa = .idle
+        }
+    }
+
     func cancelMFA() {
         pendingChallenge = nil
         pendingLocation = nil
-        mfa = .idle
+        if activeTunnelHandle == nil { mfa = .idle }
+    }
+
+    // MARK: - WireGuard config
+
+    private static func wireGuardConfig(privateKey: String, presharedKey: String?, location: DefguardLocation) -> String {
+        var lines = ["[Interface]", "PrivateKey = \(privateKey)", "Address = \(location.assignedIP)"]
+        if !location.dns.isEmpty { lines.append("DNS = \(location.dns.joined(separator: ", "))") }
+        lines.append("")
+        lines.append("[Peer]")
+        lines.append("PublicKey = \(location.serverPublicKey)")
+        if let presharedKey, !presharedKey.isEmpty { lines.append("PresharedKey = \(presharedKey)") }
+        lines.append("Endpoint = \(location.endpoint)")
+        let allowed = location.allowedIPs.isEmpty ? ["0.0.0.0/0", "::/0"] : location.allowedIPs
+        lines.append("AllowedIPs = \(allowed.joined(separator: ", "))")
+        if location.keepaliveInterval > 0 { lines.append("PersistentKeepalive = \(location.keepaliveInterval)") }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    private static func tunnelConfigPath(for instance: DefguardInstance) -> String {
+        let base = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support", isDirectory: true))
+            .appendingPathComponent("Netfluss/Defguard", isDirectory: true)
+        return base.appendingPathComponent("dg\(instance.id.uuidString.prefix(8)).conf").path
     }
 }
 

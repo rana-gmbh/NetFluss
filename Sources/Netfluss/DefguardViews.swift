@@ -50,10 +50,15 @@ private struct DefguardProfileRow: View {
 
     private var isThisProfileBusy: Bool {
         switch defguard.mfa {
-        case .starting(let id), .awaitingCode(let id, _), .verifying(let id), .authenticated(let id):
+        case .starting(let id), .awaitingCode(let id, _), .verifying(let id), .connecting(let id):
             return id == profile.id
         default: return false
         }
+    }
+
+    private var isThisProfileConnected: Bool {
+        if case .connected(let id, _) = defguard.mfa { return id == profile.id }
+        return false
     }
 
     private var showTOTPPrompt: Bool {
@@ -69,7 +74,9 @@ private struct DefguardProfileRow: View {
                     Text(profile.instance.instanceURL).font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 Spacer()
-                if let location = profile.locations.first {
+                if isThisProfileConnected {
+                    Button(L10n.text("Disconnect")) { defguard.disconnect() }
+                } else if let location = profile.locations.first {
                     Button(L10n.text("Connect")) { defguard.connect(profile, location: location) }
                         .disabled(isThisProfileBusy)
                 }
@@ -78,6 +85,7 @@ private struct DefguardProfileRow: View {
                 } label: { Image(systemName: "trash") }
                     .buttonStyle(.borderless)
                     .help(L10n.text("Remove"))
+                    .disabled(isThisProfileConnected)
             }
             statusLine
         }
@@ -90,8 +98,10 @@ private struct DefguardProfileRow: View {
         switch defguard.mfa {
         case .starting(let id) where id == profile.id, .verifying(let id) where id == profile.id:
             Text(L10n.text("Authenticating…")).font(.caption).foregroundStyle(.secondary)
-        case .authenticated(let id) where id == profile.id:
-            Label(L10n.text("Authenticated"), systemImage: "checkmark.seal")
+        case .connecting(let id) where id == profile.id:
+            Text(L10n.text("Connecting…")).font(.caption).foregroundStyle(.secondary)
+        case .connected(let id, let iface) where id == profile.id:
+            Label("\(L10n.text("Connected")) (\(iface))", systemImage: "checkmark.seal")
                 .font(.caption).foregroundStyle(.green)
         case .failed(let message):
             Text(message).font(.caption).foregroundStyle(.red)
