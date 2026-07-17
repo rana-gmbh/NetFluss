@@ -319,7 +319,11 @@ final class VPNManager: ObservableObject {
     }
 
     func disconnect() {
-        guard status.state.isActive else { return }
+        // Proceed if we're actively connected OR a backend is still lingering: a
+        // tunnel can outlive an `.failed` state (e.g. a WireGuard utun that stayed
+        // up), and the user must still be able to tear it down. Without this,
+        // disconnect() no-ops from `.failed` and orphans the tunnel + temp config.
+        guard status.state.isActive || activeTunnelHandle != nil || activeIKEv2 || ovpnClient != nil else { return }
         // A deliberate disconnect ends any auto-reconnect cycle.
         cancelPendingReconnect()
         stopWireGuardMonitor()
@@ -859,6 +863,8 @@ struct VPNProfileStore {
             // file.name may carry subdirectories (folder/zip imports).
             try fileManager.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
             try file.data.write(to: dest, options: .atomic)
+            // Configs can hold VPN private/pre-shared keys — keep them owner-only.
+            try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dest.path)
         }
     }
 
