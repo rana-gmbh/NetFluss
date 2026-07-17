@@ -337,7 +337,12 @@ final class VPNManager: ObservableObject {
             if let handle = self.activeTunnelHandle {
                 // Give the clean shutdown a moment, then ensure the process is gone.
                 try? await Task.sleep(nanoseconds: 500_000_000)
-                _ = await self.helper.stopVPNTunnel(handle: handle)
+                let stop = await self.helper.stopVPNTunnel(handle: handle)
+                if let stop, stop.terminationStatus != 0 {
+                    VPNDiagnosticsLog.shared.log("Disconnect (\(handle)) helper error: \(stop.stderr.isEmpty ? "unknown" : stop.stderr)")
+                } else {
+                    VPNDiagnosticsLog.shared.log("Disconnected \(handle)")
+                }
                 self.activeTunnelHandle = nil
             } else if let profileID = previous.profileID,
                       let profile = self.profiles.first(where: { $0.id == profileID }),
@@ -744,6 +749,13 @@ final class VPNManager: ObservableObject {
         if status.state == .disconnecting || status.state == .idle { return }
         networkMonitor?.restoreVPNDNS()
         if scheduleReconnectIfEnabled(profileID: status.profileID) { return }
+        // Tear down any lingering tunnel so a give-up can't orphan a utun device.
+        if let handle = activeTunnelHandle {
+            let helper = self.helper
+            Task { _ = await helper.stopVPNTunnel(handle: handle) }
+            activeTunnelHandle = nil
+        }
+        VPNDiagnosticsLog.shared.log("WireGuard tunnel dropped (interface gone)")
         status.state = .failed("The VPN connection stopped.")
     }
 
