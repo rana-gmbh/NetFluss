@@ -34,6 +34,7 @@ final class StatisticsManager: ObservableObject {
     @Published private(set) var report: StatisticsReport?
     @Published private(set) var isLoading = false
     @Published private(set) var isShowingSampleData = false
+    @Published private(set) var usageSummary: StatisticsUsageSummary = .empty
 
     private let monitor: NetworkMonitor
     private let store: StatisticsStore
@@ -81,10 +82,15 @@ final class StatisticsManager: ObservableObject {
 
         if !statisticsEnabled {
             previousAdapterSnapshot = snapshotMap(from: monitor.adapters)
+            usageSummary = .empty
         }
         if !appStatisticsEnabled {
             previousAppSnapshot = [:]
             previousAppSampleTime = nil
+        }
+
+        if usageSummaryLive {
+            refreshUsageSummary()
         }
     }
 
@@ -97,13 +103,15 @@ final class StatisticsManager: ObservableObject {
         let customAdapterNames = Self.loadAdapterNames()
         let hiddenApps = Set(UserDefaults.standard.stringArray(forKey: "hiddenApps") ?? [])
         let activeStore = isShowingSampleData ? (sampleStore ?? store) : store
+        let excludeTunnels = excludeTunnelsFromTotals
 
         Task { [activeStore] in
             let report = await activeStore.report(
                 for: range,
                 now: Date(),
                 customAdapterNames: customAdapterNames,
-                hiddenApps: hiddenApps
+                hiddenApps: hiddenApps,
+                excludeTunnels: excludeTunnels
             )
             await MainActor.run {
                 self.report = report
@@ -120,6 +128,7 @@ final class StatisticsManager: ObservableObject {
         let customAdapterNames = Self.loadAdapterNames()
         let hiddenApps = Set(UserDefaults.standard.stringArray(forKey: "hiddenApps") ?? [])
         let activeStore = isShowingSampleData ? (sampleStore ?? store) : store
+        let excludeTunnels = excludeTunnelsFromTotals
 
         Task { [activeStore] in
             let report = await activeStore.report(
@@ -127,7 +136,8 @@ final class StatisticsManager: ObservableObject {
                 customEnd: customEnd,
                 now: Date(),
                 customAdapterNames: customAdapterNames,
-                hiddenApps: hiddenApps
+                hiddenApps: hiddenApps,
+                excludeTunnels: excludeTunnels
             )
             await MainActor.run {
                 self.report = report
@@ -141,6 +151,26 @@ final class StatisticsManager: ObservableObject {
             loadReport(customStart: currentCustomStart, customEnd: currentCustomEnd)
         } else {
             loadReport(for: currentRange)
+        }
+    }
+
+    /// Recompute the popover "Data Usage" summary from the live store (never the
+    /// sample-data preview). Token-guarded so an older async result can't clobber a
+    /// newer one. Resets to empty when collection is off.
+    func refreshUsageSummary() {
+        guard statisticsEnabled else {
+            usageSummary = .empty
+            return
+        }
+        usageSummaryToken &+= 1
+        let token = usageSummaryToken
+        let excludeTunnels = excludeTunnelsFromTotals
+        Task { [store, weak self] in
+            let summary = await store.usageSummary(now: Date(), excludeTunnels: excludeTunnels)
+            await MainActor.run {
+                guard let self, token == self.usageSummaryToken else { return }
+                self.usageSummary = summary
+            }
         }
     }
 
@@ -174,6 +204,34 @@ final class StatisticsManager: ObservableObject {
         statisticsEnabled && UserDefaults.standard.bool(forKey: "collectAppStatistics")
     }
 
+    /// Whether the popover section is currently on screen (popover shown or
+    /// pinned window visible). Set from `StatusBarController.updateDetailMonitoring`.
+    private var liveSummaryActive = false
+
+    /// Monotonic token so a slow async recompute can't overwrite a newer summary.
+    private var usageSummaryToken = 0
+
+    /// True only while the Data Usage section is on screen AND history collection
+    /// is on AND the section is enabled — gates the per-tick recompute so a hidden
+    /// or closed section costs nothing.
+    private var usageSummaryLive: Bool {
+        liveSummaryActive && statisticsEnabled && UserDefaults.standard.bool(forKey: "showUsageSummary")
+    }
+
+    /// Whether tunnel/VPN adapters are excluded from totals — mirrors the live
+    /// Download/Upload totals so the popover's figures agree.
+    private var excludeTunnelsFromTotals: Bool {
+        UserDefaults.standard.bool(forKey: "excludeTunnelAdaptersFromTotals")
+    }
+
+    /// Called when the popover / pinned window becomes visible or hidden. On
+    /// becoming visible, refresh immediately so the numbers are current.
+    func setLiveSummaryActive(_ active: Bool) {
+        guard active != liveSummaryActive else { return }
+        liveSummaryActive = active
+        if active { refreshUsageSummary() }
+    }
+
     private func ingestAdapterSnapshot(_ adapters: [AdapterStatus]) {
         let currentSnapshot = snapshotMap(from: adapters)
         guard statisticsEnabled else {
@@ -202,8 +260,13 @@ final class StatisticsManager: ObservableObject {
         bytesSinceLastAppSample &+= deltas.reduce(UInt64(0)) { $0 &+ $1.downloadBytes &+ $1.uploadBytes }
         guard !deltas.isEmpty else { return }
 
+        // History collection runs continuously regardless of visibility; the
+        // on-screen Data Usage summary is refreshed separately (visibility-gated).
         Task.detached(priority: .utility) { [store] in
             await store.recordAdapterDeltas(deltas, at: Date())
+        }
+        if usageSummaryLive {
+            refreshUsageSummary()
         }
     }
 

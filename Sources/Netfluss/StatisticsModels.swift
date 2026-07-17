@@ -33,6 +33,15 @@ struct StatisticsTrafficAmounts: Codable, Equatable, Sendable {
     }
 }
 
+/// Calendar-aligned usage totals for the popover's "Data Usage" summary:
+/// traffic accumulated since midnight (today) and since the 1st of the month.
+struct StatisticsUsageSummary: Sendable, Equatable {
+    var today: StatisticsTrafficAmounts = .init()
+    var month: StatisticsTrafficAmounts = .init()
+
+    static let empty = StatisticsUsageSummary()
+}
+
 struct StatisticsArchive: Codable, Sendable {
     static let currentAppTrafficSchemaVersion = 3
 

@@ -795,6 +795,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     private func updateDetailMonitoring() {
         let isVisible = popover.isShown || pinnedWindowController.isVisible
         monitor.setDetailMonitoringEnabled(isVisible)
+        statisticsManager.setLiveSummaryActive(isVisible)
         wifiManager.setActive(isVisible && UserDefaults.standard.bool(forKey: "showWifiSwitcher"))
     }
 

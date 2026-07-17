@@ -262,6 +262,7 @@ struct PreferencesView: View {
     @AppStorage("topAppsGracePeriodSeconds") private var topAppsGracePeriodSeconds: Double = 3.0
     @AppStorage("collectStatistics") private var collectStatistics: Bool = false
     @AppStorage("collectAppStatistics") private var collectAppStatistics: Bool = true
+    @AppStorage("showUsageSummary") private var showUsageSummary: Bool = false
     @AppStorage("externalIPv6") private var externalIPv6: Bool = false
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
     @AppStorage("showWifiSwitcher") private var showWifiSwitcher: Bool = false
@@ -485,6 +486,14 @@ struct PreferencesView: View {
                     LText("Collect historical statistics")
                 }
                 LText("Disabled by default to avoid extra background work and energy use. When enabled, NetFluss keeps hourly and daily rollups for adapters and optional app traffic analysis.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle(isOn: $showUsageSummary) {
+                    LText("Display usage summary on popover")
+                }
+                .disabled(!collectStatistics)
+                LText("Shows today's and this month's upload, download, and total data in the popover. Requires historical statistics collection.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -1441,6 +1450,8 @@ private struct PopoverSectionsReorderEditor: View {
     @AppStorage("showWifiSwitcher") private var showWifiSwitcher: Bool = false
     @AppStorage("showVPN") private var showVPN: Bool = false
     @AppStorage("showTopApps") private var showTopApps: Bool = false
+    @AppStorage("showUsageSummary") private var showUsageSummary: Bool = false
+    @AppStorage("collectStatistics") private var collectStatistics: Bool = false
     @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
     @AppStorage("openWRTEnabled") private var openWRTEnabled: Bool = false
@@ -1458,6 +1469,8 @@ private struct PopoverSectionsReorderEditor: View {
         switch section {
         case .totals:
             return Binding(get: { showTotalsHeader }, set: { showTotalsHeader = $0 })
+        case .usage:
+            return Binding(get: { showUsageSummary }, set: { showUsageSummary = $0 })
         case .adapters:
             return Binding(get: { showAdapterList }, set: { showAdapterList = $0 })
         case .connection:
@@ -1504,7 +1517,7 @@ private struct PopoverSectionsReorderEditor: View {
     private func toggleDisabled(_ section: PopoverSection) -> Bool {
         // Router toggle can only be turned OFF from here (turning on requires
         // configuring an individual router in the Router pane).
-        section == .router && !anyRouterEnabled
+        (section == .router && !anyRouterEnabled) || (section == .usage && !collectStatistics)
     }
 
     var body: some View {
