@@ -364,3 +364,10 @@
 "Add IKEv2 VPN" = "新增 IKEv2 VPN";
 "Add" = "新增";
 "Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first." = "建立一個 NetFluss 直接連線的 IKEv2 設定檔（使用者名稱/密碼）。密碼會儲存在你的鑰匙圈中。如果伺服器使用私有 CA，請先在「鑰匙圈存取」中信任其憑證。";
+
+"VPN Diagnostics" = "VPN 診斷";
+"Copy VPN diagnostics" = "複製 VPN 診斷資訊";
+"Reveal VPN log in Finder" = "在 Finder 中顯示 VPN 日誌";
+"Clear VPN log" = "清除 VPN 日誌";
+"Copied to clipboard." = "已複製到剪貼簿。";
+"If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "若 VPN 連線失敗，請複製此日誌並傳送——它會記錄內建工具、其架構以及連線工具的完整輸出。";

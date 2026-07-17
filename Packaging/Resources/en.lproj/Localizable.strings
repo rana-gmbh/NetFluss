@@ -364,3 +364,10 @@
 "Add IKEv2 VPN" = "Add IKEv2 VPN";
 "Add" = "Add";
 "Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first." = "Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first.";
+
+"VPN Diagnostics" = "VPN Diagnostics";
+"Copy VPN diagnostics" = "Copy VPN diagnostics";
+"Reveal VPN log in Finder" = "Reveal VPN log in Finder";
+"Clear VPN log" = "Clear VPN log";
+"Copied to clipboard." = "Copied to clipboard.";
+"If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output.";

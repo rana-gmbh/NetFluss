@@ -92,7 +92,7 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             case "openVPN":
                 self.startOpenVPN(configPath: configPath, managementSocketPath: managementSocketPath, socketOwner: socketOwner, reply: reply)
             case "wireGuard":
-                self.startWireGuard(configPath: configPath, reply: reply)
+                self.startWireGuard(configPath: configPath, managementSocketPath: managementSocketPath, reply: reply)
             default:
                 reply(false, "Unsupported VPN kind '\(kind)'.")
             }
@@ -158,8 +158,13 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         reply(true, handle)
     }
 
-    private func startWireGuard(configPath: String, reply: @escaping (Bool, String?) -> Void) {
+    private func startWireGuard(configPath: String, managementSocketPath: String, reply: @escaping (Bool, String?) -> Void) {
+        // Diagnostics log the app can read back (see readVPNLog): records the tools,
+        // their architecture, the exact command, and wg-quick's full output — so a
+        // failed bring-up produces an actionable report instead of a bare errno.
+        let logPath = (managementSocketPath as NSString).deletingPathExtension + ".log"
         guard let toolsDir = Self.vpnToolsDir() else {
+            Self.writeVPNLog("Missing bundled WireGuard tools (no VPN tools dir).", to: logPath)
             reply(false, "Missing bundled WireGuard tools.")
             return
         }
@@ -167,29 +172,116 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         let wgQuick = toolsDir + "/wg-quick"
         guard FileManager.default.isExecutableFile(atPath: bashPath),
               FileManager.default.fileExists(atPath: wgQuick) else {
+            Self.writeVPNLog("Missing bundled WireGuard tools at \(toolsDir).", to: logPath)
             reply(false, "Missing bundled WireGuard tools.")
             return
         }
+        // Remove any stale temp configs from earlier runs that aren't backing a
+        // live tunnel (they'd otherwise accumulate in /tmp holding VPN secrets).
+        Self.cleanupStaleWireGuardConfigs(keeping: tunnelsQueue.sync { Set(wgTunnels.values) })
+
         // wg-quick derives the interface name from the config filename, which
         // must be a valid (≤15 char) interface name — copy to a short temp name.
         let name = "nf" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8).lowercased()
         let tmpConf = "/tmp/\(name).conf"
         do {
             let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
-            try data.write(to: URL(fileURLWithPath: tmpConf), options: .atomic)
+            // Create with 0600 up front: the config holds the WireGuard private and
+            // pre-shared keys, and /tmp is world-readable (wg-quick even warns about
+            // it). Creating with restricted perms avoids a world-readable window.
+            guard FileManager.default.createFile(atPath: tmpConf, contents: data,
+                                                 attributes: [.posixPermissions: 0o600]) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
         } catch {
+            Self.writeVPNLog("Could not stage config: \(error.localizedDescription)", to: logPath)
             reply(false, error.localizedDescription)
             return
         }
-        let env = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "WG_QUICK_USERSPACE_IMPLEMENTATION": "wireguard-go"]
+        // wg-quick needs this dir for its control socket; create it up front so a
+        // missing /var/run/wireguard can't be the failure. Put the tools dir first
+        // on PATH so wg-quick always finds our wireguard-go/wg (not a stray copy).
+        try? FileManager.default.createDirectory(atPath: "/var/run/wireguard", withIntermediateDirectories: true)
+        let env = ["PATH": "\(toolsDir):/usr/bin:/bin:/usr/sbin:/sbin",
+                   "WG_QUICK_USERSPACE_IMPLEMENTATION": "wireguard-go"]
+
+        var header = "NetFluss WireGuard bring-up\n"
+        header += "toolsDir: \(toolsDir)\n"
+        header += "bash:         \(Self.fileArch(bashPath))\n"
+        header += "wireguard-go: \(Self.fileArch(toolsDir + "/wireguard-go"))\n"
+        header += "wg:           \(Self.fileArch(toolsDir + "/wg"))\n"
+        header += "command: bash wg-quick up \(tmpConf)\n"
+
         let result = Self.runProcess(bashPath, [wgQuick, "up", tmpConf], env: env)
+        // On macOS the WireGuard device is a utunN, NOT the config name — wg-quick
+        // records the mapping in /var/run/wireguard/<name>.name. Return the REAL
+        // interface so the app monitors/displays the right one; monitoring the
+        // config name (which never exists as an interface) made the liveness poll
+        // false-detect a drop after 5s → "stopped" in the UI and piled-up utuns.
+        let iface = Self.wireGuardRealInterface(configName: name) ?? name
+        Self.writeVPNLog(header + "interface: \(iface)\n\n--- wg-quick output ---\n"
+            + (result.message ?? "(no output)")
+            + "\n\nresult: \(result.success ? "success" : "FAILED")", to: logPath)
         if result.success {
-            tunnelsQueue.sync { wgTunnels[name] = tmpConf }
-            reply(true, name)
+            tunnelsQueue.sync { wgTunnels[iface] = tmpConf }
+            reply(true, iface)
         } else {
             try? FileManager.default.removeItem(atPath: tmpConf)
             reply(false, result.message ?? "wg-quick up failed.")
         }
+    }
+
+    /// Delete our leftover `/tmp/nf*.conf` staging files that aren't backing a
+    /// live tunnel. Scoped to the `nf`-prefixed `.conf` names we create, so it can
+    /// never touch unrelated files; `keep` holds the paths of active tunnels.
+    private static func cleanupStaleWireGuardConfigs(keeping keep: Set<String>) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: "/tmp") else { return }
+        for entry in entries where entry.hasPrefix("nf") && entry.hasSuffix(".conf") {
+            let path = "/tmp/\(entry)"
+            if keep.contains(path) { continue }
+            // Never remove a config whose tunnel is still live: the helper may have
+            // restarted and lost its in-memory map. wg-quick's .name mapping file
+            // only exists while the tunnel is up.
+            let name = String(entry.dropLast(".conf".count))
+            if let iface = wireGuardRealInterface(configName: name), interfaceExists(iface) { continue }
+            try? fm.removeItem(atPath: path)
+        }
+    }
+
+    /// Whether a BSD network interface with the given name currently exists.
+    private static func interfaceExists(_ name: String) -> Bool {
+        var addrs: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&addrs) == 0 else { return false }
+        defer { freeifaddrs(addrs) }
+        var ptr = addrs
+        while let cur = ptr {
+            if String(cString: cur.pointee.ifa_name) == name { return true }
+            ptr = cur.pointee.ifa_next
+        }
+        return false
+    }
+
+    /// The real utunN device wg-quick created for a config, from the mapping file
+    /// it writes at /var/run/wireguard/<configName>.name. nil if not available.
+    private static func wireGuardRealInterface(configName: String) -> String? {
+        let path = "/var/run/wireguard/\(configName).name"
+        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        let iface = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return iface.isEmpty ? nil : iface
+    }
+
+    /// `file -b <path>` — a concise architecture line for the diagnostics log.
+    private static func fileArch(_ path: String) -> String {
+        guard FileManager.default.fileExists(atPath: path) else { return "(missing)" }
+        let r = runProcess("/usr/bin/file", ["-b", path], env: nil)
+        return (r.message ?? "").isEmpty ? "(unknown)" : (r.message ?? "")
+    }
+
+    /// Overwrite a tunnel diagnostics log the app can read via `readVPNLog`
+    /// (restricted to /tmp/netfluss-vpn-*.log there).
+    private static func writeVPNLog(_ text: String, to path: String) {
+        try? text.write(toFile: path, atomically: true, encoding: .utf8)
     }
 
     func stopVPNTunnel(handle: String, withReply reply: @escaping (Bool, String?) -> Void) {
@@ -223,7 +315,10 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
 
     func vpnTunnelStatus(handle: String, withReply reply: @escaping (Bool, String?) -> Void) {
         tunnelsQueue.async {
-            let running = self.tunnels[handle]?.isRunning ?? false
+            // OpenVPN: a live child process. WireGuard: a tracked tunnel whose utun
+            // interface still exists (the handle IS the utun name).
+            let running = self.tunnels[handle]?.isRunning
+                ?? (self.wgTunnels[handle] != nil && Self.interfaceExists(handle))
             reply(running, running ? "running" : "stopped")
         }
     }

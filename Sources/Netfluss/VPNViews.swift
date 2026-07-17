@@ -190,6 +190,7 @@ struct VPNPreferencesContent: View {
     @State private var importWarning: String?
     @State private var nativeServices: [NativeVPN.Service] = []
     @State private var showAddIKEv2 = false
+    @State private var diagnosticsCopied = false
 
     var body: some View {
         Section {
@@ -230,6 +231,26 @@ struct VPNPreferencesContent: View {
         .onAppear { nativeServices = vpn.nativeServices() }
         .sheet(isPresented: $showAddIKEv2) {
             AddIKEv2Sheet { nativeServices = vpn.nativeServices() }
+        }
+
+        Section {
+            Button {
+                VPNDiagnosticsLog.shared.copyToPasteboard()
+                diagnosticsCopied = true
+            } label: { LText("Copy VPN diagnostics") }
+            Button { VPNDiagnosticsLog.shared.revealInFinder() } label: { LText("Reveal VPN log in Finder") }
+            Button {
+                VPNDiagnosticsLog.shared.clear()
+                diagnosticsCopied = false
+            } label: { LText("Clear VPN log") }
+            if diagnosticsCopied {
+                LText("Copied to clipboard.").font(.caption).foregroundStyle(.secondary)
+            }
+            LText("If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } header: {
+            LText("VPN Diagnostics")
         }
 
         if !vpn.profiles.isEmpty {

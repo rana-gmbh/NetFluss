@@ -59,6 +59,13 @@ actor PrivilegedHelperManager {
             return .unavailable(message: "The bundled helper executable is missing.")
         }
 
+        // Repair a stale registration first: an already-`.enabled` daemon left by
+        // a previous install (possibly at a different path, with arm64-only VPN
+        // tools next to it) would otherwise make this button a no-op. This
+        // re-points the daemon at the current bundle when the version or path
+        // changed, so "Install helper" reliably fixes a wrong/old registration.
+        refreshHelperIfOutdated()
+
         switch service.status {
         case .enabled:
             return .alreadyEnabled
@@ -173,19 +180,42 @@ actor PrivilegedHelperManager {
         }
     }
 
-    private static let registeredHelperVersionKey = "registeredHelperVersion"
+    static let registeredHelperVersionKey = "registeredHelperVersion"
+    static let registeredHelperBundlePathKey = "registeredHelperBundlePath"
 
-    /// If the bundled helper is newer than the one we last registered, force a
-    /// re-registration so launchd runs the new binary. Without this, an already
-    /// `.enabled` daemon keeps serving stale code across app updates — which made
-    /// VPN fixes (e.g. --management-query-passwords) silently not take effect.
+    /// Force a re-registration when either the bundled helper version changed OR
+    /// the app moved since we last registered.
+    ///
+    /// Version change: an already-`.enabled` daemon keeps serving stale helper
+    /// code across app updates — which made VPN fixes (e.g.
+    /// --management-query-passwords) silently not take effect.
+    ///
+    /// Path change: a daemon registered by a PREVIOUS install keeps launching the
+    /// helper — and the VPN tools resolved next to it — from that OLD bundle. If
+    /// the old bundle shipped arm64-only VPN binaries (pre-universal), the running
+    /// helper spawns arm64 tools → "Bad CPU type" on Intel even after the user
+    /// installs a universal build to a new location. Re-registering re-points the
+    /// daemon at the current bundle. (Guarded against Gatekeeper app-translocation,
+    /// whose randomized per-launch path must never be pinned and would otherwise
+    /// re-register — and re-prompt for approval — on every launch.)
     private func refreshHelperIfOutdated() {
-        let current = NetflussHelperConstants.helperVersion
-        guard UserDefaults.standard.integer(forKey: Self.registeredHelperVersionKey) != current else { return }
+        let currentVersion = NetflussHelperConstants.helperVersion
+        let currentPath = Bundle.main.bundlePath
+        let defaults = UserDefaults.standard
+        let versionMatches = defaults.integer(forKey: Self.registeredHelperVersionKey) == currentVersion
+        let pathMatches = defaults.string(forKey: Self.registeredHelperBundlePathKey) == currentPath
+        guard !versionMatches || (!pathMatches && !Self.isTranslocated(currentPath)) else { return }
         _ = repairRegistration()
         if service.status == .enabled {
-            UserDefaults.standard.set(current, forKey: Self.registeredHelperVersionKey)
+            defaults.set(currentVersion, forKey: Self.registeredHelperVersionKey)
+            defaults.set(currentPath, forKey: Self.registeredHelperBundlePathKey)
         }
+    }
+
+    /// Whether the app is running from a Gatekeeper app-translocation mount (a
+    /// randomized read-only path used for quarantined apps launched in place).
+    private static func isTranslocated(_ path: String) -> Bool {
+        path.contains("/AppTranslocation/")
     }
 
     private func performIfAvailable(

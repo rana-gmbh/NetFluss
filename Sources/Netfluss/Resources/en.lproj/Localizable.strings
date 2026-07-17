@@ -258,3 +258,10 @@
 "Preparing the Cloudflare test..." = "Preparing the Cloudflare test...";
 "M-Lab speed test complete." = "M-Lab speed test complete.";
 "Cloudflare speed test complete." = "Cloudflare speed test complete.";
+
+"VPN Diagnostics" = "VPN Diagnostics";
+"Copy VPN diagnostics" = "Copy VPN diagnostics";
+"Reveal VPN log in Finder" = "Reveal VPN log in Finder";
+"Clear VPN log" = "Clear VPN log";
+"Copied to clipboard." = "Copied to clipboard.";
+"If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output.";

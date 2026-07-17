@@ -258,3 +258,10 @@
 "Preparing the Cloudflare test..." = "正在准备 Cloudflare 测试...";
 "M-Lab speed test complete." = "M-Lab 速度测试完成。";
 "Cloudflare speed test complete." = "Cloudflare 速度测试完成。";
+
+"VPN Diagnostics" = "VPN 诊断";
+"Copy VPN diagnostics" = "复制 VPN 诊断信息";
+"Reveal VPN log in Finder" = "在访达中显示 VPN 日志";
+"Clear VPN log" = "清除 VPN 日志";
+"Copied to clipboard." = "已复制到剪贴板。";
+"If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "如果 VPN 连接失败，请复制此日志并发送——它记录了内置工具、其架构以及连接工具的完整输出。";

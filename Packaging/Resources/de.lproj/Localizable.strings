@@ -364,3 +364,10 @@
 "Add IKEv2 VPN" = "IKEv2-VPN hinzufügen";
 "Add" = "Hinzufügen";
 "Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first." = "Erstellt ein IKEv2-Profil, mit dem sich NetFluss direkt verbindet (Benutzername/Passwort). Das Passwort wird in deinem Schlüsselbund gespeichert. Verwendet der Server eine private CA, vertraue zuerst deren Zertifikat in der Schlüsselbundverwaltung.";
+
+"VPN Diagnostics" = "VPN-Diagnose";
+"Copy VPN diagnostics" = "VPN-Diagnose kopieren";
+"Reveal VPN log in Finder" = "VPN-Protokoll im Finder zeigen";
+"Clear VPN log" = "VPN-Protokoll löschen";
+"Copied to clipboard." = "In die Zwischenablage kopiert.";
+"If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "Wenn eine VPN-Verbindung fehlschlägt, kopiere dieses Protokoll und sende es — es erfasst die mitgelieferten Programme, ihre Architektur und die vollständige Ausgabe des Verbindungswerkzeugs.";

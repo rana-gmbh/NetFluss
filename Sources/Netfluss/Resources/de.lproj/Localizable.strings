@@ -258,3 +258,10 @@
 "Preparing the Cloudflare test..." = "Cloudflare-Test wird vorbereitet...";
 "M-Lab speed test complete." = "M-Lab-Speedtest abgeschlossen.";
 "Cloudflare speed test complete." = "Cloudflare-Speedtest abgeschlossen.";
+
+"VPN Diagnostics" = "VPN-Diagnose";
+"Copy VPN diagnostics" = "VPN-Diagnose kopieren";
+"Reveal VPN log in Finder" = "VPN-Protokoll im Finder zeigen";
+"Clear VPN log" = "VPN-Protokoll löschen";
+"Copied to clipboard." = "In die Zwischenablage kopiert.";
+"If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "Wenn eine VPN-Verbindung fehlschlägt, kopiere dieses Protokoll und sende es — es erfasst die mitgelieferten Programme, ihre Architektur und die vollständige Ausgabe des Verbindungswerkzeugs.";
