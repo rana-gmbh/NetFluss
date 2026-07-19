@@ -126,7 +126,10 @@ actor PrivilegedHelperManager {
 
     /// Returns the tunnel handle (in `stdout`) on success.
     func startVPNTunnel(kind: String, configPath: String, managementSocketPath: String, socketOwner: String) async -> CommandResult? {
-        await performIfAvailable { helper, reply in
+        // wg-quick up can take a while (endpoint DNS, route/interface setup) on
+        // slow machines; a 15s timeout would falsely report "not responding" and
+        // orphan the tunnel, so give VPN start a generous window (issue #48).
+        await performIfAvailable(timeout: 60) { helper, reply in
             helper.startVPNTunnel(
                 kind: kind,
                 configPath: configPath,
@@ -219,6 +222,7 @@ actor PrivilegedHelperManager {
     }
 
     private func performIfAvailable(
+        timeout: TimeInterval = xpcInvocationTimeout,
         _ invocation: @escaping (NetflussPrivilegedHelperProtocol, @escaping (Bool, String?) -> Void) -> Void
     ) async -> CommandResult? {
         guard Self.hasBundledHelper else { return nil }
@@ -226,7 +230,7 @@ actor PrivilegedHelperManager {
         if let readinessFailure = ensureServiceReady() {
             return readinessFailure
         }
-        let initialResult = await performXPCInvocation(invocation)
+        let initialResult = await performXPCInvocation(invocation, timeout: timeout)
         guard initialResult.terminationStatus == PrivilegedCommandStatus.helperConnectionFailed else {
             return initialResult
         }
@@ -235,7 +239,7 @@ actor PrivilegedHelperManager {
             return initialResult
         }
 
-        return await performXPCInvocation(invocation)
+        return await performXPCInvocation(invocation, timeout: timeout)
     }
 
     private func ensureServiceReady() -> CommandResult? {
@@ -329,7 +333,8 @@ actor PrivilegedHelperManager {
     private static let xpcInvocationTimeout: TimeInterval = 15
 
     private func performXPCInvocation(
-        _ invocation: @escaping (NetflussPrivilegedHelperProtocol, @escaping (Bool, String?) -> Void) -> Void
+        _ invocation: @escaping (NetflussPrivilegedHelperProtocol, @escaping (Bool, String?) -> Void) -> Void,
+        timeout: TimeInterval = xpcInvocationTimeout
     ) async -> CommandResult {
         await withCheckedContinuation { continuation in
             let connection = NSXPCConnection(
@@ -361,7 +366,7 @@ actor PrivilegedHelperManager {
             // reply, the invalidation handler, nor the interruption handler
             // fires. Without this, the calling code (DNS switcher, Wi-Fi save)
             // hangs forever.
-            DispatchQueue.global().asyncAfter(deadline: .now() + Self.xpcInvocationTimeout) {
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
                 finish(
                     Self.failure(
                         status: PrivilegedCommandStatus.helperConnectionFailed,
