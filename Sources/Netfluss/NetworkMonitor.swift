@@ -979,6 +979,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
             let backup = captured
             await MainActor.run { [weak self] in
                 self?.vpnDNSBackup = backup
+                // Persist so a crash / helper death that skips restoreVPNDNS()
+                // doesn't leave the tunnel's DNS stuck — it's undone next launch.
+                Self.persistDNSBackup(backup)
                 self?.updateCurrentDNS()
             }
         }
@@ -990,7 +993,35 @@ final class NetworkMonitor: NSObject, ObservableObject {
         vpnDNSApplied = false
         let backup = vpnDNSBackup
         vpnDNSBackup = [:]
+        Self.persistDNSBackup(nil)
         guard !backup.isEmpty else { return }
+        Task.detached(priority: .userInitiated) { [weak self] in
+            for (service, servers) in backup {
+                _ = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers)
+            }
+            await MainActor.run { [weak self] in self?.updateCurrentDNS() }
+        }
+    }
+
+    private static let dnsBackupKey = "vpnDNSBackupV1"
+
+    private static func persistDNSBackup(_ backup: [String: [String]]?) {
+        if let backup, !backup.isEmpty, let data = try? JSONEncoder().encode(backup) {
+            UserDefaults.standard.set(data, forKey: dnsBackupKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: dnsBackupKey)
+        }
+    }
+
+    /// Undo a VPN DNS override left behind by a previous session that crashed or
+    /// whose helper died before restoreVPNDNS() ran (issue #48). Call once at
+    /// launch, before any connect-on-launch.
+    func restoreStaleVPNDNSIfNeeded() {
+        guard !vpnDNSApplied,
+              let data = UserDefaults.standard.data(forKey: Self.dnsBackupKey),
+              let backup = try? JSONDecoder().decode([String: [String]].self, from: data),
+              !backup.isEmpty else { return }
+        UserDefaults.standard.removeObject(forKey: Self.dnsBackupKey)
         Task.detached(priority: .userInitiated) { [weak self] in
             for (service, servers) in backup {
                 _ = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers)

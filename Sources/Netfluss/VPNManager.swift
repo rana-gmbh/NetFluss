@@ -401,7 +401,7 @@ final class VPNManager: ObservableObject {
             VPNDiagnosticsLog.shared.log("WireGuard connected: interface=\(iface)")
             startWireGuardMonitor(interface: iface, profileID: profile.id)
             refreshPublicIP()
-            applyProfileDNSIfNeeded(profile.id)
+            applyWireGuardDNS(profile, endpoint: endpoint)
             return
         }
 
@@ -475,6 +475,37 @@ final class VPNManager: ObservableObject {
               let preset = NetworkMonitor.allDNSPresets().first(where: { $0.id == presetID }),
               !preset.servers.isEmpty else { return }
         networkMonitor?.applyVPNDNS(preset.servers)
+    }
+
+    /// Apply DNS for a WireGuard tunnel ourselves (the helper strips `DNS` from the
+    /// config so wg-quick can't spawn its orphan-prone DNS monitor — issue #48).
+    /// A user-selected preset wins; otherwise the config's own `DNS` servers are
+    /// applied via the restorable path. Restored on disconnect/drop.
+    private func applyWireGuardDNS(_ profile: VPNProfile, endpoint: VPNServerEndpoint?) {
+        if profile.options.useProfileDNS,
+           let presetID = profile.options.dnsPresetID,
+           let preset = NetworkMonitor.allDNSPresets().first(where: { $0.id == presetID }),
+           !preset.servers.isEmpty {
+            networkMonitor?.applyVPNDNS(preset.servers)
+            return
+        }
+        let dns = wireGuardConfigDNS(for: profile, endpoint: endpoint)
+        if !dns.isEmpty { networkMonitor?.applyVPNDNS(dns) }
+    }
+
+    /// The `[Interface]` `DNS =` servers from a WireGuard config (IPs only; search
+    /// domains are ignored). Empty if none.
+    private func wireGuardConfigDNS(for profile: VPNProfile, endpoint: VPNServerEndpoint?) -> [String] {
+        let path = store.configPath(for: profile, endpoint: endpoint)
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let parts = raw.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 2, parts[0].caseInsensitiveCompare("DNS") == .orderedSame else { continue }
+            return parts[1].split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && $0.rangeOfCharacter(from: CharacterSet(charactersIn: "0123456789abcdefABCDEF.:").inverted) == nil }
+        }
+        return []
     }
 
     /// openvpn stopped on its own (failed to connect, or an established tunnel

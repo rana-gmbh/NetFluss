@@ -185,11 +185,18 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         let name = "nf" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8).lowercased()
         let tmpConf = "/tmp/\(name).conf"
         do {
-            let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
+            let raw = try String(contentsOf: URL(fileURLWithPath: configPath), encoding: .utf8)
+            // Strip `DNS`/`DNS =` lines so wg-quick does NOT manage DNS. wg-quick's
+            // DNS handling backgrounds a `route -n monitor` daemon that re-applies
+            // the tunnel DNS to every network service on each route change — and it
+            // gets ORPHANED if the helper dies before `wg-quick down`, then rewrites
+            // /etc/resolver every second, corrupting the user's DNS (issue #48). The
+            // app applies the tunnel's DNS itself via the restorable applyVPNDNS.
+            let staged = Self.stripDNSDirectives(from: raw)
             // Create with 0600 up front: the config holds the WireGuard private and
             // pre-shared keys, and /tmp is world-readable (wg-quick even warns about
             // it). Creating with restricted perms avoids a world-readable window.
-            guard FileManager.default.createFile(atPath: tmpConf, contents: data,
+            guard FileManager.default.createFile(atPath: tmpConf, contents: Data(staged.utf8),
                                                  attributes: [.posixPermissions: 0o600]) else {
                 throw CocoaError(.fileWriteUnknown)
             }
@@ -260,6 +267,18 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             ptr = cur.pointee.ifa_next
         }
         return false
+    }
+
+    /// Drop `[Interface]` `DNS = …` lines from a WireGuard config so wg-quick
+    /// doesn't set DNS or background its DNS re-applying monitor. Everything else
+    /// (Address, keys, [Peer], routes) is preserved verbatim.
+    private static func stripDNSDirectives(from config: String) -> String {
+        config.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { line in
+                let t = line.trimmingCharacters(in: .whitespaces).lowercased()
+                return !(t.hasPrefix("dns ") || t.hasPrefix("dns=") || t == "dns")
+            }
+            .joined(separator: "\n")
     }
 
     /// The real utunN device wg-quick created for a config, from the mapping file
