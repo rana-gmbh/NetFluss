@@ -472,7 +472,7 @@ struct PreferencesView: View {
                 LText("When enabled, the Download/Upload summary and menu bar use only adapters that are visible here.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                LText("Tunnel adapters such as utun, tun, tap, ipsec, and ppp are excluded from totals but remain visible in the adapter list.")
+                LText("When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

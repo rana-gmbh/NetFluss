@@ -378,8 +378,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 txRateBps: txRate
             )
             updatedAdapters.append(adapter)
-            totalRxRate += rxRate
-            totalTxRate += txRate
+            // Loopback / AirDrop / link-local interfaces never carry real internet
+            // traffic — keep them in the adapter list but never in totals (#54).
+            if !AdapterClassifier.isNonInternetInterface(named: sample.name) {
+                totalRxRate += rxRate
+                totalTxRate += txRate
+            }
         }
 
         updatedAdapters.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }

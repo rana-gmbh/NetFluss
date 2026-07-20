@@ -26,9 +26,32 @@ enum AdapterType: String, Equatable, Sendable {
 enum AdapterClassifier {
     private static let tunnelPrefixes = ["utun", "ipsec", "ppp", "tun", "tap"]
 
+    /// Interfaces that never carry real internet uplink traffic and must NEVER be
+    /// counted in usage totals — loopback, AirDrop/AWDL, and other link-local /
+    /// virtual devices. Counting them is a bug: a localhost SOCKS/HTTP proxy
+    /// double-counts via `lo0`, and AirDrop is local peer-to-peer, not internet
+    /// (issue #54).
+    private static let nonInternetPrefixes = ["lo", "awdl", "llw", "gif", "stf", "anpi"]
+
     static func isTunnelInterface(named name: String) -> Bool {
         let normalizedName = name.lowercased()
         return tunnelPrefixes.contains { normalizedName.hasPrefix($0) }
+    }
+
+    /// Whether an interface never counts toward usage totals, regardless of the
+    /// exclude-tunnels toggle.
+    static func isNonInternetInterface(named name: String) -> Bool {
+        let normalizedName = name.lowercased()
+        return nonInternetPrefixes.contains { normalizedName.hasPrefix($0) }
+    }
+
+    /// Single source of truth for whether an interface's bytes count toward usage
+    /// totals. Used by the live header totals AND the Statistics/Data Usage totals
+    /// so they always agree.
+    static func countsTowardTotals(named name: String, excludeTunnels: Bool) -> Bool {
+        if isNonInternetInterface(named: name) { return false }
+        if excludeTunnels, isTunnelInterface(named: name) { return false }
+        return true
     }
 }
 
@@ -119,7 +142,7 @@ enum AdapterTotalsFilter {
                ) {
                 continue
             }
-            if excludeTunnelAdapters, adapter.isTunnelInterface {
+            guard AdapterClassifier.countsTowardTotals(named: adapter.id, excludeTunnels: excludeTunnelAdapters) else {
                 continue
             }
             rx += adapter.rxRateBps

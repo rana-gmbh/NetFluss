@@ -371,3 +371,5 @@
 "Clear VPN log" = "Clear VPN log";
 "Copied to clipboard." = "Copied to clipboard.";
 "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output.";
+
+"When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list." = "When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list.";

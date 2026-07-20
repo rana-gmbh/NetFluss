@@ -252,7 +252,7 @@ actor StatisticsStore {
 
         func total(for keys: [String]) -> StatisticsTrafficAmounts {
             aggregate(items: archive.adapterDaily, keys: keys)
-                .filter { !(excludeTunnels && AdapterClassifier.isTunnelInterface(named: $0.key)) }
+                .filter { AdapterClassifier.countsTowardTotals(named: $0.key, excludeTunnels: excludeTunnels) }
                 .values
                 .reduce(into: StatisticsTrafficAmounts()) { $0.merge($1) }
         }
@@ -278,11 +278,13 @@ actor StatisticsStore {
         // Full per-adapter aggregate — feeds the adapter list, which always shows
         // every adapter (tunnels included, per the setting's documented behaviour).
         let adapterTotals = aggregate(items: adapterSource, keys: relevantKeys)
-        // When excluding tunnels, drop those adapters once at the source so the
-        // headline totals and the timeline chart agree; the adapter list is untouched.
-        let totalsSource = excludeTunnels
-            ? adapterSource.mapValues { $0.filter { !AdapterClassifier.isTunnelInterface(named: $0.key) } }
-            : adapterSource
+        // Drop interfaces that don't count toward totals at the source, so the
+        // headline totals and the timeline chart agree: loopback/AirDrop/link-local
+        // are always dropped, and VPN/tunnel adapters when the toggle is on. The
+        // adapter list (adapterTotals above) is untouched and still shows everything.
+        let totalsSource = adapterSource.mapValues {
+            $0.filter { AdapterClassifier.countsTowardTotals(named: $0.key, excludeTunnels: excludeTunnels) }
+        }
         let totalsAmounts = aggregate(items: totalsSource, keys: relevantKeys)
         let appTotals = aggregate(items: appSource, keys: relevantKeys)
         let timeline = timelinePoints(granularity: timelineGranularity, source: totalsSource, keys: relevantKeys)

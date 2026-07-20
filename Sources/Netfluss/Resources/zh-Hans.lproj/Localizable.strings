@@ -265,3 +265,5 @@
 "Clear VPN log" = "清除 VPN 日志";
 "Copied to clipboard." = "已复制到剪贴板。";
 "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "如果 VPN 连接失败，请复制此日志并发送——它记录了内置工具、其架构以及连接工具的完整输出。";
+
+"When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list." = "启用后，VPN/隧道适配器（utun、tun、tap、ipsec、ppp）将从总计中排除。回环和 AirDrop 始终被排除，因为它们不承载互联网流量。所有适配器仍会显示在适配器列表中。";

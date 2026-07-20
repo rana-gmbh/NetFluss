@@ -371,3 +371,5 @@
 "Clear VPN log" = "VPN-Protokoll löschen";
 "Copied to clipboard." = "In die Zwischenablage kopiert.";
 "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "Wenn eine VPN-Verbindung fehlschlägt, kopiere dieses Protokoll und sende es — es erfasst die mitgelieferten Programme, ihre Architektur und die vollständige Ausgabe des Verbindungswerkzeugs.";
+
+"When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list." = "Wenn aktiviert, werden VPN-/Tunnel-Adapter (utun, tun, tap, ipsec, ppp) aus den Summen ausgeschlossen. Loopback und AirDrop werden immer ausgeschlossen, da sie keinen Internetverkehr führen. Alle Adapter bleiben in der Adapterliste sichtbar.";
