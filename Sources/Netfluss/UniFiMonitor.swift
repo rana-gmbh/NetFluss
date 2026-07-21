@@ -28,6 +28,7 @@ struct UniFiBandwidth: Equatable, Sendable {
 enum UniFiError: Error {
     case invalidURL
     case authFailed
+    case twoFactorRequired
     case noGatewayFound
     case requestFailed
     case parseError
@@ -52,6 +53,9 @@ enum UniFiMonitor {
             loginPaths.append("https://\(trimmed):8443/api/login")
         }
 
+        var sawResponse = false
+        var twoFactorRequired = false
+
         for urlString in loginPaths {
             guard let url = URL(string: urlString) else { continue }
 
@@ -64,8 +68,9 @@ enum UniFiMonitor {
 
             let session = Self.makeSession()
             do {
-                let (_, response) = try await session.data(for: request)
+                let (data, response) = try await session.data(for: request)
                 guard let httpResponse = response as? HTTPURLResponse else { continue }
+                sawResponse = true
 
                 if httpResponse.statusCode == 200 {
                     // Extract session cookie (TOKEN for UniFi OS, unifises for legacy)
@@ -80,12 +85,25 @@ enum UniFiMonitor {
                         }
                     }
                 }
+
+                // UniFi OS answers a correct password with HTTP 499 (and/or a
+                // `{"required":"2fa"}` body) when the account has 2FA enabled.
+                if httpResponse.statusCode == 499 {
+                    twoFactorRequired = true
+                } else if let bodyJSON = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let required = bodyJSON["required"] as? String,
+                          required.lowercased().contains("2fa") || required.lowercased().contains("mfa") {
+                    twoFactorRequired = true
+                }
             } catch {
                 continue
             }
         }
 
-        throw UniFiError.authFailed
+        if twoFactorRequired { throw UniFiError.twoFactorRequired }
+        // If we never got any HTTP response, the controller was unreachable
+        // rather than the credentials being wrong.
+        throw sawResponse ? UniFiError.authFailed : UniFiError.requestFailed
     }
 
     /// Fetch real-time WAN bandwidth from the UniFi gateway device.
@@ -142,6 +160,56 @@ enum UniFiMonitor {
         throw UniFiError.requestFailed
     }
 
+    /// Fetch real-time WAN bandwidth using a UniFi Network API key.
+    ///
+    /// API keys are created in the UniFi Network application under
+    /// Settings → Control Plane → Integrations. They authenticate via the
+    /// `X-API-KEY` header and sidestep passwords and 2FA entirely, which makes
+    /// them the right fit for a background monitor.
+    static func fetchBandwidth(host: String, apiKey: String) async throws -> UniFiBandwidth {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw UniFiError.invalidURL }
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { throw UniFiError.authFailed }
+
+        let hasPort = trimmed.contains(":")
+        var apiPaths = ["https://\(trimmed)/proxy/network/api/s/default/stat/device"]
+        if !hasPort {
+            apiPaths.append("https://\(trimmed):8443/api/s/default/stat/device")
+        }
+
+        var sawAuthFailure = false
+
+        for urlString in apiPaths {
+            guard let url = URL(string: urlString) else { continue }
+
+            var request = URLRequest(url: url, timeoutInterval: 10)
+            request.setValue(key, forHTTPHeaderField: "X-API-KEY")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+            let session = Self.makeSession()
+            do {
+                let (data, response) = try await session.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse else { continue }
+
+                if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                    sawAuthFailure = true
+                    continue
+                }
+                if httpResponse.statusCode == 200 {
+                    return try parseDeviceStats(data)
+                }
+            } catch let error as UniFiError {
+                throw error
+            } catch {
+                continue
+            }
+        }
+
+        if sawAuthFailure { throw UniFiError.authFailed }
+        throw UniFiError.requestFailed
+    }
+
     // MARK: - Parsing
 
     private static func parseDeviceStats(_ data: Data) throws -> UniFiBandwidth {
@@ -150,12 +218,19 @@ enum UniFiMonitor {
             throw UniFiError.parseError
         }
 
-        // Find the gateway device (type: ugw, udm, or uxg)
-        let gatewayTypes: Set<String> = ["ugw", "udm", "uxg"]
-        guard let gateway = devices.first(where: { device in
+        // Find the gateway device by type. Known gateway/console types:
+        //   ugw (USG), udm (Dream Machine), udr (Dream Router),
+        //   uxg (Next-gen Gateway), ucg (Cloud Gateway), udw (Dream Wall).
+        let gatewayTypes: Set<String> = ["ugw", "udm", "udr", "uxg", "ucg", "udw"]
+        let gateway = devices.first(where: { device in
             if let type = device["type"] as? String { return gatewayTypes.contains(type) }
             return false
-        }) else {
+        })
+        // Fallback for unrecognized/future console types: the gateway is the
+        // device that reports a WAN uplink (APs/switches do not carry `wan1`).
+        ?? devices.first(where: { $0["wan1"] is [String: Any] })
+
+        guard let gateway else {
             throw UniFiError.noGatewayFound
         }
 
@@ -236,6 +311,56 @@ enum UniFiMonitor {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
+            kSecAttrAccount as String: host
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
+    // MARK: - API Key (Keychain)
+
+    private static let apiKeyService = "com.local.netfluss.unifi.apikey"
+
+    static func saveAPIKey(host: String, apiKey: String) {
+        guard let data = apiKey.data(using: .utf8) else { return }
+
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: apiKeyService,
+            kSecAttrAccount as String: host
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: apiKeyService,
+            kSecAttrAccount as String: host,
+            kSecValueData as String: data
+        ]
+        SecItemAdd(addQuery as CFDictionary, nil)
+    }
+
+    static func loadAPIKey(host: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: apiKeyService,
+            kSecAttrAccount as String: host,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let value = String(data: data, encoding: .utf8),
+              !value.isEmpty else { return nil }
+        return value
+    }
+
+    static func deleteAPIKey(host: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: apiKeyService,
             kSecAttrAccount as String: host
         ]
         SecItemDelete(query as CFDictionary)

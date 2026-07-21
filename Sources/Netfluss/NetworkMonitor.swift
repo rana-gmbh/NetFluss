@@ -1424,29 +1424,88 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         let customHost = UserDefaults.standard.string(forKey: "unifiHost") ?? ""
         let host = customHost.isEmpty ? gatewayIP : customHost
+        let usesAutoHost = customHost.isEmpty
+        let useAPIKey = UserDefaults.standard.bool(forKey: "unifiUseAPIKey")
 
         Task { [weak self] in
             guard let self else { return }
             do {
-                guard let creds = UniFiMonitor.loadCredentials(host: host) else {
-                    let msg = "No credentials configured"
-                    self.setIfChanged(\.unifiError, to: msg)
-                    self.setIfChanged(\.unifi, to: nil)
-                    self.unifiInFlight = false
-                    return
+                let bandwidth: UniFiBandwidth
+                if useAPIKey {
+                    guard let apiKey = UniFiMonitor.loadAPIKey(host: host) else {
+                        let msg = "No API key configured"
+                        self.setIfChanged(\.unifiError, to: msg)
+                        self.setIfChanged(\.unifi, to: nil)
+                        self.unifiInFlight = false
+                        return
+                    }
+                    bandwidth = try await UniFiMonitor.fetchBandwidth(host: host, apiKey: apiKey)
+                } else {
+                    guard let creds = UniFiMonitor.loadCredentials(host: host) else {
+                        let msg = "No credentials configured"
+                        self.setIfChanged(\.unifiError, to: msg)
+                        self.setIfChanged(\.unifi, to: nil)
+                        self.unifiInFlight = false
+                        return
+                    }
+                    bandwidth = try await UniFiMonitor.fetchBandwidth(
+                        host: host, username: creds.username, password: creds.password
+                    )
                 }
-                let bandwidth = try await UniFiMonitor.fetchBandwidth(
-                    host: host, username: creds.username, password: creds.password
-                )
                 self.setIfChanged(\.unifi, to: bandwidth)
                 self.setIfChanged(\.unifiError, to: nil)
             } catch {
                 self.setIfChanged(\.unifi, to: nil)
-                let msg = "Cannot reach UniFi gateway"
+                let msg = Self.describeUniFiError(error, host: host, usesAutoHost: usesAutoHost)
                 self.setIfChanged(\.unifiError, to: msg)
             }
             self.unifiInFlight = false
         }
+    }
+
+    private nonisolated static func describeUniFiError(
+        _ error: Error,
+        host: String,
+        usesAutoHost: Bool
+    ) -> String {
+        if let unifiError = error as? UniFiError {
+            switch unifiError {
+            case .invalidURL:
+                return "Enter a valid UniFi controller address."
+            case .authFailed:
+                return "UniFi login failed. Check the username and password — the local API needs a local admin account, not a UI.com cloud login."
+            case .twoFactorRequired:
+                return "UniFi login failed because two-factor authentication is enabled on this account. Create a local admin account without 2FA for Netfluss to use."
+            case .noGatewayFound:
+                return "Connected to UniFi, but no gateway device was found in the controller response."
+            case .parseError:
+                return "UniFi returned an unexpected response."
+            case .requestFailed:
+                return usesAutoHost
+                    ? "Cannot reach UniFi gateway at \(host). Set the controller address manually if auto detection picked the wrong gateway."
+                    : "Cannot reach UniFi gateway at \(host)."
+            }
+        }
+
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut:
+                return "UniFi controller did not respond in time."
+            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .networkConnectionLost, .notConnectedToInternet:
+                if usesAutoHost {
+                    return "Cannot reach UniFi gateway at \(host). Set the controller address manually if auto detection picked the wrong gateway."
+                }
+                return "Cannot reach UniFi gateway at \(host)."
+            default:
+                break
+            }
+        }
+
+        let message = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !message.isEmpty {
+            return message
+        }
+        return "Cannot reach UniFi gateway."
     }
 
     // MARK: - OpenWRT

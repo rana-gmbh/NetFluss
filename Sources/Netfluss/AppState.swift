@@ -82,6 +82,7 @@ final class AppState {
             "fritzBoxHost": "",
             "unifiEnabled": false,
             "unifiHost": "",
+            "unifiUseAPIKey": false,
             "openWRTEnabled": false,
             "openWRTHost": "",
             "opnsenseEnabled": false,

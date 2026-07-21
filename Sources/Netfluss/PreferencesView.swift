@@ -272,6 +272,7 @@ struct PreferencesView: View {
     @AppStorage("fritzBoxHost") private var fritzBoxHost: String = ""
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
     @AppStorage("unifiHost") private var unifiHost: String = ""
+    @AppStorage("unifiUseAPIKey") private var unifiUseAPIKey: Bool = false
     @AppStorage("openWRTEnabled") private var openWRTEnabled: Bool = false
     @AppStorage("openWRTHost") private var openWRTHost: String = ""
     @AppStorage("opnsenseEnabled") private var opnsenseEnabled: Bool = false
@@ -932,10 +933,20 @@ struct PreferencesView: View {
                     } label: {
                         LText("Router address")
                     }
+                    Picker(selection: $unifiUseAPIKey) {
+                        LText("Local admin").tag(false)
+                        LText("API key").tag(true)
+                    } label: {
+                        LText("Authentication")
+                    }
+                    .pickerStyle(.segmented)
                     LabeledContent {
                         HStack(spacing: 6) {
                             let host = unifiHost.isEmpty ? monitor.gatewayIP : unifiHost
-                            if UniFiMonitor.loadCredentials(host: host) != nil {
+                            let isConfigured = unifiUseAPIKey
+                                ? (UniFiMonitor.loadAPIKey(host: host) != nil)
+                                : (UniFiMonitor.loadCredentials(host: host) != nil)
+                            if isConfigured {
                                 LText("Configured")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
@@ -945,20 +956,30 @@ struct PreferencesView: View {
                                     .foregroundStyle(.orange)
                             }
                             Button("Edit…") {
-                                EditRouterCredentialsController.shared.show(
-                                    title: "UniFi Credentials",
-                                    host: host
-                                ) { username, password in
-                                    UniFiMonitor.saveCredentials(host: host, username: username, password: password)
+                                if unifiUseAPIKey {
+                                    EditUniFiAPIKeyController.shared.show(host: host)
+                                } else {
+                                    EditRouterCredentialsController.shared.show(
+                                        title: "UniFi Credentials",
+                                        host: host
+                                    ) { username, password in
+                                        UniFiMonitor.saveCredentials(host: host, username: username, password: password)
+                                    }
                                 }
                             }
                         }
                     } label: {
-                        LText("Credentials")
+                        LText(unifiUseAPIKey ? "API key" : "Credentials")
                     }
-                    LText("Queries your UniFi gateway via its local API (HTTPS). Requires a local admin account on the UniFi controller.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    if unifiUseAPIKey {
+                        LText("Queries your UniFi gateway via its local API (HTTPS) using a Network API key. Create one in the UniFi Network app under Settings → Control Plane → Integrations. API keys work with 2FA enabled and never expire.")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    } else {
+                        LText("Queries your UniFi gateway via its local API (HTTPS). Requires a local admin account on the UniFi controller. If the account has 2FA enabled, use an API key instead — password login cannot complete a 2FA challenge.")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
                     if let error = monitor.unifiError {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")

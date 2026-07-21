@@ -386,6 +386,97 @@ struct EditRouterCredentialsPanelView: View {
     }
 }
 
+// MARK: - UniFi API Key Editor
+
+@MainActor
+final class EditUniFiAPIKeyController {
+    static let shared = EditUniFiAPIKeyController()
+    private var panel: NSPanel?
+
+    func show(host: String, onSave: @escaping () -> Void = {}) {
+        if let panel {
+            panel.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let view = EditUniFiAPIKeyPanelView(host: host) { [weak self] apiKey in
+            if apiKey.isEmpty {
+                UniFiMonitor.deleteAPIKey(host: host)
+            } else {
+                UniFiMonitor.saveAPIKey(host: host, apiKey: apiKey)
+            }
+            onSave()
+            self?.close()
+        } onCancel: { [weak self] in
+            self?.close()
+        }
+        let hosting = NSHostingController(rootView: view)
+
+        let panel = NSPanel(contentViewController: hosting)
+        panel.title = "UniFi API Key"
+        panel.styleMask = [.titled, .closable, .nonactivatingPanel]
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.setContentSize(NSSize(width: 340, height: 240))
+        panel.isReleasedWhenClosed = false
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKey()
+
+        self.panel = panel
+    }
+
+    private func close() {
+        panel?.close()
+        panel = nil
+        reactivatePreferencesWindow()
+    }
+}
+
+struct EditUniFiAPIKeyPanelView: View {
+    let host: String
+    let onSave: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var apiKey: String = ""
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("UniFi API Key")
+                .font(.headline)
+            Text("for \(host)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text("Create a key in the UniFi Network app under Settings → Control Plane → Integrations.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            SecureField("API Key", text: $apiKey)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { save() }
+            HStack(spacing: 12) {
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(24)
+    }
+
+    private func save() {
+        let trimmed = apiKey.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        onSave(trimmed)
+    }
+}
+
 // MARK: - OPNsense Credentials Editor
 
 @MainActor
