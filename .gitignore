@@ -8,3 +8,6 @@ DerivedData/
 .netrc
 *.app
 mock_*.py
+
+# Local scratch note — not for committing
+SESSION-HANDOFF.md
