@@ -285,7 +285,8 @@ enum UniFiMonitor {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecValueData as String: data
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
         SecItemAdd(addQuery as CFDictionary, nil)
     }
@@ -339,7 +340,8 @@ enum UniFiMonitor {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: apiKeyService,
             kSecAttrAccount as String: host,
-            kSecValueData as String: data
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
         SecItemAdd(addQuery as CFDictionary, nil)
     }

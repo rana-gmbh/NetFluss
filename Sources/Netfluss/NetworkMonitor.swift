@@ -1191,8 +1191,11 @@ final class NetworkMonitor: NSObject, ObservableObject {
     }
 
     private nonisolated static func dnsShellCommand(services: [String], servers: [String]) -> String {
+        // This runs via `osascript … with administrator privileges` (helper-absent
+        // fallback). Shell-quote each server so a malformed/hostile value can't
+        // inject commands — servers are otherwise interpolated into a shell string.
         services.map { service in
-            let serverArguments = servers.isEmpty ? "empty" : servers.joined(separator: " ")
+            let serverArguments = servers.isEmpty ? "empty" : servers.map { shellQuoted($0) }.joined(separator: " ")
             return "/usr/sbin/networksetup -setdnsservers \(shellQuoted(service)) \(serverArguments)"
         }
         .joined(separator: " && ")
