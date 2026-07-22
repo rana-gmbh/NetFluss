@@ -149,6 +149,28 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private static let dnsRefreshInterval: TimeInterval = 30
     private static let routerRefreshInterval: TimeInterval = 5
     private static let externalIPRefreshInterval: TimeInterval = 300
+
+    // Per-router failure backoff: an unreachable/misconfigured router was retried
+    // every 5s forever (a full TLS attempt each time, worse with a pinned window).
+    // Back off 10→20→40→60s on repeated failure, reset on success.
+    private var routerNextPoll: [String: Date] = [:]
+    private var routerFailCount: [String: Int] = [:]
+
+    private func routerPollDue(_ key: String, at now: Date) -> Bool {
+        (routerNextPoll[key] ?? .distantPast) <= now
+    }
+
+    private func noteRouterOutcome(_ key: String, success: Bool, at now: Date = Date()) {
+        if success {
+            routerFailCount[key] = 0
+            routerNextPoll[key] = nil
+        } else {
+            let n = (routerFailCount[key] ?? 0) + 1
+            routerFailCount[key] = n
+            let delay = min(60.0, Self.routerRefreshInterval * pow(2.0, Double(n)))
+            routerNextPoll[key] = now.addingTimeInterval(delay)
+        }
+    }
     private static let fritzBoxFailureThreshold = 3
 
     private struct RefreshResult {
@@ -262,6 +284,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         if enabled {
             forceDetailRefresh = true
+            // Poll routers immediately on open, regardless of any prior backoff.
+            routerNextPoll.removeAll()
+            routerFailCount.removeAll()
             updateTopAppsCollectionState()
             refresh()
         } else {
@@ -480,10 +505,10 @@ final class NetworkMonitor: NSObject, ObservableObject {
         }
         if shouldRefreshRouters {
             lastRouterRefresh = now
-            updateFritzBox()
-            updateUniFi()
-            updateOpenWRT()
-            updateOPNsense()
+            if routerPollDue("fritz", at: now) { updateFritzBox() }
+            if routerPollDue("unifi", at: now) { updateUniFi() }
+            if routerPollDue("openwrt", at: now) { updateOpenWRT() }
+            if routerPollDue("opnsense", at: now) { updateOPNsense() }
         }
 
         let needsImmediateFollowUp = detailMonitoringEnabled && forceDetailRefresh
@@ -1433,8 +1458,10 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 self.setIfChanged(\.fritzBox, to: bandwidth)
                 self.fritzBoxFailureCount = 0
                 self.setIfChanged(\.fritzBoxError, to: nil)
+                self.noteRouterOutcome("fritz", success: true)
             } catch {
                 self.fritzBoxFailureCount += 1
+                self.noteRouterOutcome("fritz", success: false)
 
                 let errorMessage = Self.describeFritzBoxError(
                     error,
@@ -1492,8 +1519,10 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 }
                 self.setIfChanged(\.unifi, to: bandwidth)
                 self.setIfChanged(\.unifiError, to: nil)
+                self.noteRouterOutcome("unifi", success: true)
             } catch {
                 self.setIfChanged(\.unifi, to: nil)
+                self.noteRouterOutcome("unifi", success: false)
                 let msg = Self.certificateChangedMessage(host: host, router: "UniFi")
                     ?? Self.describeUniFiError(error, host: host, usesAutoHost: usesAutoHost)
                 self.setIfChanged(\.unifiError, to: msg)
@@ -1603,10 +1632,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 self.openWRTLastSample = sample
                 self.openWRTLastSampleHost = host
                 self.setIfChanged(\.openWRTError, to: nil)
+                self.noteRouterOutcome("openwrt", success: true)
             } catch {
                 self.setIfChanged(\.openWRT, to: nil)
                 self.openWRTLastSample = nil
                 self.openWRTLastSampleHost = nil
+                self.noteRouterOutcome("openwrt", success: false)
                 let msg = Self.certificateChangedMessage(host: host, router: "OpenWRT")
                     ?? Self.describeOpenWRTError(error, host: host, usesAutoHost: usesAutoHost)
                 self.setIfChanged(\.openWRTError, to: msg)
@@ -1661,10 +1692,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 self.opnsenseLastSample = sample
                 self.opnsenseLastSampleHost = host
                 self.setIfChanged(\.opnsenseError, to: nil)
+                self.noteRouterOutcome("opnsense", success: true)
             } catch {
                 self.setIfChanged(\.opnsense, to: nil)
                 self.opnsenseLastSample = nil
                 self.opnsenseLastSampleHost = nil
+                self.noteRouterOutcome("opnsense", success: false)
                 let msg = Self.certificateChangedMessage(host: host, router: "OPNsense")
                     ?? Self.describeOPNsenseError(error, host: host, usesAutoHost: usesAutoHost)
                 self.setIfChanged(\.opnsenseError, to: msg)
