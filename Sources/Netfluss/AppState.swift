@@ -102,6 +102,9 @@ final class AppState {
         self.wifiManager = wifiManager
         self.vpnManager = VPNManager.shared
         VPNManager.shared.networkMonitor = monitor
+        // Undo any VPN DNS override left behind by a previous session that died
+        // before restoring it, before we (maybe) connect on launch (issue #48).
+        monitor.restoreStaleVPNDNSIfNeeded()
         VPNManager.shared.connectOnLaunchIfNeeded()
         self.statusBar = StatusBarController(
             monitor: monitor,
