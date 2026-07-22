@@ -12,11 +12,10 @@ mock_*.py
 # Local scratch note — not for committing
 SESSION-HANDOFF.md
 
-# Build artifacts / local test outputs (root-level only)
-/*.zip
-/*.png
-/*.webp
-/*.icns
+# Build artifacts / local test outputs (root-level only).
+# Note: the project legitimately tracks Screenshots/, screenshot.png, and
+# Packaging/Resources/*.icns — do NOT add broad *.png/*.icns/Screenshots ignores.
+/NetFluss-*.zip
+/Icon.Pack.zip
 /dist/
 /Icon.Pack/
-/Screenshots/
