@@ -43,6 +43,10 @@ final class NetworkDiagnostics {
     var isCapturing: Bool { captureDeadline != nil }
 
     func record(adapters: [AdapterStatus], at date: Date) {
+        // Only accumulate while a capture is active — beginCapture() clears the
+        // ring, so snapshots recorded outside a capture are never used. This was
+        // appending (and retaining) an AdapterStatus array every 1s tick forever.
+        guard isCapturing else { return }
         ring.append(Snapshot(date: date, adapters: adapters))
         if ring.count > maxBufferedSnapshots {
             ring.removeFirst(ring.count - maxBufferedSnapshots)
