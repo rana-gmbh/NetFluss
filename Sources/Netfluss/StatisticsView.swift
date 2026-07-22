@@ -25,7 +25,9 @@ private let statisticsRangeLabelColumnWidth: CGFloat = 62
 
 struct StatisticsView: View {
     @EnvironmentObject private var statisticsManager: StatisticsManager
-    @EnvironmentObject private var monitor: NetworkMonitor
+    // Note: intentionally NOT observing NetworkMonitor — its adapters/totals
+    // publish ~1/s and would re-evaluate this whole window (two Charts + lists)
+    // every tick for nothing. Preferences is opened via a notification instead.
     @AppStorage("collectStatistics") private var collectStatistics: Bool = false
     @AppStorage("collectAppStatistics") private var collectAppStatistics: Bool = true
     @AppStorage("excludeTunnelAdaptersFromTotals") private var excludeTunnelAdapters: Bool = false
@@ -323,7 +325,7 @@ struct StatisticsView: View {
                     .frame(maxWidth: 420)
                 if !collectStatistics {
                     Button {
-                        PreferencesWindowController.shared.show(monitor: monitor)
+                        NotificationCenter.default.post(name: .showPreferences, object: nil)
                     } label: {
                         LText("Open Preferences")
                     }
@@ -404,7 +406,7 @@ struct StatisticsView: View {
             }
             Spacer()
             Button {
-                PreferencesWindowController.shared.show(monitor: monitor)
+                NotificationCenter.default.post(name: .showPreferences, object: nil)
             } label: {
                 LText("Preferences")
             }

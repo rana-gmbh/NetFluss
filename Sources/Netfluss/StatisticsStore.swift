@@ -487,7 +487,15 @@ actor StatisticsStore {
         storage[bucketKey] = bucket
     }
 
+    private var lastPruneAt: Date?
+
     private func prune(now: Date) {
+        // Called on every record (~1/s while statistics are on), but buckets are
+        // minute-granular — filtering the whole archive (up to ~1300 Calendar-
+        // parsed keys) every second is wasted work. Throttle to once a minute.
+        if let last = lastPruneAt, now.timeIntervalSince(last) < 60 { return }
+        lastPruneAt = now
+
         let minuteCutoff = calendar.date(byAdding: .minute, value: -Constants.minuteRetentionMinutes, to: now) ?? now
         let hourlyCutoff = calendar.date(byAdding: .hour, value: -Constants.hourlyRetentionHours, to: now) ?? now
         let dailyCutoff = calendar.date(byAdding: .day, value: -Constants.dailyRetentionDays, to: now) ?? now

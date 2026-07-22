@@ -510,8 +510,35 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             name: .closePopover, object: nil
         )
 
+        // Suspend the detail polls (router HTTPS every 5s, CoreWLAN radio scans
+        // every 8s, IP refresh) while the display is asleep or the session is
+        // locked — nothing is visible to update, and a pinned window otherwise
+        // kept them running 24/7. Resumes on wake/unlock.
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.addObserver(self, selector: #selector(handleScreenSleep),
+                              name: NSWorkspace.screensDidSleepNotification, object: nil)
+        workspace.addObserver(self, selector: #selector(handleScreenWake),
+                              name: NSWorkspace.screensDidWakeNotification, object: nil)
+        let distributed = DistributedNotificationCenter.default()
+        distributed.addObserver(self, selector: #selector(handleScreenSleep),
+                                name: NSNotification.Name("com.apple.screenIsLocked"), object: nil)
+        distributed.addObserver(self, selector: #selector(handleScreenWake),
+                                name: NSNotification.Name("com.apple.screenIsUnlocked"), object: nil)
+
         applyPreferences()
         updateLabel()
+    }
+
+    private var screenAsleep = false
+
+    @objc private func handleScreenSleep() {
+        screenAsleep = true
+        updateDetailMonitoring()
+    }
+
+    @objc private func handleScreenWake() {
+        screenAsleep = false
+        updateDetailMonitoring()
     }
 
     @objc private func closePopover() {
@@ -793,7 +820,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     }
 
     private func updateDetailMonitoring() {
-        let isVisible = popover.isShown || pinnedWindowController.isVisible
+        let isVisible = (popover.isShown || pinnedWindowController.isVisible) && !screenAsleep
         monitor.setDetailMonitoringEnabled(isVisible)
         statisticsManager.setLiveSummaryActive(isVisible)
         wifiManager.setActive(isVisible && UserDefaults.standard.bool(forKey: "showWifiSwitcher"))
