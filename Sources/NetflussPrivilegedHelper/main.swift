@@ -544,12 +544,16 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             // VPN agent can) and -U (update if present). The app can't write the
             // System keychain, but the root helper can.
             _ = Self.runCommand(arguments: ["/usr/bin/security", "delete-generic-password", "-s", service, "-a", account, Self.systemKeychainPath])
-            // Pass the password via stdin (`-w` with no value prompts and reads
-            // stdin) instead of an argv element, so it isn't exposed to `ps` while
-            // the command runs. -A (any app may read, for the VPN agent) + -U kept.
-            let add = Self.runCommand(
-                arguments: ["/usr/bin/security", "add-generic-password", "-U", "-A", "-s", service, "-a", account, "-w", Self.systemKeychainPath],
-                stdin: password + "\n")
+            // Add to the System keychain with -A (any app may read, so the macOS
+            // VPN agent can) and -U (update if present). The app can't write the
+            // System keychain, but the root helper can.
+            // NOTE: the password is an argv element here — briefly visible to `ps`.
+            // Attempts to pass it via stdin failed: `security add-generic-password`
+            // -w requires an inline value and does not read the password from stdin
+            // in a non-tty (daemon) context (validated). A proper off-argv fix needs
+            // SecItemAdd to the System keychain with a legacy any-app SecAccess for
+            // neagent — deferred until it can be tested against a real IKEv2 setup.
+            let add = Self.runCommand(arguments: ["/usr/bin/security", "add-generic-password", "-U", "-A", "-s", service, "-a", account, "-w", password, Self.systemKeychainPath])
             guard add.success else {
                 reply(false, add.message ?? "Could not store the VPN password.")
                 return
@@ -654,7 +658,7 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         return HelperCommandResult(success: process.terminationStatus == 0, message: message)
     }
 
-    private static func runCommand(arguments: [String], stdin: String? = nil) -> HelperCommandResult {
+    private static func runCommand(arguments: [String]) -> HelperCommandResult {
         guard let executable = arguments.first else {
             return HelperCommandResult(success: false, message: "Missing command.")
         }
@@ -667,22 +671,11 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
-        var stdinPipe: Pipe?
-        if stdin != nil {
-            let p = Pipe()
-            process.standardInput = p
-            stdinPipe = p
-        }
 
         do {
             try process.run()
         } catch {
             return HelperCommandResult(success: false, message: error.localizedDescription)
-        }
-
-        if let stdin, let stdinPipe {
-            stdinPipe.fileHandleForWriting.write(Data(stdin.utf8))
-            try? stdinPipe.fileHandleForWriting.close()
         }
 
         let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
