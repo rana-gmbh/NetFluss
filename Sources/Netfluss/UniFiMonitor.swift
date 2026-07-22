@@ -251,11 +251,16 @@ enum UniFiMonitor {
 
     // MARK: - TLS (self-signed cert support)
 
-    private static func makeSession() -> URLSession {
+    /// One reused session: enables HTTP keep-alive + TLS resumption across the
+    /// 5-second polls (was creating a fresh ephemeral session — and full TLS
+    /// handshake — per request) and pins the router's certificate (TOFU).
+    private static let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
-        return URLSession(configuration: config, delegate: InsecureTLSDelegate.shared, delegateQueue: nil)
-    }
+        return URLSession(configuration: config, delegate: PinningTLSDelegate.shared, delegateQueue: nil)
+    }()
+
+    private static func makeSession() -> URLSession { session }
 
     // MARK: - Keychain Helpers
 
@@ -367,19 +372,5 @@ enum UniFiMonitor {
     }
 }
 
-// MARK: - Insecure TLS Delegate (UniFi uses self-signed certs)
-
-final class InsecureTLSDelegate: NSObject, URLSessionDelegate {
-    static let shared = InsecureTLSDelegate()
-
-    func urlSession(_ session: URLSession,
-                    didReceive challenge: URLAuthenticationChallenge,
-                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-           let trust = challenge.protectionSpace.serverTrust {
-            completionHandler(.useCredential, URLCredential(trust: trust))
-        } else {
-            completionHandler(.performDefaultHandling, nil)
-        }
-    }
-}
+// Router TLS trust is handled by PinningTLSDelegate in RouterTLS.swift (TOFU
+// certificate pinning), shared by the UniFi/OpenWRT/OPNsense monitors.

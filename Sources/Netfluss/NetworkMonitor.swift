@@ -1487,11 +1487,22 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 self.setIfChanged(\.unifiError, to: nil)
             } catch {
                 self.setIfChanged(\.unifi, to: nil)
-                let msg = Self.describeUniFiError(error, host: host, usesAutoHost: usesAutoHost)
+                let msg = Self.certificateChangedMessage(host: host, router: "UniFi")
+                    ?? Self.describeUniFiError(error, host: host, usesAutoHost: usesAutoHost)
                 self.setIfChanged(\.unifiError, to: msg)
             }
             self.unifiInFlight = false
         }
+    }
+
+    /// If the router's pinned TLS certificate changed, return a precise warning
+    /// (possible MITM) instead of a generic "cannot reach" message. The user
+    /// re-trusts by re-saving the router address, which resets the pin.
+    private nonisolated static func certificateChangedMessage(host: String, router: String) -> String? {
+        guard TLSPinStore.certificateChanged(host: host) else { return nil }
+        return "\(router)'s TLS certificate changed since it was first trusted. "
+            + "If you didn't change the router, this could be an interception attempt. "
+            + "To re-trust it, re-enter the router address in Preferences."
     }
 
     private nonisolated static func describeUniFiError(
@@ -1589,11 +1600,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 self.setIfChanged(\.openWRT, to: nil)
                 self.openWRTLastSample = nil
                 self.openWRTLastSampleHost = nil
-                let msg = Self.describeOpenWRTError(
-                    error,
-                    host: host,
-                    usesAutoHost: usesAutoHost
-                )
+                let msg = Self.certificateChangedMessage(host: host, router: "OpenWRT")
+                    ?? Self.describeOpenWRTError(error, host: host, usesAutoHost: usesAutoHost)
                 self.setIfChanged(\.openWRTError, to: msg)
             }
             self.openWRTInFlight = false
@@ -1650,11 +1658,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 self.setIfChanged(\.opnsense, to: nil)
                 self.opnsenseLastSample = nil
                 self.opnsenseLastSampleHost = nil
-                let msg = Self.describeOPNsenseError(
-                    error,
-                    host: host,
-                    usesAutoHost: usesAutoHost
-                )
+                let msg = Self.certificateChangedMessage(host: host, router: "OPNsense")
+                    ?? Self.describeOPNsenseError(error, host: host, usesAutoHost: usesAutoHost)
                 self.setIfChanged(\.opnsenseError, to: msg)
             }
             self.opnsenseInFlight = false

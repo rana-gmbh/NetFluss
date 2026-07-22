@@ -307,12 +307,13 @@ enum OPNsenseMonitor {
             return [normalized]
         }
 
-        guard let httpsURL = URL(string: "https://\(trimmed)"),
-              let httpURL = URL(string: "http://\(trimmed)") else {
+        // Bare host → HTTPS only. We no longer auto-fall-back to http:// (that
+        // let an attacker who blocks 443 force the API key over cleartext). A
+        // user who genuinely needs http can type an explicit http:// scheme.
+        guard let httpsURL = URL(string: "https://\(trimmed)") else {
             throw OPNsenseError.invalidURL
         }
-
-        return [httpsURL, httpURL]
+        return [httpsURL]
     }
 
     private static func normalizeBaseURL(from components: URLComponents) -> URL? {
@@ -349,11 +350,13 @@ enum OPNsenseMonitor {
         }
     }
 
-    private static func makeSession() -> URLSession {
+    private static let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
-        return URLSession(configuration: config, delegate: InsecureTLSDelegate.shared, delegateQueue: nil)
-    }
+        return URLSession(configuration: config, delegate: PinningTLSDelegate.shared, delegateQueue: nil)
+    }()
+
+    private static func makeSession() -> URLSession { session }
 
     // MARK: - Keychain Helpers
 

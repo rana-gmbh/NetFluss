@@ -288,11 +288,12 @@ enum OpenWRTMonitor {
             return [normalized]
         }
 
-        guard let httpsURL = URL(string: "https://\(trimmed)"),
-              let httpURL = URL(string: "http://\(trimmed)") else {
+        // Bare host → HTTPS only (no silent http:// downgrade of credentials).
+        // An explicit http:// scheme is still honoured for users who need it.
+        guard let httpsURL = URL(string: "https://\(trimmed)") else {
             throw OpenWRTError.invalidURL
         }
-        return [httpsURL.appending(path: "ubus"), httpURL.appending(path: "ubus")]
+        return [httpsURL.appending(path: "ubus")]
     }
 
     private static func normalizeBaseURL(from components: URLComponents) -> URL? {
@@ -485,11 +486,13 @@ enum OpenWRTMonitor {
         }
     }
 
-    private static func makeSession() -> URLSession {
+    private static let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
-        return URLSession(configuration: config, delegate: InsecureTLSDelegate.shared, delegateQueue: nil)
-    }
+        return URLSession(configuration: config, delegate: PinningTLSDelegate.shared, delegateQueue: nil)
+    }()
+
+    private static func makeSession() -> URLSession { session }
 
     // MARK: - Keychain Helpers
 

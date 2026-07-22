@@ -941,6 +941,7 @@ struct PreferencesView: View {
                                     currentHost: unifiHost
                                 ) { newHost in
                                     unifiHost = newHost
+                                    TLSPinStore.resetTrust(host: newHost)
                                 }
                             }
                         }
@@ -1037,6 +1038,7 @@ struct PreferencesView: View {
                                     currentHost: openWRTHost
                                 ) { newHost in
                                     openWRTHost = newHost
+                                    TLSPinStore.resetTrust(host: newHost)
                                 }
                             }
                         }
@@ -1113,6 +1115,7 @@ struct PreferencesView: View {
                                     currentHost: opnsenseHost
                                 ) { newHost in
                                     opnsenseHost = newHost
+                                    TLSPinStore.resetTrust(host: newHost)
                                 }
                             }
                         }
