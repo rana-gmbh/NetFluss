@@ -184,15 +184,14 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         // must be a valid (≤15 char) interface name — copy to a short temp name.
         let name = "nf" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8).lowercased()
         let tmpConf = "/tmp/\(name).conf"
+        var routeNote: String?
         do {
             let raw = try String(contentsOf: URL(fileURLWithPath: configPath), encoding: .utf8)
-            // Strip `DNS`/`DNS =` lines so wg-quick does NOT manage DNS. wg-quick's
-            // DNS handling backgrounds a `route -n monitor` daemon that re-applies
-            // the tunnel DNS to every network service on each route change — and it
-            // gets ORPHANED if the helper dies before `wg-quick down`, then rewrites
-            // /etc/resolver every second, corrupting the user's DNS (issue #48). The
-            // app applies the tunnel's DNS itself via the restorable applyVPNDNS.
-            let staged = Self.stripDNSDirectives(from: raw)
+            // Strip `DNS`/`DNS =` lines so wg-quick does NOT manage DNS (issue #48),
+            // and route any PRIVATE DNS server through the tunnel so the DNS we apply
+            // ourselves is actually reachable (issue #50 point 2). See stageWireGuardConfig.
+            let staged: String
+            (staged, routeNote) = Self.stageWireGuardConfig(from: raw)
             // Create with 0600 up front: the config holds the WireGuard private and
             // pre-shared keys, and /tmp is world-readable (wg-quick even warns about
             // it). Creating with restricted perms avoids a world-readable window.
@@ -217,6 +216,7 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         header += "bash:         \(Self.fileArch(bashPath))\n"
         header += "wireguard-go: \(Self.fileArch(toolsDir + "/wireguard-go"))\n"
         header += "wg:           \(Self.fileArch(toolsDir + "/wg"))\n"
+        if let routeNote { header += "dns-routing: \(routeNote)\n" }
         header += "command: bash wg-quick up \(tmpConf)\n"
 
         let result = Self.runProcess(bashPath, [wgQuick, "up", tmpConf], env: env)
@@ -279,6 +279,127 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
                 return !(t.hasPrefix("dns ") || t.hasPrefix("dns=") || t == "dns")
             }
             .joined(separator: "\n")
+    }
+
+    /// Prepare a WireGuard config for `wg-quick up`:
+    ///  1. Strip `DNS` directives (issue #48 — see stripDNSDirectives).
+    ///  2. Route private DNS servers through the tunnel (issue #50 point 2).
+    ///
+    /// NetFluss applies the tunnel's DNS itself, but `wg-quick` only installs
+    /// routes from `AllowedIPs`. If a PRIVATE DNS server (e.g. 192.168.15.1) isn't
+    /// covered by `AllowedIPs`, no route to it goes through the tunnel — it egresses
+    /// the physical default route where a VPN-internal resolver is unreachable, so
+    /// DNS silently breaks. WireGuard also cryptokey-routes: a host route alone
+    /// isn't enough, the address must be in the peer's `AllowedIPs`. So we add the
+    /// DNS server's `/32` to the peer's `AllowedIPs`; `wg-quick` then both permits
+    /// and routes it. Scoped to private (RFC1918) addresses — a public resolver is
+    /// reachable off-tunnel and force-routing it would break split tunnels — and
+    /// only when there's exactly one `[Peer]` (which peer owns the DNS is otherwise
+    /// ambiguous, and a duplicate AllowedIP across peers is rejected by wg).
+    ///
+    /// Returns the staged config and an optional note for the diagnostics log.
+    private static func stageWireGuardConfig(from config: String) -> (config: String, note: String?) {
+        let dnsServers = wireGuardDNSServers(in: config)
+        let allowed = wireGuardAllowedIPs(in: config)
+        let peerCount = config.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { $0.trimmingCharacters(in: .whitespaces).lowercased() == "[peer]" }.count
+
+        let uncovered = dnsServers.filter { ip in
+            isPrivateIPv4(ip) && !allowed.contains { ipv4(ip, isInside: $0) }
+        }
+
+        let staged = stripDNSDirectives(from: config)
+        guard !uncovered.isEmpty else { return (staged, nil) }
+
+        guard peerCount == 1 else {
+            return (staged, "private DNS \(uncovered.joined(separator: ", ")) not in AllowedIPs; "
+                + "not auto-routed (\(peerCount) peers — ambiguous). Add it to the correct peer's AllowedIPs.")
+        }
+        let routed = appendAllowedIPs(uncovered.map { "\($0)/32" }, to: staged)
+        return (routed, "routed private DNS through tunnel (added to AllowedIPs): "
+            + uncovered.joined(separator: ", "))
+    }
+
+    /// IPv4 DNS server addresses from a config's `DNS =` lines (search domains and
+    /// IPv6 servers are ignored — only IPv4 auto-routing is handled).
+    private static func wireGuardDNSServers(in config: String) -> [String] {
+        var out: [String] = []
+        for line in config.split(separator: "\n", omittingEmptySubsequences: false) {
+            guard let value = Self.value(ofKey: "dns", in: String(line)) else { continue }
+            for token in value.split(separator: ",") {
+                let ip = token.trimmingCharacters(in: .whitespaces)
+                if ipv4ToUInt32(ip) != nil { out.append(ip) }
+            }
+        }
+        return out
+    }
+
+    /// All `AllowedIPs =` CIDR entries across the config (all peers).
+    private static func wireGuardAllowedIPs(in config: String) -> [String] {
+        var out: [String] = []
+        for line in config.split(separator: "\n", omittingEmptySubsequences: false) {
+            guard let value = Self.value(ofKey: "allowedips", in: String(line)) else { continue }
+            for token in value.split(separator: ",") {
+                let cidr = token.trimmingCharacters(in: .whitespaces)
+                if !cidr.isEmpty { out.append(cidr) }
+            }
+        }
+        return out
+    }
+
+    /// Append CIDRs to the first `AllowedIPs =` line in the config (single-peer
+    /// only — callers guarantee that). Returns the config unchanged if none found.
+    private static func appendAllowedIPs(_ cidrs: [String], to config: String) -> String {
+        guard !cidrs.isEmpty else { return config }
+        var lines = config.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        for i in lines.indices where Self.value(ofKey: "allowedips", in: lines[i]) != nil {
+            let trimmedRight = lines[i].replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
+            lines[i] = trimmedRight + ", " + cidrs.joined(separator: ", ")
+            return lines.joined(separator: "\n")
+        }
+        return config
+    }
+
+    /// The value of a `key = value` config line (case-insensitive key match), or
+    /// nil if the line isn't that key. Ignores comments and section headers.
+    private static func value(ofKey key: String, in line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.hasPrefix("#"), let eq = trimmed.firstIndex(of: "=") else { return nil }
+        guard trimmed[..<eq].trimmingCharacters(in: .whitespaces).lowercased() == key else { return nil }
+        return String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Parse a dotted-quad IPv4 string to a UInt32, or nil if not a valid IPv4.
+    private static func ipv4ToUInt32(_ s: String) -> UInt32? {
+        let parts = s.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return nil }
+        var value: UInt32 = 0
+        for part in parts {
+            guard let octet = UInt16(part), octet <= 255 else { return nil }
+            value = (value << 8) | UInt32(octet)
+        }
+        return value
+    }
+
+    /// Whether an IPv4 address is in a private (RFC1918) range.
+    private static func isPrivateIPv4(_ s: String) -> Bool {
+        guard let v = ipv4ToUInt32(s) else { return false }
+        if (v & 0xFF00_0000) == 0x0A00_0000 { return true }  // 10.0.0.0/8
+        if (v & 0xFFF0_0000) == 0xAC10_0000 { return true }  // 172.16.0.0/12
+        if (v & 0xFFFF_0000) == 0xC0A8_0000 { return true }  // 192.168.0.0/16
+        return false
+    }
+
+    /// Whether an IPv4 address falls inside a CIDR string (e.g. "10.0.0.0/24").
+    /// Non-IPv4 CIDRs (IPv6) return false.
+    private static func ipv4(_ ip: String, isInside cidr: String) -> Bool {
+        let parts = cidr.split(separator: "/", maxSplits: 1)
+        guard let net = ipv4ToUInt32(String(parts[0])), let addr = ipv4ToUInt32(ip) else { return false }
+        let prefix = parts.count > 1 ? (UInt32(String(parts[1])) ?? 32) : 32
+        guard prefix <= 32 else { return false }
+        if prefix == 0 { return true }
+        let mask: UInt32 = ~UInt32(0) << (32 - prefix)
+        return (net & mask) == (addr & mask)
     }
 
     /// The real utunN device wg-quick created for a config, from the mapping file
