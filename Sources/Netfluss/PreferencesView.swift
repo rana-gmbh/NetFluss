@@ -71,9 +71,23 @@ struct ColorSwatchPicker: View {
                     selection = option.id
                 } label: {
                     ZStack {
-                        Circle()
-                            .fill(swatchColor(option.id))
-                            .frame(width: 18, height: 18)
+                        if option.id == "system" {
+                            // Transparent swatch with a grey border + an "auto"
+                            // glyph, so it is not mistaken for the Black option.
+                            Circle()
+                                .fill(Color.clear)
+                                .frame(width: 18, height: 18)
+                            Circle()
+                                .strokeBorder(.secondary.opacity(0.5), lineWidth: 1)
+                                .frame(width: 18, height: 18)
+                            Image(systemName: "circle.lefthalf.filled")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Circle()
+                                .fill(swatchColor(option.id))
+                                .frame(width: 18, height: 18)
+                        }
                         if selection == option.id {
                             Circle()
                                 .strokeBorder(.white.opacity(0.9), lineWidth: 2)
