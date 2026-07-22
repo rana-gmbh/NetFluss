@@ -31,20 +31,37 @@ actor StatisticsStore {
     private var lastFlushAt: Date?
     private let calendar = Calendar.autoupdatingCurrent
 
+    private var isLoaded = false
+
     init(url: URL) {
+        // Defer the file read + JSON decode: doing it here ran on the caller
+        // (main thread, in applicationDidFinishLaunching) and delayed launch by
+        // as much as the history size. Load lazily on the actor's executor on
+        // first access — see ensureLoaded().
         self.url = url
-        let loaded = Self.loadArchive(from: url)
-        self.archive = loaded.archive
-        self.hasPendingChanges = loaded.didMigrate
+        self.archive = .empty
     }
 
     init(archive: StatisticsArchive) {
         self.url = nil
         self.archive = archive
+        self.isLoaded = true
+    }
+
+    /// Load the on-disk archive on first use (runs on the actor executor, i.e.
+    /// off the main thread). A no-op after the first call.
+    private func ensureLoaded() {
+        guard !isLoaded else { return }
+        isLoaded = true
+        guard let url else { return }
+        let loaded = Self.loadArchive(from: url)
+        self.archive = loaded.archive
+        self.hasPendingChanges = loaded.didMigrate
     }
 
     func recordAdapterDeltas(_ deltas: [StatisticsAdapterDelta], at date: Date) async {
         guard !deltas.isEmpty else { return }
+        ensureLoaded()
         let minuteKey = Self.minuteKey(for: date, calendar: calendar)
         let hourKey = Self.hourKey(for: date, calendar: calendar)
         let dayKey = Self.dayKey(for: date, calendar: calendar)
@@ -82,6 +99,7 @@ actor StatisticsStore {
 
     func recordAppDeltas(_ deltas: [StatisticsAppDelta], at date: Date) async {
         guard !deltas.isEmpty else { return }
+        ensureLoaded()
         let minuteKey = Self.minuteKey(for: date, calendar: calendar)
         let hourKey = Self.hourKey(for: date, calendar: calendar)
         let dayKey = Self.dayKey(for: date, calendar: calendar)
@@ -131,6 +149,7 @@ actor StatisticsStore {
         hiddenApps: Set<String>,
         excludeTunnels: Bool
     ) -> StatisticsReport {
+        ensureLoaded()
         let adapterSource: [String: [String: StatisticsTrafficAmounts]]
         let appSource: [String: [String: StatisticsTrafficAmounts]]
         let relevantKeys: [String]
@@ -194,6 +213,7 @@ actor StatisticsStore {
         hiddenApps: Set<String>,
         excludeTunnels: Bool
     ) -> StatisticsReport {
+        ensureLoaded()
         let boundedEnd = min(max(customStart, customEnd), now)
         let boundedStart = min(customStart, boundedEnd)
         let span = boundedEnd.timeIntervalSince(boundedStart)
@@ -245,6 +265,7 @@ actor StatisticsStore {
     /// with the live Download/Upload totals when that preference is on. Cheap —
     /// sums at most ~31 daily buckets — safe to call on every refresh tick.
     func usageSummary(now: Date, excludeTunnels: Bool) -> StatisticsUsageSummary {
+        ensureLoaded()
         let todayStart = calendar.startOfDay(for: now)
         let monthStart = calendar.dateInterval(of: .month, for: now)?.start ?? todayStart
         let todayKeys = Self.dayKeys(from: todayStart, to: now, calendar: calendar)
