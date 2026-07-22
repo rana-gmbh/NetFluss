@@ -104,6 +104,18 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             reply(false, "Missing bundled openvpn binary.")
             return
         }
+        // The config is user-imported and we're about to run openvpn as ROOT.
+        // `--script-security 1` blocks config up/down scripts, but it does NOT
+        // block `--plugin` (which dlopens a module) — so a malicious .ovpn could
+        // load arbitrary code as root. Reject configs carrying dangerous
+        // directives before launch. Standard provider configs never need these.
+        if let bad = Self.unsafeOpenVPNDirective(inConfigAt: configPath) {
+            Self.writeVPNLog("Refused config: unsafe directive '\(bad)'", to:
+                (managementSocketPath as NSString).deletingPathExtension + ".log")
+            reply(false, "This OpenVPN config was refused because it contains a '\(bad)' "
+                + "directive, which could run code as root. Remove it and re-import.")
+            return
+        }
         // Write a log next to the socket so the app can surface the real failure
         // reason (openvpn validates options and exits before the socket exists on
         // many config errors). script-security 1 lets openvpn call its built-in
@@ -279,6 +291,35 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
                 return !(t.hasPrefix("dns ") || t.hasPrefix("dns=") || t == "dns")
             }
             .joined(separator: "\n")
+    }
+
+    /// Directives that let an OpenVPN config execute code (as root, here) or
+    /// nest another config. `--script-security 1` (which we force) neutralizes
+    /// up/down/route-up/etc. scripts, but `plugin` and script-security escalation
+    /// are separate — so we reject the config outright if any appear. Returns the
+    /// offending directive name, or nil if the config is clean/unreadable.
+    private static func unsafeOpenVPNDirective(inConfigAt path: String) -> String? {
+        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+        // Names that must never appear as a directive (line-leading token).
+        let banned: Set<String> = [
+            "plugin", "up", "down", "route-up", "route-pre-down", "ipchange",
+            "client-connect", "client-disconnect", "learn-address", "tls-verify",
+            "auth-user-pass-verify", "config"
+        ]
+        for line in raw.split(separator: "\n", omittingEmptySubsequences: false) {
+            var t = line.trimmingCharacters(in: .whitespaces)
+            if t.isEmpty || t.hasPrefix("#") || t.hasPrefix(";") || t.hasPrefix("<") { continue }
+            t = t.replacingOccurrences(of: "--", with: "", options: .anchored)
+            let name = t.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init)?.lowercased()
+            guard let name else { continue }
+            if banned.contains(name) { return name }
+            // Block `script-security 2` (or 3) — enabling user scripts.
+            if name == "script-security" {
+                let level = t.split(whereSeparator: { $0 == " " || $0 == "\t" }).dropFirst().first.map(String.init)
+                if let level, (Int(level) ?? 0) >= 2 { return "script-security 2" }
+            }
+        }
+        return nil
     }
 
     /// Prepare a WireGuard config for `wg-quick up`:
@@ -503,7 +544,12 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             // VPN agent can) and -U (update if present). The app can't write the
             // System keychain, but the root helper can.
             _ = Self.runCommand(arguments: ["/usr/bin/security", "delete-generic-password", "-s", service, "-a", account, Self.systemKeychainPath])
-            let add = Self.runCommand(arguments: ["/usr/bin/security", "add-generic-password", "-U", "-A", "-s", service, "-a", account, "-w", password, Self.systemKeychainPath])
+            // Pass the password via stdin (`-w` with no value prompts and reads
+            // stdin) instead of an argv element, so it isn't exposed to `ps` while
+            // the command runs. -A (any app may read, for the VPN agent) + -U kept.
+            let add = Self.runCommand(
+                arguments: ["/usr/bin/security", "add-generic-password", "-U", "-A", "-s", service, "-a", account, "-w", Self.systemKeychainPath],
+                stdin: password + "\n")
             guard add.success else {
                 reply(false, add.message ?? "Could not store the VPN password.")
                 return
@@ -563,14 +609,13 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         }
         guard !text.isEmpty else { return }
         let payload = Data(("\n----- openvpn process output -----\n" + text + "\n").utf8)
-        let url = URL(fileURLWithPath: logPath)
-        if let fh = try? FileHandle(forWritingTo: url) {
-            defer { try? fh.close() }
-            _ = try? fh.seekToEnd()
-            try? fh.write(contentsOf: payload)
-        } else {
-            try? payload.write(to: url)
-        }
+        // O_NOFOLLOW: never follow a symlink — root must not be tricked into
+        // appending to an attacker-planted link at this /tmp path. 0600 perms.
+        let fd = open(logPath, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW, 0o600)
+        guard fd >= 0 else { return }
+        let fh = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        try? fh.write(contentsOf: payload)
+        try? fh.close()
     }
 
     private static func bundledVPNBinaryPath(kind: String) -> String? {
@@ -609,7 +654,7 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         return HelperCommandResult(success: process.terminationStatus == 0, message: message)
     }
 
-    private static func runCommand(arguments: [String]) -> HelperCommandResult {
+    private static func runCommand(arguments: [String], stdin: String? = nil) -> HelperCommandResult {
         guard let executable = arguments.first else {
             return HelperCommandResult(success: false, message: "Missing command.")
         }
@@ -622,11 +667,22 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
+        var stdinPipe: Pipe?
+        if stdin != nil {
+            let p = Pipe()
+            process.standardInput = p
+            stdinPipe = p
+        }
 
         do {
             try process.run()
         } catch {
             return HelperCommandResult(success: false, message: error.localizedDescription)
+        }
+
+        if let stdin, let stdinPipe {
+            stdinPipe.fileHandleForWriting.write(Data(stdin.utf8))
+            try? stdinPipe.fileHandleForWriting.close()
         }
 
         let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
