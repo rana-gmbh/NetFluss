@@ -293,31 +293,26 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             .joined(separator: "\n")
     }
 
-    /// Directives that let an OpenVPN config execute code (as root, here) or
-    /// nest another config. `--script-security 1` (which we force) neutralizes
-    /// up/down/route-up/etc. scripts, but `plugin` and script-security escalation
-    /// are separate — so we reject the config outright if any appear. Returns the
-    /// offending directive name, or nil if the config is clean/unreadable.
+    /// Directives that let an OpenVPN config execute code as root even though we
+    /// force `--script-security 1`. That level (and it wins — our flag is placed
+    /// after `--config` in argv, overriding any in-config value) already disables
+    /// all user scripts: up/down/route-up/tls-verify/client-connect/etc. simply
+    /// don't run, so there's no need to reject configs that merely contain them
+    /// (many legit provider configs use up/down for DNS — rejecting those would be
+    /// a regression). The genuine exceptions are:
+    ///   • `plugin` — dlopens a shared module; NOT governed by --script-security.
+    ///   • `config` — nests another config file our top-level scan can't see,
+    ///     which could smuggle a `plugin`.
+    /// Returns the offending directive name, or nil if the config is clean.
     private static func unsafeOpenVPNDirective(inConfigAt path: String) -> String? {
         guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
-        // Names that must never appear as a directive (line-leading token).
-        let banned: Set<String> = [
-            "plugin", "up", "down", "route-up", "route-pre-down", "ipchange",
-            "client-connect", "client-disconnect", "learn-address", "tls-verify",
-            "auth-user-pass-verify", "config"
-        ]
+        let banned: Set<String> = ["plugin", "config"]
         for line in raw.split(separator: "\n", omittingEmptySubsequences: false) {
             var t = line.trimmingCharacters(in: .whitespaces)
             if t.isEmpty || t.hasPrefix("#") || t.hasPrefix(";") || t.hasPrefix("<") { continue }
             t = t.replacingOccurrences(of: "--", with: "", options: .anchored)
             let name = t.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init)?.lowercased()
-            guard let name else { continue }
-            if banned.contains(name) { return name }
-            // Block `script-security 2` (or 3) — enabling user scripts.
-            if name == "script-security" {
-                let level = t.split(whereSeparator: { $0 == " " || $0 == "\t" }).dropFirst().first.map(String.init)
-                if let level, (Int(level) ?? 0) >= 2 { return "script-security 2" }
-            }
+            if let name, banned.contains(name) { return name }
         }
         return nil
     }
