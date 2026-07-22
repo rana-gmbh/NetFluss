@@ -52,6 +52,10 @@ struct MenuBarView: View {
 
     private static let cardSpacing: CGFloat = 6   // VStack spacing between cards
     @State private var contentHeight: CGFloat = 0
+    // Live height during a resize drag — drives the layout without writing
+    // UserDefaults on every pointer move (each write fanned out a context-menu
+    // rebuild + statistics reconfigure). Persisted once on drag end. nil = idle.
+    @State private var liveDragHeight: CGFloat?
     // Cached JSON decode — updated via notification, not every render
     @State private var cachedCustomNames: [String: String] = {
         (try? JSONDecoder().decode([String: String].self,
@@ -90,7 +94,7 @@ struct MenuBarView: View {
         // popover arrow + decoration (~18pt), plus safety margin so the popover
         // window stays within the screen even with all sections enabled.
         let screenMax = max(screenVisibleFrame.height - 80, 240)
-        let savedHeight = UserDefaults.standard.double(forKey: "popoverHeight")
+        let savedHeight = liveDragHeight ?? UserDefaults.standard.double(forKey: "popoverHeight")
         let heightLimit = savedHeight > 0 ? min(savedHeight, screenMax) : screenMax
 
         let scrollHeight = min(contentHeight, heightLimit)
@@ -116,7 +120,7 @@ struct MenuBarView: View {
                 .frame(height: contentHeight > 0 ? scrollHeight : heightLimit)
 
             if !isPinned {
-                PopoverResizeHandle()
+                PopoverResizeHandle(liveHeight: $liveDragHeight)
             }
         }
         .background(theme.backgroundColor ?? .clear)
@@ -882,6 +886,7 @@ private struct ContentHeightKey: PreferenceKey {
 // MARK: - Popover Resize Handle
 
 struct PopoverResizeHandle: View {
+    @Binding var liveHeight: CGFloat?
     @State private var dragStartHeight: CGFloat = 0
     @State private var currentViewHeight: CGFloat = 0
 
@@ -924,12 +929,17 @@ struct PopoverResizeHandle: View {
                             dragStartHeight = popoverHeight
                         }
                     }
-                    // Dragging down = positive translation = taller popover
-                    let newHeight = max(200, dragStartHeight + value.translation.height)
-                    UserDefaults.standard.set(newHeight, forKey: "popoverHeight")
+                    // Dragging down = positive translation = taller popover.
+                    // Drive the layout live via @State; persist only on release so
+                    // we don't fire UserDefaults.didChangeNotification per frame.
+                    liveHeight = max(200, dragStartHeight + value.translation.height)
                 }
                 .onEnded { _ in
+                    if let h = liveHeight {
+                        UserDefaults.standard.set(h, forKey: "popoverHeight")
+                    }
                     dragStartHeight = 0
+                    liveHeight = nil
                 }
         )
         .onTapGesture(count: 2) {

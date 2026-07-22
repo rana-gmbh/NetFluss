@@ -308,6 +308,12 @@ struct PreferencesView: View {
     @State private var dnsDraggingID: String? = nil
     @State private var dnsDragBaseOrder: [String] = []
     @State private var selectedPane: PreferencePane = .general
+    // "Credentials configured?" flags — cached in state so the keychain
+    // (SecItemCopyMatching, a disk+securityd hit) isn't queried in `body`, which
+    // re-evaluates every monitor tick while Preferences is open.
+    @State private var unifiConfigured = false
+    @State private var openWRTConfigured = false
+    @State private var opnsenseConfigured = false
 
     @EnvironmentObject private var monitor: NetworkMonitor
 
@@ -958,10 +964,7 @@ struct PreferencesView: View {
                     LabeledContent {
                         HStack(spacing: 6) {
                             let host = unifiHost.isEmpty ? monitor.gatewayIP : unifiHost
-                            let isConfigured = unifiUseAPIKey
-                                ? (UniFiMonitor.loadAPIKey(host: host) != nil)
-                                : (UniFiMonitor.loadCredentials(host: host) != nil)
-                            if isConfigured {
+                            if unifiConfigured {
                                 LText("Configured")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
@@ -972,13 +975,16 @@ struct PreferencesView: View {
                             }
                             Button("Edit…") {
                                 if unifiUseAPIKey {
-                                    EditUniFiAPIKeyController.shared.show(host: host)
+                                    EditUniFiAPIKeyController.shared.show(host: host) {
+                                        NotificationCenter.default.post(name: .routerCredentialsChanged, object: nil)
+                                    }
                                 } else {
                                     EditRouterCredentialsController.shared.show(
                                         title: "UniFi Credentials",
                                         host: host
                                     ) { username, password in
                                         UniFiMonitor.saveCredentials(host: host, username: username, password: password)
+                                        NotificationCenter.default.post(name: .routerCredentialsChanged, object: nil)
                                     }
                                 }
                             }
@@ -1048,7 +1054,7 @@ struct PreferencesView: View {
                     LabeledContent {
                         HStack(spacing: 6) {
                             let host = openWRTHost.isEmpty ? monitor.gatewayIP : openWRTHost
-                            if OpenWRTMonitor.loadCredentials(host: host) != nil {
+                            if openWRTConfigured {
                                 LText("Configured")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
@@ -1063,6 +1069,7 @@ struct PreferencesView: View {
                                     host: host
                                 ) { username, password in
                                     OpenWRTMonitor.saveCredentials(host: host, username: username, password: password)
+                                    NotificationCenter.default.post(name: .routerCredentialsChanged, object: nil)
                                 }
                             }
                         }
@@ -1125,7 +1132,7 @@ struct PreferencesView: View {
                     LabeledContent {
                         HStack(spacing: 6) {
                             let host = opnsenseHost.isEmpty ? monitor.gatewayIP : opnsenseHost
-                            if OPNsenseMonitor.loadCredentials(host: host) != nil {
+                            if opnsenseConfigured {
                                 LText("Configured")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
@@ -1135,7 +1142,9 @@ struct PreferencesView: View {
                                     .foregroundStyle(.orange)
                             }
                             Button("Edit…") {
-                                EditOPNsenseCredentialsController.shared.show(host: host)
+                                EditOPNsenseCredentialsController.shared.show(host: host) {
+                                    NotificationCenter.default.post(name: .routerCredentialsChanged, object: nil)
+                                }
                             }
                         }
                     } label: {
@@ -1200,12 +1209,32 @@ struct PreferencesView: View {
             if menuBarMode == "icon", menuBarIconSymbol == "network" {
                 menuBarIconSymbol = "netfluss"
             }
+            refreshRouterCredentialStatus()
         }
         .onChange(of: menuBarMode) { newValue in
             if newValue == "icon", menuBarIconSymbol == "network" {
                 menuBarIconSymbol = "netfluss"
             }
         }
+        .onChange(of: unifiUseAPIKey) { _ in refreshRouterCredentialStatus() }
+        .onChange(of: unifiHost) { _ in refreshRouterCredentialStatus() }
+        .onChange(of: openWRTHost) { _ in refreshRouterCredentialStatus() }
+        .onChange(of: opnsenseHost) { _ in refreshRouterCredentialStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: .routerCredentialsChanged)) { _ in
+            refreshRouterCredentialStatus()
+        }
+    }
+
+    /// Re-read the router "credentials configured?" flags from the keychain.
+    /// Called on appear, when hosts/mode change, and after an editor saves — so
+    /// `body` never touches the keychain on its 1 Hz re-evaluation.
+    private func refreshRouterCredentialStatus() {
+        let unifi = unifiHost.isEmpty ? monitor.gatewayIP : unifiHost
+        unifiConfigured = unifiUseAPIKey
+            ? (UniFiMonitor.loadAPIKey(host: unifi) != nil)
+            : (UniFiMonitor.loadCredentials(host: unifi) != nil)
+        openWRTConfigured = OpenWRTMonitor.loadCredentials(host: openWRTHost.isEmpty ? monitor.gatewayIP : openWRTHost) != nil
+        opnsenseConfigured = OPNsenseMonitor.loadCredentials(host: opnsenseHost.isEmpty ? monitor.gatewayIP : opnsenseHost) != nil
     }
 
     private var preferencesToolbar: some View {

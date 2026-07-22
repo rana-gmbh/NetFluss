@@ -852,6 +852,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         }
     }
 
+    private var lastMenuLanguage: String?
+
     private func applyPreferences() {
         if UserDefaults.standard.string(forKey: "menuBarMode") == "sparkline" {
             UserDefaults.standard.set("dashboard", forKey: "menuBarMode")
@@ -862,7 +864,15 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         monitor.start(interval: effectiveInterval)
 
         popover.appearance = nil
-        configureContextMenu()
+        // The context menu only depends on the app language (its items are static,
+        // just localized). Rebuilding it on every defaults write — e.g. each frame
+        // of a color-picker/slider drag — was needless churn. Rebuild only when the
+        // language actually changed.
+        let language = UserDefaults.standard.string(forKey: "appLanguage")
+        if language != lastMenuLanguage {
+            lastMenuLanguage = language
+            configureContextMenu()
+        }
         updateLabel()
     }
 

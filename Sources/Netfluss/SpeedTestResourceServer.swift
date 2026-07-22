@@ -59,7 +59,12 @@ final class SpeedTestResourceServer {
             return
         }
 
-        let listener = try NWListener(using: .tcp, on: .any)
+        // Bind loopback only. The WebView connects via 127.0.0.1, and these are
+        // just the bundled speed-test assets — no reason to expose the port to the
+        // LAN (.any bound all interfaces).
+        let params = NWParameters.tcp
+        params.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
+        let listener = try NWListener(using: params)
         self.listener = listener
 
         let ready = DispatchSemaphore(value: 0)

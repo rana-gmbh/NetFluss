@@ -19,6 +19,12 @@ import Foundation
 import CryptoKit
 import Security
 
+extension Notification.Name {
+    /// Posted after a router credential/API-key is saved, so Preferences can
+    /// refresh its cached "configured?" flags without polling the keychain.
+    static let routerCredentialsChanged = Notification.Name("netfluss.routerCredentialsChanged")
+}
+
 /// Trust-on-first-use (TOFU) certificate store for the local router monitors
 /// (UniFi / OpenWRT / OPNsense), which use self-signed certificates that the
 /// system trust store can't validate.

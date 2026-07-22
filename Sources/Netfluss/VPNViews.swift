@@ -224,13 +224,13 @@ struct VPNPreferencesContent: View {
             }
             Button { showAddIKEv2 = true } label: { LText("Add IKEv2 VPN…") }
             Button { installMobileconfig() } label: { LText("Install configuration profile (.mobileconfig)…") }
-            Button { nativeServices = vpn.nativeServices() } label: { LText("Refresh system VPNs") }
+            Button { refreshNativeServices() } label: { LText("Refresh system VPNs") }
         } header: {
             LText("System VPN (IKEv2 / IPsec / L2TP)")
         }
-        .onAppear { nativeServices = vpn.nativeServices() }
+        .onAppear { refreshNativeServices() }
         .sheet(isPresented: $showAddIKEv2) {
-            AddIKEv2Sheet { nativeServices = vpn.nativeServices() }
+            AddIKEv2Sheet { refreshNativeServices() }
         }
 
         Section {
@@ -261,6 +261,15 @@ struct VPNPreferencesContent: View {
             } header: {
                 LText("Profiles")
             }
+        }
+    }
+
+    /// Load the system VPN service list off the main thread — `NativeVPN.list()`
+    /// spawns `scutil` (30–150ms), which froze the pane on open.
+    private func refreshNativeServices() {
+        Task {
+            let services = await Task.detached(priority: .userInitiated) { NativeVPN.list() }.value
+            nativeServices = services
         }
     }
 

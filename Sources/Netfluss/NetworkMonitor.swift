@@ -905,9 +905,16 @@ final class NetworkMonitor: NSObject, ObservableObject {
     // MARK: - DNS
 
     private func updateCurrentDNS() {
-        guard let servers = Self.currentDNSServers() else { return }
-        setIfChanged(\.currentDNSServers, to: servers)
-        setIfChanged(\.activeDNSPresetID, to: matchPreset(servers: servers))
+        // currentDNSServers() spawns `networksetup` (talks to configd, 50–300ms)
+        // — never on the main thread; it stalled the popover as it animated open.
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let servers = Self.currentDNSServers() else { return }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.setIfChanged(\.currentDNSServers, to: servers)
+                self.setIfChanged(\.activeDNSPresetID, to: self.matchPreset(servers: servers))
+            }
+        }
     }
 
     private func startListeningForWiFiEvents() {
