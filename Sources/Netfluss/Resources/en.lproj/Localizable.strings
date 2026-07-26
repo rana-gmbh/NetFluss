@@ -259,6 +259,112 @@
 "M-Lab speed test complete." = "M-Lab speed test complete.";
 "Cloudflare speed test complete." = "Cloudflare speed test complete.";
 
+// MARK: - 2.3 additions (Wi-Fi switcher, popover section reorder, system access)
+"Wi-Fi" = "Wi-Fi";
+"Wi-Fi Networks" = "Wi-Fi Networks";
+"Wi-Fi Switcher" = "Wi-Fi Switcher";
+"No Wi-Fi adapter found." = "No Wi-Fi adapter found.";
+"Location access is required to list nearby Wi-Fi networks. macOS uses the same restriction in System Settings → Wi-Fi." = "Location access is required to list nearby Wi-Fi networks. macOS uses the same restriction in System Settings → Wi-Fi.";
+"Open Location Settings…" = "Open Location Settings…";
+"Waiting for Location permission…" = "Waiting for Location permission…";
+"Scanning for networks…" = "Scanning for networks…";
+"Not available" = "Not available";
+"Pin to top" = "Pin to top";
+"Unpin" = "Unpin";
+"ESSID" = "ESSID";
+"Security" = "Security";
+"Band" = "Band";
+"Channel" = "Channel";
+"RSSI" = "RSSI";
+"Status" = "Status";
+"Not in range" = "Not in range";
+"Pinned" = "Pinned";
+"Yes" = "Yes";
+"Connect to %@" = "Connect to %@";
+"Enter the password for this %@ network." = "Enter the password for this %@ network.";
+"Enter the network password." = "Enter the network password.";
+"Join" = "Join";
+"Password" = "Password";
+"Network is not in range right now." = "Network is not in range right now.";
+"Network is no longer in range." = "Network is no longer in range.";
+"Show Wi-Fi networks in popover" = "Show Wi-Fi networks in popover";
+"Lists nearby Wi-Fi networks from the system's cached scan. Tap a row to join — saved networks reconnect immediately, new secured networks prompt for a password." = "Lists nearby Wi-Fi networks from the system's cached scan. Tap a row to join — saved networks reconnect immediately, new secured networks prompt for a password.";
+"Only show the strongest networks" = "Only show the strongest networks";
+"Maximum networks shown" = "Maximum networks shown";
+"Pinned networks and the currently-connected network always appear regardless of this limit." = "Pinned networks and the currently-connected network always appear regardless of this limit.";
+"System access" = "System access";
+"Grant Location Access…" = "Grant Location Access…";
+"Refresh Wi-Fi Scan" = "Refresh Wi-Fi Scan";
+"Granted" = "Granted";
+"Not requested yet" = "Not requested yet";
+"Denied — open System Settings to allow" = "Denied — open System Settings to allow";
+"Required to list nearby Wi-Fi networks. macOS uses the same gate for its own Wi-Fi menu." = "Required to list nearby Wi-Fi networks. macOS uses the same gate for its own Wi-Fi menu.";
+"Install Privileged Helper…" = "Install Privileged Helper…";
+"Installing…" = "Installing…";
+"Used to change DNS servers and to persist new Wi-Fi credentials into macOS's Known Networks. macOS may show a \"Background Items Added\" approval prompt the first time." = "Used to change DNS servers and to persist new Wi-Fi credentials into macOS's Known Networks. macOS may show a \"Background Items Added\" approval prompt the first time.";
+"Already installed" = "Already installed";
+"Registered" = "Registered";
+"Popover sections" = "Popover sections";
+"Drag to reorder sections in the popover. Toggling a row mirrors the corresponding pref in DNS, Wi-Fi, Router, or Top Apps panels." = "Drag to reorder sections in the popover. Toggling a row mirrors the corresponding pref in DNS, Wi-Fi, Router, or Top Apps panels.";
+"Download / Upload" = "Download / Upload";
+"Network adapters" = "Network adapters";
+"Network flow" = "Network flow";
+
+// MARK: - 2.3 cleanup: previously-untranslated diagnostics flow + odds and ends
+"Copy Network Diagnostics…" = "Copy Network Diagnostics…";
+"Record network diagnostics?" = "Record network diagnostics?";
+"Start" = "Start";
+"Diagnostics copied to clipboard" = "Diagnostics copied to clipboard";
+"OK" = "OK";
+"NetFluss will record per-interface byte counters for %.0f seconds. After you click Start, begin a large download (for example a Speed Test) and let it run until the capture finishes. The diagnostics will then be copied to your clipboard so you can paste them into a GitHub issue.\n\nNo network traffic is sent — only local counters from your machine are recorded." = "NetFluss will record per-interface byte counters for %.0f seconds. After you click Start, begin a large download (for example a Speed Test) and let it run until the capture finishes. The diagnostics will then be copied to your clipboard so you can paste them into a GitHub issue.\n\nNo network traffic is sent — only local counters from your machine are recorded.";
+"%d snapshots were captured. Paste them into the GitHub issue (issue #31) so the developer can identify which interface accumulates download bytes on your Mac." = "%d snapshots were captured. Paste them into the GitHub issue (issue #31) so the developer can identify which interface accumulates download bytes on your Mac.";
+"Wi-Fi Details" = "Wi-Fi Details";
+"Reconnect" = "Reconnect";
+"Reconnect automatically" = "Reconnect automatically";
+"Connect when NetFluss starts" = "Connect when NetFluss starts";
+"Use custom DNS while connected" = "Use custom DNS while connected";
+"Choose a DNS preset" = "Choose a DNS preset";
+"Edit" = "Edit";
+"Delete" = "Delete";
+"Rename" = "Rename";
+"Custom color" = "Custom color";
+"Dashboard (basic)" = "Dashboard (basic)";
+"Clear custom date range" = "Clear custom date range";
+
+"Apps to Hide…" = "Apps to Hide…";
+"Apps to Hide (%d)…" = "Apps to Hide (%d)…";
+
+
+/* VPN (v2.4) */
+"VPN" = "VPN";
+"Show VPN in popover" = "Show VPN in popover";
+"Import OpenVPN profile…" = "Import OpenVPN profile…";
+"Import WireGuard profile…" = "Import WireGuard profile…";
+"Import a single config file, or a folder or .zip of them (e.g. a provider's router profiles). Each config becomes a selectable server." = "Import a single config file, or a folder or .zip of them (e.g. a provider's router profiles). Each config becomes a selectable server.";
+"Add system VPN…" = "Add system VPN…";
+"Add IKEv2 VPN…" = "Add IKEv2 VPN…";
+"Install configuration profile (.mobileconfig)…" = "Install configuration profile (.mobileconfig)…";
+"Refresh system VPNs" = "Refresh system VPNs";
+"System VPN (IKEv2 / IPsec / L2TP)" = "System VPN (IKEv2 / IPsec / L2TP)";
+"No system VPNs found. Configure one in System Settings → VPN, or install a provider configuration profile below." = "No system VPNs found. Configure one in System Settings → VPN, or install a provider configuration profile below.";
+"Profiles" = "Profiles";
+"No VPN profiles. Add one in Preferences → VPN." = "No VPN profiles. Add one in Preferences → VPN.";
+"Not connected" = "Not connected";
+"Connected" = "Connected";
+"Connect" = "Connect";
+"Disconnect" = "Disconnect";
+"Disconnecting…" = "Disconnecting…";
+"Reconnecting…" = "Reconnecting…";
+"Name" = "Name";
+"Username" = "Username";
+"Save credentials" = "Save credentials";
+"Saved" = "Saved";
+"Move up" = "Move up";
+"Move down" = "Move down";
+"Add IKEv2 VPN" = "Add IKEv2 VPN";
+"Add" = "Add";
+"Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first." = "Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first.";
+
 "VPN Diagnostics" = "VPN Diagnostics";
 "Copy VPN diagnostics" = "Copy VPN diagnostics";
 "Reveal VPN log in Finder" = "Reveal VPN log in Finder";
@@ -267,3 +373,36 @@
 "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output.";
 
 "When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list." = "When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list.";
+
+// MARK: - Network Slice (2.5)
+"Network Slice" = "Network Slice";
+"Who your Mac is talking to right now." = "Who your Mac is talking to right now.";
+"Traffic Rate" = "Traffic Rate";
+"Network Hosts" = "Network Hosts";
+"Services" = "Services";
+"Apps" = "Apps";
+"Pause" = "Pause";
+"Resume" = "Resume";
+"Port %d" = "Port %d";
+"No traffic captured yet." = "No traffic captured yet.";
+"Other" = "Other";
+
+// MARK: - Network Slice host detail (2.5)
+"Local Address" = "Local Address";
+"Local Port" = "Local Port";
+"Remote Port" = "Remote Port";
+"Protocol" = "Protocol";
+"Service" = "Service";
+"Back" = "Back";
+"%d connections" = "%d connections";
+
+// MARK: - Network Slice hosts mode toggle (2.5)
+"Live view — traffic from the last few seconds." = "Live view — traffic from the last few seconds.";
+"Accumulated view — total traffic since this window was opened." = "Accumulated view — total traffic since this window was opened.";
+"No active hosts right now." = "No active hosts right now.";
+
+// MARK: - Network Slice service/app details (2.5)
+"No active services right now." = "No active services right now.";
+"No active apps right now." = "No active apps right now.";
+"App" = "App";
+"Host" = "Host";

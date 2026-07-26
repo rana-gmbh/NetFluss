@@ -589,6 +589,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         SpeedTestWindowController.shared.show(manager: speedTestManager)
     }
 
+    @objc private func showNetworkSliceFromContextMenu(_ sender: Any?) {
+        closePopover()
+        NetworkSliceWindowController.shared.show(monitor: monitor)
+    }
+
     @objc private func showAboutFromContextMenu(_ sender: Any?) {
         closePopover()
         AboutWindowController.shared.show()
@@ -697,6 +702,10 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         let speedTestItem = NSMenuItem(title: L10n.text("Speed Test…"), action: #selector(showSpeedTestFromContextMenu(_:)), keyEquivalent: "")
         speedTestItem.target = self
         contextMenu.addItem(speedTestItem)
+
+        let networkSliceItem = NSMenuItem(title: L10n.text("Network Slice"), action: #selector(showNetworkSliceFromContextMenu(_:)), keyEquivalent: "")
+        networkSliceItem.target = self
+        contextMenu.addItem(networkSliceItem)
 
         let aboutItem = NSMenuItem(title: L10n.text("About NetFluss"), action: #selector(showAboutFromContextMenu(_:)), keyEquivalent: "")
         aboutItem.target = self

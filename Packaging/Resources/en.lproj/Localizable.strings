@@ -373,3 +373,36 @@
 "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output.";
 
 "When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list." = "When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list.";
+
+// MARK: - Network Slice (2.5)
+"Network Slice" = "Network Slice";
+"Who your Mac is talking to right now." = "Who your Mac is talking to right now.";
+"Traffic Rate" = "Traffic Rate";
+"Network Hosts" = "Network Hosts";
+"Services" = "Services";
+"Apps" = "Apps";
+"Pause" = "Pause";
+"Resume" = "Resume";
+"Port %d" = "Port %d";
+"No traffic captured yet." = "No traffic captured yet.";
+"Other" = "Other";
+
+// MARK: - Network Slice host detail (2.5)
+"Local Address" = "Local Address";
+"Local Port" = "Local Port";
+"Remote Port" = "Remote Port";
+"Protocol" = "Protocol";
+"Service" = "Service";
+"Back" = "Back";
+"%d connections" = "%d connections";
+
+// MARK: - Network Slice hosts mode toggle (2.5)
+"Live view — traffic from the last few seconds." = "Live view — traffic from the last few seconds.";
+"Accumulated view — total traffic since this window was opened." = "Accumulated view — total traffic since this window was opened.";
+"No active hosts right now." = "No active hosts right now.";
+
+// MARK: - Network Slice service/app details (2.5)
+"No active services right now." = "No active services right now.";
+"No active apps right now." = "No active apps right now.";
+"App" = "App";
+"Host" = "Host";

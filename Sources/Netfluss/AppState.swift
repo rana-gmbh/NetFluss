@@ -90,7 +90,10 @@ final class AppState {
             "automaticUpdateChecksEnabled": true,
             "appLanguage": AppLanguage.system.rawValue,
             "backgroundUpdateLastNotifiedVersion": "",
-            "showVPN": false
+            "showVPN": false,
+            "networkSliceHostsLive": false,
+            "networkSliceServicesLive": false,
+            "networkSliceAppsLive": false
         ])
         let monitor = NetworkMonitor()
         self.monitor = monitor

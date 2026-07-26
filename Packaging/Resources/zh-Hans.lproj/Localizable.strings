@@ -373,3 +373,36 @@
 "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "如果 VPN 连接失败，请复制此日志并发送——它记录了内置工具、其架构以及连接工具的完整输出。";
 
 "When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list." = "启用后，VPN/隧道适配器（utun、tun、tap、ipsec、ppp）将从总计中排除。回环和 AirDrop 始终被排除，因为它们不承载互联网流量。所有适配器仍会显示在适配器列表中。";
+
+// MARK: - Network Slice (2.5)
+"Network Slice" = "网络切片";
+"Who your Mac is talking to right now." = "你的 Mac 此刻正在与谁通信。";
+"Traffic Rate" = "流量速率";
+"Network Hosts" = "网络主机";
+"Services" = "服务";
+"Apps" = "应用";
+"Pause" = "暂停";
+"Resume" = "继续";
+"Port %d" = "端口 %d";
+"No traffic captured yet." = "尚未捕获到流量。";
+"Other" = "其他";
+
+// MARK: - Network Slice host detail (2.5)
+"Local Address" = "本地地址";
+"Local Port" = "本地端口";
+"Remote Port" = "远程端口";
+"Protocol" = "协议";
+"Service" = "服务";
+"Back" = "返回";
+"%d connections" = "%d 个连接";
+
+// MARK: - Network Slice hosts mode toggle (2.5)
+"Live view — traffic from the last few seconds." = "实时视图——最近几秒的流量。";
+"Accumulated view — total traffic since this window was opened." = "累计视图——自打开此窗口以来的总流量。";
+"No active hosts right now." = "当前没有活跃的主机。";
+
+// MARK: - Network Slice service/app details (2.5)
+"No active services right now." = "当前没有活跃的服务。";
+"No active apps right now." = "当前没有活跃的应用。";
+"App" = "应用";
+"Host" = "主机";

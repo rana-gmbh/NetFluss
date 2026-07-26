@@ -259,6 +259,112 @@
 "M-Lab speed test complete." = "M-Lab 速度測試完成。";
 "Cloudflare speed test complete." = "Cloudflare 速度測試完成。";
 
+// MARK: - 2.3 additions (Wi-Fi switcher, popover section reorder, system access)
+"Wi-Fi" = "Wi-Fi";
+"Wi-Fi Networks" = "Wi-Fi 網路";
+"Wi-Fi Switcher" = "Wi-Fi 切換器";
+"No Wi-Fi adapter found." = "找不到 Wi-Fi 介面卡。";
+"Location access is required to list nearby Wi-Fi networks. macOS uses the same restriction in System Settings → Wi-Fi." = "需要位置權限才能列出附近的 Wi-Fi 網路。macOS 在「系統設定 → Wi-Fi」中使用相同的限制。";
+"Open Location Settings…" = "開啟位置設定…";
+"Waiting for Location permission…" = "正在等待位置權限…";
+"Scanning for networks…" = "正在掃描網路…";
+"Not available" = "無法使用";
+"Pin to top" = "置頂";
+"Unpin" = "取消置頂";
+"ESSID" = "ESSID";
+"Security" = "安全性";
+"Band" = "頻段";
+"Channel" = "頻道";
+"RSSI" = "RSSI";
+"Status" = "狀態";
+"Not in range" = "不在範圍內";
+"Pinned" = "已置頂";
+"Yes" = "是";
+"Connect to %@" = "連線到 %@";
+"Enter the password for this %@ network." = "請輸入此 %@ 網路的密碼。";
+"Enter the network password." = "請輸入網路密碼。";
+"Join" = "加入";
+"Password" = "密碼";
+"Network is not in range right now." = "此網路目前不在範圍內。";
+"Network is no longer in range." = "此網路已不在範圍內。";
+"Show Wi-Fi networks in popover" = "在彈出視窗中顯示 Wi-Fi 網路";
+"Lists nearby Wi-Fi networks from the system's cached scan. Tap a row to join — saved networks reconnect immediately, new secured networks prompt for a password." = "列出系統快取掃描中的附近 Wi-Fi 網路。點按一列即可加入 — 已儲存的網路會立即重新連線，新的安全網路會提示輸入密碼。";
+"Only show the strongest networks" = "僅顯示訊號最強的網路";
+"Maximum networks shown" = "最多顯示的網路數量";
+"Pinned networks and the currently-connected network always appear regardless of this limit." = "已置頂的網路和目前連線的網路始終會顯示，不受此限制影響。";
+"System access" = "系統存取";
+"Grant Location Access…" = "授予位置存取權限…";
+"Refresh Wi-Fi Scan" = "重新整理 Wi-Fi 掃描";
+"Granted" = "已授予";
+"Not requested yet" = "尚未請求";
+"Denied — open System Settings to allow" = "已拒絕 — 開啟系統設定以允許";
+"Required to list nearby Wi-Fi networks. macOS uses the same gate for its own Wi-Fi menu." = "列出附近 Wi-Fi 網路所需的權限。macOS 在自家 Wi-Fi 選單中使用相同的權限關卡。";
+"Install Privileged Helper…" = "安裝特權輔助工具…";
+"Installing…" = "正在安裝…";
+"Used to change DNS servers and to persist new Wi-Fi credentials into macOS's Known Networks. macOS may show a \"Background Items Added\" approval prompt the first time." = "用於變更 DNS 伺服器並將新的 Wi-Fi 認證儲存至 macOS 的已知網路。首次使用時，macOS 可能會顯示「已加入背景項目」的批准提示。";
+"Already installed" = "已安裝";
+"Registered" = "已註冊";
+"Popover sections" = "彈出視窗區段";
+"Drag to reorder sections in the popover. Toggling a row mirrors the corresponding pref in DNS, Wi-Fi, Router, or Top Apps panels." = "拖動以重新排序彈出視窗中的區段。切換某一列會與對應的 DNS、Wi-Fi、路由器或熱門 App 面板中的設定同步。";
+"Download / Upload" = "下載 / 上傳";
+"Network adapters" = "網路介面卡";
+"Network flow" = "網路流向";
+
+// MARK: - 2.3 cleanup: previously-untranslated diagnostics flow + odds and ends
+"Copy Network Diagnostics…" = "複製網路診斷資訊…";
+"Record network diagnostics?" = "記錄網路診斷資訊？";
+"Start" = "開始";
+"Diagnostics copied to clipboard" = "已將診斷資訊複製到剪貼簿";
+"OK" = "好";
+"NetFluss will record per-interface byte counters for %.0f seconds. After you click Start, begin a large download (for example a Speed Test) and let it run until the capture finishes. The diagnostics will then be copied to your clipboard so you can paste them into a GitHub issue.\n\nNo network traffic is sent — only local counters from your machine are recorded." = "NetFluss 將記錄每個網路介面的位元組計數器 %.0f 秒。按下「開始」後，請啟動較大的下載（例如速度測試）並讓它持續執行至記錄結束。診斷資訊接著會複製到剪貼簿，您可以將其貼到 GitHub Issue 中。\n\n不會傳送任何網路流量 — 僅記錄您機器上的本機計數器。";
+"%d snapshots were captured. Paste them into the GitHub issue (issue #31) so the developer can identify which interface accumulates download bytes on your Mac." = "已擷取 %d 個快照。請將其貼到 GitHub Issue (#31)，以便開發者判斷您 Mac 上哪個介面在累積下載位元組。";
+"Wi-Fi Details" = "Wi-Fi 詳細資訊";
+"Reconnect" = "重新連線";
+"Reconnect automatically" = "自動重新連線";
+"Connect when NetFluss starts" = "NetFluss 啟動時連線";
+"Use custom DNS while connected" = "連線時使用自訂 DNS";
+"Choose a DNS preset" = "選擇 DNS 預設";
+"Edit" = "編輯";
+"Delete" = "刪除";
+"Rename" = "重新命名";
+"Custom color" = "自訂顏色";
+"Dashboard (basic)" = "儀表板（基本）";
+"Clear custom date range" = "清除自訂日期範圍";
+
+"Apps to Hide…" = "要隱藏的 App…";
+"Apps to Hide (%d)…" = "要隱藏的 App (%d)…";
+
+
+/* VPN (v2.4) */
+"VPN" = "VPN";
+"Show VPN in popover" = "在彈出視窗中顯示 VPN";
+"Import OpenVPN profile…" = "匯入 OpenVPN 設定檔…";
+"Import WireGuard profile…" = "匯入 WireGuard 設定檔…";
+"Import a single config file, or a folder or .zip of them (e.g. a provider's router profiles). Each config becomes a selectable server." = "匯入單一設定檔，或包含多個設定檔的資料夾或 .zip（例如供應商的路由器設定）。每個設定都會成為一個可選伺服器。";
+"Add system VPN…" = "新增系統 VPN…";
+"Add IKEv2 VPN…" = "新增 IKEv2 VPN…";
+"Install configuration profile (.mobileconfig)…" = "安裝設定描述檔 (.mobileconfig)…";
+"Refresh system VPNs" = "重新整理系統 VPN";
+"System VPN (IKEv2 / IPsec / L2TP)" = "系統 VPN (IKEv2 / IPsec / L2TP)";
+"No system VPNs found. Configure one in System Settings → VPN, or install a provider configuration profile below." = "找不到系統 VPN。請在「系統設定 → VPN」中設定一個，或在下方安裝供應商的設定描述檔。";
+"Profiles" = "設定檔";
+"No VPN profiles. Add one in Preferences → VPN." = "沒有 VPN 設定檔。請在「設定 → VPN」中新增一個。";
+"Not connected" = "未連線";
+"Connected" = "已連線";
+"Connect" = "連線";
+"Disconnect" = "中斷連線";
+"Disconnecting…" = "正在中斷連線…";
+"Reconnecting…" = "正在重新連線…";
+"Name" = "名稱";
+"Username" = "使用者名稱";
+"Save credentials" = "儲存憑證";
+"Saved" = "已儲存";
+"Move up" = "上移";
+"Move down" = "下移";
+"Add IKEv2 VPN" = "新增 IKEv2 VPN";
+"Add" = "新增";
+"Creates an IKEv2 profile NetFluss connects directly (username/password). The password is stored in your Keychain. If the server uses a private CA, trust its certificate in Keychain Access first." = "建立一個 NetFluss 直接連線的 IKEv2 設定檔（使用者名稱/密碼）。密碼會儲存在你的鑰匙圈中。如果伺服器使用私有 CA，請先在「鑰匙圈存取」中信任其憑證。";
+
 "VPN Diagnostics" = "VPN 診斷";
 "Copy VPN diagnostics" = "複製 VPN 診斷資訊";
 "Reveal VPN log in Finder" = "在 Finder 中顯示 VPN 日誌";
@@ -267,3 +373,36 @@
 "If a VPN connection fails, copy this log and send it — it records the bundled tools, their architecture, and the connection tool's full output." = "若 VPN 連線失敗，請複製此日誌並傳送——它會記錄內建工具、其架構以及連線工具的完整輸出。";
 
 "When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list." = "啟用後，VPN/通道介面（utun、tun、tap、ipsec、ppp）將從總計中排除。回送與 AirDrop 一律排除，因為它們不承載網際網路流量。所有介面仍會顯示在介面清單中。";
+
+// MARK: - Network Slice (2.5)
+"Network Slice" = "網路切片";
+"Who your Mac is talking to right now." = "你的 Mac 此刻正在與誰通訊。";
+"Traffic Rate" = "流量速率";
+"Network Hosts" = "網路主機";
+"Services" = "服務";
+"Apps" = "應用程式";
+"Pause" = "暫停";
+"Resume" = "繼續";
+"Port %d" = "連接埠 %d";
+"No traffic captured yet." = "尚未擷取到流量。";
+"Other" = "其他";
+
+// MARK: - Network Slice host detail (2.5)
+"Local Address" = "本機位址";
+"Local Port" = "本機連接埠";
+"Remote Port" = "遠端連接埠";
+"Protocol" = "通訊協定";
+"Service" = "服務";
+"Back" = "返回";
+"%d connections" = "%d 個連線";
+
+// MARK: - Network Slice hosts mode toggle (2.5)
+"Live view — traffic from the last few seconds." = "即時檢視——最近幾秒的流量。";
+"Accumulated view — total traffic since this window was opened." = "累計檢視——自開啟此視窗以來的總流量。";
+"No active hosts right now." = "目前沒有活躍的主機。";
+
+// MARK: - Network Slice service/app details (2.5)
+"No active services right now." = "目前沒有活躍的服務。";
+"No active apps right now." = "目前沒有活躍的應用程式。";
+"App" = "App";
+"Host" = "主機";
