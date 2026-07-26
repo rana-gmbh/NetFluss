@@ -1941,6 +1941,12 @@ enum ProcessNetworkSampler {
 
     // PID→name cache: avoids repeated proc_pidpath + filesystem lookups.
     // Cleared every ~10 samples (caller resets via clearNameCache()).
+    // Guarded by nameCacheLock: the statistics sampler, the live nettop
+    // collector, and the Network Slice sampler all resolve names from
+    // different background threads — unsynchronized Dictionary mutation
+    // corrupts its storage and crashes (seen in the wild as EXC_BAD_ACCESS
+    // in Dictionary.setValue). The lock also serializes pathBuffer use.
+    private static let nameCacheLock = NSLock()
     private static var pidNameCache: [pid_t: String] = [:]
     private static var pidNameCacheAge: UInt64 = 0
     private static let sampleCondition = NSCondition()
@@ -1950,6 +1956,8 @@ enum ProcessNetworkSampler {
     private static var sampleInFlight = false
 
     static func clearNameCacheIfNeeded() {
+        nameCacheLock.lock()
+        defer { nameCacheLock.unlock() }
         pidNameCacheAge &+= 1
         if pidNameCacheAge % 10 == 0 {
             pidNameCache.removeAll(keepingCapacity: true)
@@ -1964,6 +1972,8 @@ enum ProcessNetworkSampler {
     }
 
     static func cachedProcessName(for pid: pid_t) -> String {
+        nameCacheLock.lock()
+        defer { nameCacheLock.unlock() }
         if let cached = pidNameCache[pid] {
             return cached
         }
@@ -2087,14 +2097,7 @@ enum ProcessNetworkSampler {
             }
             guard let pid, pid > 0 else { continue }
 
-            let name: String
-            if let cached = pidNameCache[pid] {
-                name = cached
-            } else {
-                let resolved = processName(for: pid) ?? "PID \(pid)"
-                pidNameCache[pid] = resolved
-                name = resolved
-            }
+            let name = cachedProcessName(for: pid)
 
             let connectionID: String
             if isNetworkSource, parts.count >= 19 {
