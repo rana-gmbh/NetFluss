@@ -94,7 +94,9 @@ struct MenuBarView: View {
         // popover arrow + decoration (~18pt), plus safety margin so the popover
         // window stays within the screen even with all sections enabled.
         let screenMax = max(screenVisibleFrame.height - 80, 240)
-        let savedHeight = liveDragHeight ?? UserDefaults.standard.double(forKey: "popoverHeight")
+        // Spell the CGFloat conversion out: `liveDragHeight ?? someDouble` infers
+        // CGFloat? on the Swift 6.1 toolchain CI uses, which fails to compile.
+        let savedHeight: CGFloat = liveDragHeight ?? CGFloat(UserDefaults.standard.double(forKey: "popoverHeight"))
         let heightLimit = savedHeight > 0 ? min(savedHeight, screenMax) : screenMax
 
         let scrollHeight = min(contentHeight, heightLimit)
