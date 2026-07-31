@@ -406,3 +406,17 @@
 "No active apps right now." = "Gerade keine aktiven Apps.";
 "App" = "App";
 "Host" = "Host";
+
+// MARK: - UniFi authentication mode (2.5)
+"Authentication" = "Authentifizierung";
+"Local admin" = "Lokaler Admin";
+"API key" = "API-Schlüssel";
+"Queries your UniFi gateway via its local API (HTTPS) using a Network API key. Create one in the UniFi Network app under Settings → Control Plane → Integrations. API keys work with 2FA enabled and never expire." = "Fragt dein UniFi-Gateway über dessen lokale API (HTTPS) mit einem Network-API-Schlüssel ab. Erstelle einen in der UniFi-Network-App unter Einstellungen → Control Plane → Integrationen. API-Schlüssel funktionieren auch mit aktivierter 2FA und laufen nie ab.";
+"Queries your UniFi gateway via its local API (HTTPS). Requires a local admin account on the UniFi controller. If the account has 2FA enabled, use an API key instead — password login cannot complete a 2FA challenge." = "Fragt dein UniFi-Gateway über dessen lokale API (HTTPS) ab. Erfordert ein lokales Admin-Konto auf dem UniFi-Controller. Wenn für das Konto 2FA aktiviert ist, verwende stattdessen einen API-Schlüssel — die Anmeldung mit Passwort kann keine 2FA-Abfrage abschließen.";
+
+// MARK: - SwiftUI interpolated keys (previously unlocalized)
+"Version %@" = "Version %@";
+"NetFluss %@ is available!" = "NetFluss %@ ist verfügbar!";
+"Rename \"%@\"" = "„%@“ umbenennen";
+"Custom name" = "Eigener Name";
+"Cafe X, back room, hotel Wi-Fi, coworking desk 4…" = "Café X, Hinterzimmer, Hotel-WLAN, Coworking-Platz 4 …";

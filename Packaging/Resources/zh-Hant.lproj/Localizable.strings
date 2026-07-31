@@ -406,3 +406,17 @@
 "No active apps right now." = "目前沒有活躍的應用程式。";
 "App" = "App";
 "Host" = "主機";
+
+// MARK: - UniFi authentication mode (2.5)
+"Authentication" = "身分驗證";
+"Local admin" = "本機管理員";
+"API key" = "API 金鑰";
+"Queries your UniFi gateway via its local API (HTTPS) using a Network API key. Create one in the UniFi Network app under Settings → Control Plane → Integrations. API keys work with 2FA enabled and never expire." = "使用 Network API 金鑰透過本機 API（HTTPS）查詢你的 UniFi 閘道器。可在 UniFi Network App 的「設定 → Control Plane → 整合」中建立。API 金鑰在啟用雙重驗證時仍可使用，且永不過期。";
+"Queries your UniFi gateway via its local API (HTTPS). Requires a local admin account on the UniFi controller. If the account has 2FA enabled, use an API key instead — password login cannot complete a 2FA challenge." = "透過本機 API（HTTPS）查詢你的 UniFi 閘道器。需要 UniFi 控制器上的本機管理員帳戶。若該帳戶已啟用雙重驗證，請改用 API 金鑰——密碼登入無法完成雙重驗證。";
+
+// MARK: - SwiftUI interpolated keys (previously unlocalized)
+"Version %@" = "版本 %@";
+"NetFluss %@ is available!" = "NetFluss %@ 已發布！";
+"Rename \"%@\"" = "重新命名「%@」";
+"Custom name" = "自訂名稱";
+"Cafe X, back room, hotel Wi-Fi, coworking desk 4…" = "X 咖啡廳、後廳、飯店 Wi-Fi、共享辦公 4 號座位…";
