@@ -37,6 +37,8 @@ Latest release: **NetFluss 2.5**
   <img src="Screenshots/NetFluss%20Network%20Slice%20App%20Details.webp" width="820" alt="Network Slice — app details">
 </p>
 
+- **Data Usage totals, right in the popover** — a new section showing how much you have actually moved, without opening a separate window: **Upload**, **Download**, and an emphasised **Total** row, each split across a **Today** and a **This Month** column, read from the history NetFluss already collects. It updates live while the popover is open, and a chart button in its header jumps straight to the full Bandwidth Statistics window. Enable it under Preferences → Statistics (it needs historical statistics collection turned on); tunnel adapters can be excluded from the figures, and loopback and AirDrop always are. (Thanks to [@truekasun](https://github.com/truekasun).)
+
 - **VPN fixes — WireGuard and Intel Macs.** A round of fixes for issues reported against the 2.4 VPN client:
   - **Universal (Intel) VPN binaries are back.** The bundled OpenVPN and WireGuard toolchain ships arm64 *and* x86_64 slices again, both targeting macOS 13, so VPN works on Intel Macs. The release build now hard-fails if either slice is missing, so it can't regress silently. (#48)
   - **WireGuard no longer corrupts your DNS.** `wg-quick`'s orphan-prone DNS monitor is stopped, private tunnel DNS is routed *through* the tunnel, and NetFluss now tracks the real `utun` interface instead of guessing. Teardown, file permissions, and stale-config cleanup were hardened. (#48, #50)
@@ -78,8 +80,6 @@ Latest release: **NetFluss 2.5**
 - **Accurate download rate in every scenario** — the macOS 26.5 fix for the frozen `ifi_ibytes` inbound counter now reads a lightweight kernel-statistics source, so the download number and Bandwidth Statistics history stay correct without the earlier CPU cost.
 
 - **"System default" menu bar color** — a new colour choice that follows the menu bar appearance automatically, staying legible when the wallpaper switches between light and dark. (Thanks to [@mvanhorn](https://github.com/mvanhorn).)
-
-- **Data Usage summary in the popover** — an optional section showing today's and this month's upload, download, and total data, read from the statistics NetFluss already collects. Enable it under Preferences → Statistics. (Thanks to [@truekasun](https://github.com/truekasun).)
 
 ## New in 2.3
 
@@ -151,6 +151,7 @@ Latest release: **NetFluss 2.5**
 - **Top Apps** — optional section listing the top 5 processes by current network traffic, with a relative usage bar per app (enable in Preferences)
   - **Live updates while visible** — app traffic refreshes live while the popup or pinned window is open
   - **App filtering** — hide noisy background processes (e.g. mDNSResponder) from the list via Preferences or hover to hide directly
+- **Data Usage** — optional section with Upload, Download, and Total rows across a Today and a This Month column, read from the collected history and updated live while the popover is open; a chart button opens the full Bandwidth Statistics window (enable in Preferences → Statistics)
 - **Pin button** — turn the popup into a movable floating window so NetFluss can stay open like a live widget
 - **Scrollable popover** — the popover is scrollable and resizable for smaller screens, preventing overflow when many adapters or sections are active
 - **Edge-aware popover positioning** — keeps the popover fully visible when the menu bar icon sits near the left or right screen border
