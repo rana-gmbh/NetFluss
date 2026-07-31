@@ -6,7 +6,55 @@
 
 A native macOS menubar app showing real-time upload and download rates, router-wide bandwidth, historical traffic statistics, and built-in speed testing.
 
-Latest release: **NetFluss 2.4**
+Latest release: **NetFluss 2.5**
+
+## New in 2.5
+
+- **Network Slice — see who your Mac is talking to, right now.** A dedicated live-traffic window, opened from the menu bar icon's right-click menu. A rolling Traffic Rate chart at the top, and below it three linked columns — **Network Hosts**, **Services**, and **Apps** — each ranked by volume with a relative usage bar. Remote hosts are reverse-resolved to hostnames and tagged with a country flag, so a row reads `dns.google 🇺🇸` instead of a bare IP.
+  - Each column has a **⚡ live / Σ accumulated** toggle: ⚡ shows only the last sample interval (what is moving *this second*), Σ shows the running total since you opened the window.
+  - **Pause** freezes the view so you can read a burst without it scrolling away.
+  - Built on the same lightweight `netstat` diffing NetFluss already uses — **no packet capture, no `nettop` daemon, no extra privileges**, and sampling stops the moment you close the window.
+
+<p align="center">
+  <img src="Screenshots/NetFluss%20Network%20Slice.webp" width="820" alt="NetFluss Network Slice window">
+</p>
+
+  - **Click any row to drill in.** A **host** expands to every connection with it — which app, local and remote port, protocol, service, and per-connection download/upload.
+
+<p align="center">
+  <img src="Screenshots/NetFluss%20Network%20Slice%20Network%20Hosts%20Details.webp" width="820" alt="Network Slice — network host details">
+</p>
+
+  - A **service** (https, imaps, a bare port number…) expands to every host and app using it — useful for answering "what is all this HTTPS traffic, actually?"
+
+<p align="center">
+  <img src="Screenshots/NetFluss%20Network%20Slice%20Services%20Details.webp" width="820" alt="Network Slice — service details">
+</p>
+
+  - An **app** expands to every host it is currently connected to, with the service and port for each.
+
+<p align="center">
+  <img src="Screenshots/NetFluss%20Network%20Slice%20App%20Details.webp" width="820" alt="Network Slice — app details">
+</p>
+
+- **VPN fixes — WireGuard and Intel Macs.** A round of fixes for issues reported against the 2.4 VPN client:
+  - **Universal (Intel) VPN binaries are back.** The bundled OpenVPN and WireGuard toolchain ships arm64 *and* x86_64 slices again, both targeting macOS 13, so VPN works on Intel Macs. The release build now hard-fails if either slice is missing, so it can't regress silently. (#48)
+  - **WireGuard no longer corrupts your DNS.** `wg-quick`'s orphan-prone DNS monitor is stopped, private tunnel DNS is routed *through* the tunnel, and NetFluss now tracks the real `utun` interface instead of guessing. Teardown, file permissions, and stale-config cleanup were hardened. (#48, #50)
+  - **The real OpenVPN failure reason** is surfaced instead of a generic error, and a new **VPN Diagnostics** log (Preferences → VPN) records the bundled tools, their architecture, and the connection tool's full output — copyable in one click for bug reports. (#49)
+  - **Helper repair** — "Install helper" now fixes a stale registration, and the helper re-registers itself when the app bundle moves.
+
+- **Lower energy use and better stability**
+  - Fixed a crash caused by a data race on the process-name cache behind Top Apps.
+  - Network diagnostics are only recorded while a capture is actually running; failing router monitors back off exponentially instead of retrying in a tight loop; statistics pruning is throttled and polling suspends on screen sleep/lock.
+  - Main-thread stalls were taken out of the DNS, VPN, and Preferences paths, the statistics archive loads off the main thread, and adapter drag-reordering no longer churns.
+
+- **Security hardening** — router monitors use TOFU certificate pinning with session reuse and never silently downgrade to HTTP; Keychain items are pinned to this device; OpenVPN configs are sanitized before use; the IKEv2 password is kept out of `argv`; helper logs are opened `O_NOFOLLOW`.
+
+- **UniFi: UDR and API-key support** — UniFi Dream Router is supported, and you can authenticate with a Network API key instead of a local admin account (API keys work with 2FA enabled and never expire), with clearer, more granular connection errors.
+
+- **More accurate usage totals** — loopback and AirDrop are excluded from totals, since they never carry internet traffic. (#54)
+
+- **Complete German, 简体中文 and 繁體中文 translations** for everything above.
 
 ## New in 2.4
 
@@ -108,6 +156,22 @@ Latest release: **NetFluss 2.4**
 - **Edge-aware popover positioning** — keeps the popover fully visible when the menu bar icon sits near the left or right screen border
 - **Footer** — quick access to Preferences, About, and Quit
 
+### Network Slice
+
+- **Live traffic window** — "who your Mac is talking to right now", opened from the menu bar icon's right-click menu
+- **Traffic Rate chart** — rolling download/upload timeline across the last minute
+- **Three linked columns** — Network Hosts, Services, and Apps, each ranked by volume with a relative usage bar
+  - Remote hosts are reverse-resolved to hostnames and tagged with a **country flag**
+  - Services are named where known (https, imaps, …) and fall back to `Port N`
+- **⚡ live / Σ accumulated toggle** per column — the last sample interval only, or the running total since the window was opened
+- **Drill-down** — click any host, service, or app to see its individual connections with app, local port, remote port, protocol, service, and per-connection download/upload
+- **Pause** — freeze the view to read a burst of traffic
+- **No packet capture** — built on the same lightweight `netstat` diffing used elsewhere in NetFluss; no `nettop` daemon, no extra privileges, and sampling stops when the window closes
+
+<p align="center">
+  <img src="Screenshots/NetFluss%20Network%20Slice.webp" width="820" alt="NetFluss Network Slice window">
+</p>
+
 ### VPN
 
 - **Lean built-in VPN client** — connect to your VPN without installing the provider's own client app
@@ -119,6 +183,7 @@ Latest release: **NetFluss 2.4**
 - **Auto-reconnect** — automatically re-establish a dropped tunnel, with exponential backoff
 - **Connect on launch** — start a chosen profile automatically when NetFluss launches
 - **Profile management** — import, rename, reorder, and delete profiles in Preferences → VPN; credentials stored securely in the macOS Keychain
+- **VPN Diagnostics** — a log in Preferences → VPN recording the bundled tools, their architecture, and the connection tool's full output; copy it to the clipboard in one click for bug reports
 
 ### Statistics
 
@@ -201,7 +266,7 @@ Latest release: **NetFluss 2.4**
 
 ## Install
 
-Download `NetFluss-2.4.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
+Download `NetFluss-2.5.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
 
 NetFluss is notarized and signed with a Developer ID certificate, so Gatekeeper should clear it automatically on first launch.
 
