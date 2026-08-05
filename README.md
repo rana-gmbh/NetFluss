@@ -274,8 +274,12 @@ NetFluss is notarized and signed with a Developer ID certificate, so Gatekeeper 
 You can also use Homebrew to install NetFluss:
 
 ```bash
-brew install --cask rana-gmbh/netfluss/netfluss
+brew tap rana-gmbh/netfluss
+brew trust rana-gmbh/netfluss
+brew install --cask netfluss
 ```
+
+Homebrew requires third-party taps to be trusted before it will load them, so the `brew trust` step is needed once. Without it, the install stops with `Error: Refusing to load cask rana-gmbh/netfluss/netfluss from untrusted tap`. Later updates come through `brew upgrade --cask netfluss`.
 
 ## Build from source
 
