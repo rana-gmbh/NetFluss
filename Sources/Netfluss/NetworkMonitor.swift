@@ -1596,10 +1596,11 @@ final class NetworkMonitor: NSObject, ObservableObject {
     /// (possible MITM) instead of a generic "cannot reach" message. The user
     /// re-trusts by re-saving the router address, which resets the pin.
     private nonisolated static func certificateChangedMessage(host: String, router: String) -> String? {
-        guard TLSPinStore.certificateChanged(host: host) else { return nil }
-        return "\(router)'s TLS certificate changed since it was first trusted. "
-            + "If you didn't change the router, this could be an interception attempt. "
-            + "To re-trust it, re-enter the router address in Preferences."
+        RouterConnectionDiagnosis.certificateChangedMessage(
+            router: router,
+            host: host,
+            retrustHint: RouterConnectionDiagnosis.preferencesRetrustHint
+        )
     }
 
     private nonisolated static func describeUniFiError(
@@ -1607,6 +1608,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
         host: String,
         usesAutoHost: Bool
     ) -> String {
+        func withAutoHint(_ message: String) -> String {
+            usesAutoHost
+                ? "\(message) Set the controller address manually if auto detection picked the wrong gateway."
+                : message
+        }
+
         if let unifiError = error as? UniFiError {
             switch unifiError {
             case .invalidURL:
@@ -1619,25 +1626,17 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 return "Connected to UniFi, but no gateway device was found in the controller response."
             case .parseError:
                 return "UniFi returned an unexpected response."
-            case .requestFailed:
-                return usesAutoHost
-                    ? "Cannot reach UniFi gateway at \(host). Set the controller address manually if auto detection picked the wrong gateway."
-                    : "Cannot reach UniFi gateway at \(host)."
+            case .requestFailed(let urlError):
+                return withAutoHint(RouterConnectionDiagnosis.transportMessage(
+                    router: "UniFi", host: host, error: urlError, allowsHTTP: false
+                ))
             }
         }
 
         if let urlError = error as? URLError {
-            switch urlError.code {
-            case .timedOut:
-                return "UniFi controller did not respond in time."
-            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .networkConnectionLost, .notConnectedToInternet:
-                if usesAutoHost {
-                    return "Cannot reach UniFi gateway at \(host). Set the controller address manually if auto detection picked the wrong gateway."
-                }
-                return "Cannot reach UniFi gateway at \(host)."
-            default:
-                break
-            }
+            return withAutoHint(RouterConnectionDiagnosis.transportMessage(
+                router: "UniFi", host: host, error: urlError, allowsHTTP: false
+            ))
         }
 
         let message = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1829,6 +1828,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         usesAutoHost: Bool
     ) -> String {
         let autoHint = "Auto uses the current default gateway. Set the OpenWRT address manually if that is a different router."
+        func withAutoHint(_ message: String) -> String { usesAutoHost ? "\(message) \(autoHint)" : message }
 
         if let openWRTError = error as? OpenWRTError {
             switch openWRTError {
@@ -1860,24 +1860,17 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 return "OpenWRT responded, but no WAN interface could be identified."
             case .parseError:
                 return "OpenWRT returned an unexpected ubus response."
-            case .requestFailed:
-                return usesAutoHost
-                    ? "Cannot reach OpenWRT at \(host). \(autoHint)"
-                    : "Cannot reach OpenWRT at \(host)."
+            case .requestFailed(let urlError):
+                return withAutoHint(RouterConnectionDiagnosis.transportMessage(
+                    router: "OpenWRT", host: host, error: urlError, allowsHTTP: true
+                ))
             }
         }
 
         if let urlError = error as? URLError {
-            switch urlError.code {
-            case .timedOut:
-                return "OpenWRT did not respond in time."
-            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .networkConnectionLost, .notConnectedToInternet:
-                return usesAutoHost
-                    ? "Cannot reach OpenWRT at \(host). \(autoHint)"
-                    : "Cannot reach OpenWRT at \(host)."
-            default:
-                break
-            }
+            return withAutoHint(RouterConnectionDiagnosis.transportMessage(
+                router: "OpenWRT", host: host, error: urlError, allowsHTTP: true
+            ))
         }
 
         let message = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1895,6 +1888,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         usesAutoHost: Bool
     ) -> String {
         let autoHint = "Auto uses the current default gateway. Set the OPNsense address manually if that is a different router."
+        func withAutoHint(_ message: String) -> String { usesAutoHost ? "\(message) \(autoHint)" : message }
 
         if let opnsenseError = error as? OPNsenseError {
             switch opnsenseError {
@@ -1913,24 +1907,17 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 return "OPNsense responded, but no WAN interface could be identified."
             case .parseError:
                 return "OPNsense returned an unexpected response."
-            case .requestFailed:
-                return usesAutoHost
-                    ? "Cannot reach OPNsense at \(host). \(autoHint)"
-                    : "Cannot reach OPNsense at \(host)."
+            case .requestFailed(let urlError):
+                return withAutoHint(RouterConnectionDiagnosis.transportMessage(
+                    router: "OPNsense", host: host, error: urlError, allowsHTTP: true
+                ))
             }
         }
 
         if let urlError = error as? URLError {
-            switch urlError.code {
-            case .timedOut:
-                return "OPNsense did not respond in time."
-            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .networkConnectionLost, .notConnectedToInternet:
-                return usesAutoHost
-                    ? "Cannot reach OPNsense at \(host). \(autoHint)"
-                    : "Cannot reach OPNsense at \(host)."
-            default:
-                break
-            }
+            return withAutoHint(RouterConnectionDiagnosis.transportMessage(
+                router: "OPNsense", host: host, error: urlError, allowsHTTP: true
+            ))
         }
 
         let message = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)

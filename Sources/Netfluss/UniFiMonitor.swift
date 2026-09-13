@@ -30,7 +30,8 @@ enum UniFiError: Error {
     case authFailed
     case twoFactorRequired
     case noGatewayFound
-    case requestFailed
+    /// Transport/TLS failure; carries the first URLError so the UI can say why.
+    case requestFailed(URLError?)
     case parseError
 }
 
@@ -55,6 +56,7 @@ enum UniFiMonitor {
 
         var sawResponse = false
         var twoFactorRequired = false
+        var firstTransportError: URLError?
 
         for urlString in loginPaths {
             guard let url = URL(string: urlString) else { continue }
@@ -95,6 +97,9 @@ enum UniFiMonitor {
                           required.lowercased().contains("2fa") || required.lowercased().contains("mfa") {
                     twoFactorRequired = true
                 }
+            } catch let error as URLError {
+                if firstTransportError == nil { firstTransportError = error }
+                continue
             } catch {
                 continue
             }
@@ -103,7 +108,7 @@ enum UniFiMonitor {
         if twoFactorRequired { throw UniFiError.twoFactorRequired }
         // If we never got any HTTP response, the controller was unreachable
         // rather than the credentials being wrong.
-        throw sawResponse ? UniFiError.authFailed : UniFiError.requestFailed
+        throw sawResponse ? UniFiError.authFailed : UniFiError.requestFailed(firstTransportError)
     }
 
     /// Fetch real-time WAN bandwidth from the UniFi gateway device.
@@ -122,6 +127,8 @@ enum UniFiMonitor {
         if !hasPort {
             apiPaths.append("https://\(trimmed):8443/api/s/default/stat/device")
         }
+
+        var firstTransportError: URLError?
 
         for urlString in apiPaths {
             guard let url = URL(string: urlString) else { continue }
@@ -152,12 +159,15 @@ enum UniFiMonitor {
                 }
             } catch let error as UniFiError {
                 throw error
+            } catch let error as URLError {
+                if firstTransportError == nil { firstTransportError = error }
+                continue
             } catch {
                 continue
             }
         }
 
-        throw UniFiError.requestFailed
+        throw UniFiError.requestFailed(firstTransportError)
     }
 
     /// Fetch real-time WAN bandwidth using a UniFi Network API key.
@@ -179,6 +189,7 @@ enum UniFiMonitor {
         }
 
         var sawAuthFailure = false
+        var firstTransportError: URLError?
 
         for urlString in apiPaths {
             guard let url = URL(string: urlString) else { continue }
@@ -201,13 +212,16 @@ enum UniFiMonitor {
                 }
             } catch let error as UniFiError {
                 throw error
+            } catch let error as URLError {
+                if firstTransportError == nil { firstTransportError = error }
+                continue
             } catch {
                 continue
             }
         }
 
         if sawAuthFailure { throw UniFiError.authFailed }
-        throw UniFiError.requestFailed
+        throw UniFiError.requestFailed(firstTransportError)
     }
 
     // MARK: - Parsing

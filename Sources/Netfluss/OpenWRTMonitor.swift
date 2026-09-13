@@ -37,7 +37,8 @@ enum OpenWRTError: Error {
     case ubusUnavailable
     case httpStatus(Int)
     case rpcFailure(Int, String)
-    case requestFailed
+    /// Transport/TLS failure; carries the URLError so the UI can say why.
+    case requestFailed(URLError?)
     case parseError
     case noWANDevice
 }
@@ -62,7 +63,7 @@ enum OpenWRTMonitor {
         sessionHost = nil
         sessionURL = nil
 
-        var lastError: Error = OpenWRTError.requestFailed
+        var lastError: Error = OpenWRTError.requestFailed(nil)
         for url in try candidateURLs(for: trimmed) {
             do {
                 let rpcData = try await call(
@@ -255,7 +256,7 @@ enum OpenWRTMonitor {
             let session = makeSession()
             let (data, response) = try await session.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw OpenWRTError.requestFailed
+                throw OpenWRTError.requestFailed(nil)
             }
 
             switch httpResponse.statusCode {
@@ -270,8 +271,10 @@ enum OpenWRTMonitor {
             }
         } catch let error as OpenWRTError {
             throw error
+        } catch let error as URLError {
+            throw OpenWRTError.requestFailed(error)
         } catch {
-            throw OpenWRTError.requestFailed
+            throw OpenWRTError.requestFailed(nil)
         }
     }
 
@@ -279,7 +282,9 @@ enum OpenWRTMonitor {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw OpenWRTError.invalidURL }
 
-        if let components = URLComponents(string: trimmed), let scheme = components.scheme {
+        // Only "scheme://" counts as a URL: "router.lan:8443" would otherwise
+        // parse with scheme "router.lan" and be rejected as invalid.
+        if trimmed.contains("://"), let components = URLComponents(string: trimmed), let scheme = components.scheme {
             let normalizedScheme = scheme.lowercased()
             guard let normalized = normalizeBaseURL(from: components),
                   normalizedScheme == "http" || normalizedScheme == "https" else {

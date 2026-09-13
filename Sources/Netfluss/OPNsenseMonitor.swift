@@ -36,7 +36,8 @@ enum OPNsenseError: Error {
     case invalidURL
     case authFailed
     case httpStatus(Int)
-    case requestFailed
+    /// Transport/TLS failure; carries the URLError so the UI can say why.
+    case requestFailed(URLError?)
     case parseError
     case noWANInterface
 }
@@ -57,7 +58,7 @@ enum OPNsenseMonitor {
         sessionHost = nil
         sessionBaseURL = nil
 
-        var lastError: Error = OPNsenseError.requestFailed
+        var lastError: Error = OPNsenseError.requestFailed(nil)
         for baseURL in try candidateBaseURLs(for: trimmed) {
             do {
                 // Simple auth check against a lightweight GET endpoint.
@@ -270,12 +271,12 @@ enum OPNsenseMonitor {
             let (data, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw OPNsenseError.requestFailed
+                throw OPNsenseError.requestFailed(nil)
             }
 
             switch httpResponse.statusCode {
             case 200:
-                guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
                     let responseBody = String(data: data, encoding: .utf8) ?? "(unable to decode)"
                     let truncated = responseBody.prefix(100)
                     print("OPNsense parse error. Response was: \(truncated)")
@@ -289,8 +290,10 @@ enum OPNsenseMonitor {
             }
         } catch let error as OPNsenseError {
             throw error
+        } catch let error as URLError {
+            throw OPNsenseError.requestFailed(error)
         } catch {
-            throw OPNsenseError.requestFailed
+            throw OPNsenseError.requestFailed(nil)
         }
     }
 
@@ -298,7 +301,9 @@ enum OPNsenseMonitor {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw OPNsenseError.invalidURL }
 
-        if let components = URLComponents(string: trimmed), let scheme = components.scheme {
+        // Only "scheme://" counts as a URL: "router.lan:8443" would otherwise
+        // parse with scheme "router.lan" and be rejected as invalid.
+        if trimmed.contains("://"), let components = URLComponents(string: trimmed), let scheme = components.scheme {
             let normalizedScheme = scheme.lowercased()
             guard normalizedScheme == "http" || normalizedScheme == "https",
                   let normalized = normalizeBaseURL(from: components) else {

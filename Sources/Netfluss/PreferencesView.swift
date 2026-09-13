@@ -985,7 +985,7 @@ struct PreferencesView: View {
                                     currentHost: unifiHost
                                 ) { newHost in
                                     unifiHost = newHost
-                                    TLSPinStore.resetTrust(host: newHost)
+                                    TLSPinStore.resetTrust(host: newHost.isEmpty ? monitor.gatewayIP : newHost)
                                 }
                             }
                         }
@@ -1082,7 +1082,7 @@ struct PreferencesView: View {
                                     currentHost: openWRTHost
                                 ) { newHost in
                                     openWRTHost = newHost
-                                    TLSPinStore.resetTrust(host: newHost)
+                                    TLSPinStore.resetTrust(host: newHost.isEmpty ? monitor.gatewayIP : newHost)
                                 }
                             }
                         }
@@ -1114,7 +1114,7 @@ struct PreferencesView: View {
                     } label: {
                         LText("Credentials")
                     }
-                    LText("Queries your OpenWRT router via ubus JSON-RPC over HTTPS or HTTP. Auto uses the current default gateway, which may be the wrong router on dual-router setups. Set a fixed OpenWRT IP or URL if needed. Requires the router's admin credentials and the uhttpd-mod-ubus package.")
+                    LText("Queries your OpenWRT router via ubus JSON-RPC over HTTPS. Auto uses the current default gateway, which may be the wrong router on dual-router setups. Set a fixed OpenWRT IP or URL if needed — for plain HTTP, enter http://<IP>. Requires the router's admin credentials and the uhttpd-mod-ubus package.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                     if let error = monitor.openWRTError {
@@ -1160,7 +1160,7 @@ struct PreferencesView: View {
                                     currentHost: opnsenseHost
                                 ) { newHost in
                                     opnsenseHost = newHost
-                                    TLSPinStore.resetTrust(host: newHost)
+                                    TLSPinStore.resetTrust(host: newHost.isEmpty ? monitor.gatewayIP : newHost)
                                 }
                             }
                         }
@@ -1188,7 +1188,7 @@ struct PreferencesView: View {
                     } label: {
                         LText("API Credentials")
                     }
-                    LText("Queries your OPNsense router via REST API over HTTPS or HTTP. Auto uses the current default gateway. Requires API key and secret configured in OPNsense.")
+                    LText("Queries your OPNsense router via its REST API over HTTPS. Auto uses the current default gateway. If the web interface uses plain HTTP or a different port, enter the full URL (e.g. http://192.168.1.1 or https://192.168.1.1:8443). Requires an API key and secret configured in OPNsense.")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                     if let error = monitor.opnsenseError {

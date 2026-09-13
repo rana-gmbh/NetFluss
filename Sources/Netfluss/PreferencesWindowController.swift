@@ -499,6 +499,8 @@ final class EditOPNsenseCredentialsController {
             self?.close()
         }
         let hosting = NSHostingController(rootView: view)
+        // Grow with the (multi-line) diagnosis and the re-trust button.
+        hosting.sizingOptions = [.preferredContentSize]
 
         let panel = NSPanel(contentViewController: hosting)
         panel.title = "OPNsense API Credentials"
@@ -532,6 +534,8 @@ struct EditOPNsenseCredentialsPanelView: View {
     @State private var isTesting = false
     @State private var testPassed = false
     @State private var testError: String?
+    /// The last test failed because the pinned TLS certificate changed.
+    @State private var certificateChanged = false
 
     private var canTest: Bool {
         !apiKey.trimmingCharacters(in: .whitespaces).isEmpty && !apiSecret.isEmpty
@@ -557,13 +561,26 @@ struct EditOPNsenseCredentialsPanelView: View {
 
             // Test connection status
             if let error = testError {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(.orange)
-                        .font(.system(size: 12))
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                VStack(spacing: 8) {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.system(size: 12))
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if certificateChanged {
+                        // Explicit user action = re-trust (TOFU) the router's
+                        // current certificate, then test again.
+                        Button("Trust Current Certificate") {
+                            TLSPinStore.resetTrust(host: host)
+                            testConnection()
+                        }
+                        .controlSize(.small)
+                        .disabled(isTesting)
+                    }
                 }
             } else if testPassed {
                 HStack(spacing: 6) {
@@ -592,6 +609,7 @@ struct EditOPNsenseCredentialsPanelView: View {
             }
         }
         .padding(24)
+        .frame(width: 340)
         .onAppear {
             if let creds = OPNsenseMonitor.loadCredentials(host: host) {
                 apiKey = creds.apiKey
@@ -607,6 +625,7 @@ struct EditOPNsenseCredentialsPanelView: View {
         isTesting = true
         testError = nil
         testPassed = false
+        certificateChanged = false
 
         Task {
             do {
@@ -617,8 +636,15 @@ struct EditOPNsenseCredentialsPanelView: View {
                     isTesting = false
                 }
             } catch {
+                let changed = TLSPinStore.certificateChanged(host: host)
                 let errorMsg: String
-                if let opnsenseError = error as? OPNsenseError {
+                if changed {
+                    errorMsg = RouterConnectionDiagnosis.certificateChangedMessage(
+                        router: "OPNsense",
+                        host: host,
+                        retrustHint: "If you expected this (for example after replacing the router's certificate), click “Trust Current Certificate”."
+                    ) ?? "OPNsense's TLS certificate changed since NetFluss first trusted it."
+                } else if let opnsenseError = error as? OPNsenseError {
                     switch opnsenseError {
                     case .authFailed:
                         errorMsg = "API key or secret is incorrect (HTTP 401/403)"
@@ -628,28 +654,24 @@ struct EditOPNsenseCredentialsPanelView: View {
                         errorMsg = "HTTP error \(code) — check the router address and verify the API is enabled"
                     case .parseError:
                         errorMsg = "Router returned unexpected format — verify the API endpoint or check the OPNsense logs (console output has details)"
-                    case .requestFailed:
-                        errorMsg = "Could not reach router — verify address and network connectivity"
+                    case .requestFailed(let urlError):
+                        errorMsg = RouterConnectionDiagnosis.transportMessage(
+                            router: "OPNsense", host: host, error: urlError, allowsHTTP: true
+                        )
                     case .noWANInterface:
                         errorMsg = "Router responded but WAN interface not found"
                     }
                 } else if let urlError = error as? URLError {
-                    switch urlError.code {
-                    case .timedOut:
-                        errorMsg = "Router did not respond in time"
-                    case .cannotFindHost:
-                        errorMsg = "Could not resolve host — check the address"
-                    case .cannotConnectToHost:
-                        errorMsg = "Could not connect to router — verify address and network"
-                    default:
-                        errorMsg = "Network error: \((error as NSError).localizedDescription)"
-                    }
+                    errorMsg = RouterConnectionDiagnosis.transportMessage(
+                        router: "OPNsense", host: host, error: urlError, allowsHTTP: true
+                    )
                 } else {
                     errorMsg = "Error: \((error as NSError).localizedDescription)"
                 }
                 await MainActor.run {
                     testPassed = false
                     testError = errorMsg
+                    certificateChanged = changed
                     isTesting = false
                 }
             }

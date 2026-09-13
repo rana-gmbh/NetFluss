@@ -154,8 +154,8 @@
 "OpenWRT" = "OpenWRT";
 "Provider" = "提供者";
 "Queries your Fritz!Box via TR-064 (no authentication needed for bandwidth data). Auto uses the current default gateway. Set a fixed address if your Fritz!Box is reachable at a different IP. Port 49000 must be reachable." = "透過 TR-064 查詢 Fritz!Box（頻寬資料無需認證）。自動模式使用目前預設閘道。如果 Fritz!Box 位於其他 IP，請設定固定位址。連接埠 49000 必須可存取。";
-"Queries your OPNsense router via REST API over HTTPS or HTTP. Auto uses the current default gateway. Requires API key and secret configured in OPNsense." = "透過 HTTPS 或 HTTP 使用 REST API 查詢 OPNsense 路由器。自動模式使用目前預設閘道。需要在 OPNsense 中設定 API 金鑰和密鑰。";
-"Queries your OpenWRT router via ubus JSON-RPC over HTTPS or HTTP. Auto uses the current default gateway, which may be the wrong router on dual-router setups. Set a fixed OpenWRT IP or URL if needed. Requires the router's admin credentials and the uhttpd-mod-ubus package." = "透過 HTTPS 或 HTTP 使用 ubus JSON-RPC 查詢 OpenWRT 路由器。自動模式使用目前預設閘道，在雙路由設定中可能不是正確的路由器。需要時請設定固定 OpenWRT IP 或 URL。需要路由器管理員憑證和 uhttpd-mod-ubus 套件。";
+"Queries your OPNsense router via its REST API over HTTPS. Auto uses the current default gateway. If the web interface uses plain HTTP or a different port, enter the full URL (e.g. http://192.168.1.1 or https://192.168.1.1:8443). Requires an API key and secret configured in OPNsense." = "透過 HTTPS 呼叫 REST API 查詢你的 OPNsense 路由器。自動模式使用目前的預設閘道。如果網頁介面僅使用 HTTP 或其他連接埠，請輸入完整 URL（例如 http://192.168.1.1 或 https://192.168.1.1:8443）。需要在 OPNsense 中設定 API 金鑰與密鑰。";
+"Queries your OpenWRT router via ubus JSON-RPC over HTTPS. Auto uses the current default gateway, which may be the wrong router on dual-router setups. Set a fixed OpenWRT IP or URL if needed — for plain HTTP, enter http://<IP>. Requires the router's admin credentials and the uhttpd-mod-ubus package." = "透過 HTTPS 使用 ubus JSON-RPC 查詢你的 OpenWRT 路由器。自動模式使用目前的預設閘道，在雙路由器環境中可能不是正確的路由器。如有需要，請設定固定的 OpenWRT IP 或 URL；如需純 HTTP，請輸入 http://<IP>。需要路由器的管理員憑證以及 uhttpd-mod-ubus 套件。";
 "Queries your UniFi gateway via its local API (HTTPS). Requires a local admin account on the UniFi controller." = "透過本地 API（HTTPS）查詢 UniFi 閘道。需要 UniFi 控制器上的本地管理員帳戶。";
 "Recent results saved on this Mac. Add notes to remember the exact place." = "保存在這台 Mac 上的最近結果。加入備註以記住具體地點。";
 "Release Notes ↗" = "發布說明 ↗";
@@ -438,3 +438,4 @@
 "Check for updates automatically" = "自動檢查更新";
 "Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About." = "NetFluss 每天在 GitHub 上檢查一次新版本，並詢問是否下載並安裝。你也可以隨時透過選單列圖示的右鍵選單或「關於」視窗手動檢查。";
 "Last checked: %@" = "上次檢查：%@";
+"Trust Current Certificate" = "信任目前的憑證";
