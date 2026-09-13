@@ -49,6 +49,7 @@ struct MenuBarView: View {
     @AppStorage("showAdapterList") private var showAdapterList: Bool = true
     @AppStorage("showUsageSummary") private var showUsageSummary: Bool = false
     @AppStorage("collectStatistics") private var collectStatistics: Bool = false
+    @AppStorage("showTrafficTimer") private var showTrafficTimer: Bool = false
 
     private static let cardSpacing: CGFloat = 6   // VStack spacing between cards
     @State private var contentHeight: CGFloat = 0
@@ -162,6 +163,7 @@ struct MenuBarView: View {
         case .wifi: return showWifiSwitcher
         case .vpn: return showVPN
         case .topApps: return showTopApps
+        case .timer: return showTrafficTimer
         }
     }
 
@@ -247,6 +249,9 @@ struct MenuBarView: View {
 
         case .topApps:
             TopAppsSection(topApps: monitor.topApps, useBits: useBits)
+
+        case .timer:
+            TrafficTimerSection()
         }
     }
 

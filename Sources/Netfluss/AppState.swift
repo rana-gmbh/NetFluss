@@ -73,6 +73,7 @@ final class AppState {
             "showTotalsHeader": true,
             "showAdapterList": true,
             "showUsageSummary": false,
+            "showTrafficTimer": false,
             "popoverSectionOrder": PopoverSection.defaultOrder.map(\.rawValue),
             "lastConnectionStatusMode": "flow",
             "customDNSPresets": Data(),
@@ -110,6 +111,7 @@ final class AppState {
         self.wifiManager = wifiManager
         self.vpnManager = VPNManager.shared
         VPNManager.shared.networkMonitor = monitor
+        TrafficTimer.shared.attach(to: monitor)
         // Undo any VPN DNS override left behind by a previous session that died
         // before restoring it, before we (maybe) connect on launch (issue #48).
         monitor.restoreStaleVPNDNSIfNeeded()

@@ -428,3 +428,9 @@
 "Show when VPN is off" = "VPN 關閉時也顯示";
 "Country flag" = "國家/地區旗幟";
 "Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is)." = "顯示在速率右側。VPN 指示器也能偵測由其他 App 啟動的 VPN。國家/地區旗幟顯示你的公用 IP 所在位置（透過 ipify.org 和 ipwho.is 查詢）。";
+"Traffic Timer" = "流量計時器";
+"Reset" = "重設";
+"Running" = "執行中";
+"Paused" = "已暫停";
+"Starting time" = "開始時間";
+"Paused at" = "暫停於";

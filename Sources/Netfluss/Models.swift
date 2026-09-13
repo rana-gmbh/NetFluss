@@ -229,11 +229,12 @@ enum PopoverSection: String, CaseIterable, Identifiable, Sendable {
     case wifi
     case vpn
     case topApps
+    case timer
 
     var id: String { rawValue }
 
     static let defaultOrder: [PopoverSection] = [
-        .totals, .adapters, .connection, .dns, .router, .wifi, .vpn, .topApps, .usage
+        .totals, .adapters, .connection, .dns, .router, .wifi, .vpn, .topApps, .usage, .timer
     ]
 
     var displayName: String {
@@ -247,6 +248,7 @@ enum PopoverSection: String, CaseIterable, Identifiable, Sendable {
         case .wifi: return "Wi-Fi Networks"
         case .vpn: return "VPN"
         case .topApps: return "Top Apps"
+        case .timer: return "Traffic Timer"
         }
     }
 
@@ -261,6 +263,7 @@ enum PopoverSection: String, CaseIterable, Identifiable, Sendable {
         case .wifi: return "wifi"
         case .vpn: return "lock.shield"
         case .topApps: return "list.number"
+        case .timer: return "stopwatch"
         }
     }
 

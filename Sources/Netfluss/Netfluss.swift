@@ -63,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         appState?.flushStatistics()
+        TrafficTimer.shared.persist()
         if let preferencesObserver {
             NotificationCenter.default.removeObserver(preferencesObserver)
         }

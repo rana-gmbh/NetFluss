@@ -1557,6 +1557,7 @@ private struct PopoverSectionsReorderEditor: View {
     @AppStorage("showTopApps") private var showTopApps: Bool = false
     @AppStorage("showUsageSummary") private var showUsageSummary: Bool = false
     @AppStorage("collectStatistics") private var collectStatistics: Bool = false
+    @AppStorage("showTrafficTimer") private var showTrafficTimer: Bool = false
     @AppStorage("fritzBoxEnabled") private var fritzBoxEnabled: Bool = false
     @AppStorage("unifiEnabled") private var unifiEnabled: Bool = false
     @AppStorage("openWRTEnabled") private var openWRTEnabled: Bool = false
@@ -1616,6 +1617,8 @@ private struct PopoverSectionsReorderEditor: View {
             return Binding(get: { showVPN }, set: { showVPN = $0 })
         case .topApps:
             return Binding(get: { showTopApps }, set: { showTopApps = $0 })
+        case .timer:
+            return Binding(get: { showTrafficTimer }, set: { showTrafficTimer = $0 })
         }
     }
 
