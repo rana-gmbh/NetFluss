@@ -18,6 +18,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: CFBundleVersion is `git rev-list --count HEAD`, and
+          # Sparkle compares that number to decide whether an update is newer.
+          # A shallow clone counts 1 for every release, so no installed copy
+          # would ever be offered an update.
+          fetch-depth: 0
 
       - name: Build
         run: swift build -c release --arch arm64 --arch x86_64
