@@ -420,3 +420,11 @@
 "Rename \"%@\"" = "重新命名「%@」";
 "Custom name" = "自訂名稱";
 "Cafe X, back room, hotel Wi-Fi, coworking desk 4…" = "X 咖啡廳、後廳、飯店 Wi-Fi、共享辦公 4 號座位…";
+"VPN indicator" = "VPN 指示器";
+"Off" = "關閉";
+"Dot" = "圓點";
+"Shield" = "盾牌";
+"VPN indicator color" = "VPN 指示器顏色";
+"Show when VPN is off" = "VPN 關閉時也顯示";
+"Country flag" = "國家/地區旗幟";
+"Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is)." = "顯示在速率右側。VPN 指示器也能偵測由其他 App 啟動的 VPN。國家/地區旗幟顯示你的公用 IP 所在位置（透過 ipify.org 和 ipwho.is 查詢）。";

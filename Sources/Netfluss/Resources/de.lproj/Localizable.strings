@@ -420,3 +420,11 @@
 "Rename \"%@\"" = "„%@“ umbenennen";
 "Custom name" = "Eigener Name";
 "Cafe X, back room, hotel Wi-Fi, coworking desk 4…" = "Café X, Hinterzimmer, Hotel-WLAN, Coworking-Platz 4 …";
+"VPN indicator" = "VPN-Anzeige";
+"Off" = "Aus";
+"Dot" = "Punkt";
+"Shield" = "Schild";
+"VPN indicator color" = "Farbe der VPN-Anzeige";
+"Show when VPN is off" = "Auch anzeigen, wenn VPN aus ist";
+"Country flag" = "Länderflagge";
+"Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is)." = "Wird rechts neben den Raten angezeigt. Die VPN-Anzeige erkennt auch VPNs, die von anderen Apps gestartet wurden. Die Länderflagge zeigt, wo sich deine öffentliche IP befindet (ermittelt über ipify.org und ipwho.is).";

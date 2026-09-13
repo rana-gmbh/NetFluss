@@ -91,6 +91,11 @@ final class AppState {
             "appLanguage": AppLanguage.system.rawValue,
             "backgroundUpdateLastNotifiedVersion": "",
             "showVPN": false,
+            "menuBarVPNIndicator": "off",
+            "menuBarVPNIndicatorColor": "green",
+            "menuBarVPNIndicatorColorHex": "",
+            "menuBarVPNShowWhenOff": true,
+            "menuBarShowCountryFlag": false,
             "networkSliceHostsLive": false,
             "networkSliceServicesLive": false,
             "networkSliceAppsLive": false

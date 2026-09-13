@@ -420,3 +420,11 @@
 "Rename \"%@\"" = "Rename \"%@\"";
 "Custom name" = "Custom name";
 "Cafe X, back room, hotel Wi-Fi, coworking desk 4…" = "Cafe X, back room, hotel Wi-Fi, coworking desk 4…";
+"VPN indicator" = "VPN indicator";
+"Off" = "Off";
+"Dot" = "Dot";
+"Shield" = "Shield";
+"VPN indicator color" = "VPN indicator color";
+"Show when VPN is off" = "Show when VPN is off";
+"Country flag" = "Country flag";
+"Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is)." = "Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is).";

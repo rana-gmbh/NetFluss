@@ -117,6 +117,7 @@ Latest release: **NetFluss 2.5**
 - Monospaced digits for stable layout
 - Configurable font size (8–16 pt), font style (Monospaced / System / Rounded), pinned unit, and decimal precision
 - **Icon mode** — switch to a single symbol in the menu bar and choose between multiple icon options, including the NetFluss app-style icon
+- **VPN indicator & country flag** — optional marks right of the rates: a VPN status dot or shield (custom colour, optionally dimmed when disconnected) that also detects VPNs started by other apps, and the flag of your public IP's country
 - **Launch at login** — toggle in Preferences → Launch
 
 ### Popover

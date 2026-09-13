@@ -267,6 +267,11 @@ struct PreferencesView: View {
     @AppStorage("menuBarIconSymbol") private var menuBarIconSymbol: String = "network"
     @AppStorage("menuBarPinnedUnit") private var menuBarPinnedUnit: String = "auto"
     @AppStorage("menuBarDecimals") private var menuBarDecimals: Int = 0
+    @AppStorage("menuBarVPNIndicator") private var menuBarVPNIndicator: String = "off"
+    @AppStorage("menuBarVPNIndicatorColor") private var menuBarVPNIndicatorColor: String = "green"
+    @AppStorage("menuBarVPNIndicatorColorHex") private var menuBarVPNIndicatorColorHex: String = ""
+    @AppStorage("menuBarVPNShowWhenOff") private var menuBarVPNShowWhenOff: Bool = true
+    @AppStorage("menuBarShowCountryFlag") private var menuBarShowCountryFlag: Bool = false
     @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "flow"
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
     @AppStorage("excludeTunnelAdaptersFromTotals") private var excludeTunnelAdaptersFromTotals: Bool = false
@@ -650,6 +655,39 @@ struct PreferencesView: View {
                         }
                     } label: {
                         LText("Decimals")
+                    }
+                    LabeledContent {
+                        TrailingPreferenceControl(width: appearanceControlWidth) {
+                            Picker("", selection: $menuBarVPNIndicator) {
+                                LText("Off").tag("off")
+                                LText("Dot").tag("dot")
+                                LText("Shield").tag("shield")
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 230)
+                        }
+                    } label: {
+                        LText("VPN indicator")
+                    }
+                    if menuBarVPNIndicator != "off" {
+                        LabeledContent {
+                            TrailingPreferenceControl(width: appearanceControlWidth) {
+                                ColorSwatchPicker(selection: $menuBarVPNIndicatorColor, customHex: $menuBarVPNIndicatorColorHex)
+                            }
+                        } label: {
+                            LText("VPN indicator color")
+                        }
+                        Toggle(isOn: $menuBarVPNShowWhenOff) {
+                            LText("Show when VPN is off")
+                        }
+                    }
+                    Toggle(isOn: $menuBarShowCountryFlag) {
+                        LText("Country flag")
+                    }
+                    if menuBarVPNIndicator != "off" || menuBarShowCountryFlag {
+                        LText("Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 LText("Dashboard uses router-wide traffic when Fritz!Box, UniFi, OpenWRT, or OPNsense bandwidth is enabled and available.")

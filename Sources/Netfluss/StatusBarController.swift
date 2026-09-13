@@ -70,6 +70,24 @@ private struct MenuBarDisplayModel {
     let totalText: String
     let referenceTotalText: String
     let ringProgress: CGFloat
+    let accessories: MenuBarAccessories
+}
+
+/// Optional status marks drawn to the right of the rates: a VPN indicator
+/// (dot or shield) and the flag of the public IP's country (issue #60).
+private struct MenuBarAccessories {
+    enum VPNMark {
+        case dot(active: Bool, color: NSColor, diameter: CGFloat)
+        case symbol(NSImage)
+    }
+
+    let vpn: VPNMark?
+    let flag: String?
+    let flagFont: NSFont
+
+    static let none = MenuBarAccessories(vpn: nil, flag: nil, flagFont: .systemFont(ofSize: 10))
+
+    var isEmpty: Bool { vpn == nil && flag == nil }
 }
 
 private final class MenuBarRatesView: NSView {
@@ -77,6 +95,8 @@ private final class MenuBarRatesView: NSView {
     private static let stackHorizontalPadding: CGFloat = 2
     private static let stackSpacing: CGFloat = 1
     private static let capsulePadding: CGFloat = 7
+    private static let accessoryGap: CGFloat = 5
+    private static let accessorySpacing: CGFloat = 4
 
     private struct TextRun {
         let text: String
@@ -108,6 +128,10 @@ private final class MenuBarRatesView: NSView {
     }
 
     static func preferredWidth(for model: MenuBarDisplayModel) -> CGFloat {
+        ceil(ratesWidth(for: model) + trailingReserve(for: model))
+    }
+
+    private static func ratesWidth(for model: MenuBarDisplayModel) -> CGFloat {
         switch model.style {
         case .stack:
             let downRuns = stackRuns(
@@ -172,6 +196,93 @@ private final class MenuBarRatesView: NSView {
         case .dashboard, .dashboardBasic:
             drawDashboard(model)
         }
+        drawAccessories(model)
+    }
+
+    // MARK: Accessories (VPN indicator + country flag)
+
+    /// Width of the accessory items themselves, including the spacing between them.
+    private static func accessoryItemsWidth(_ accessories: MenuBarAccessories) -> CGFloat {
+        var widths: [CGFloat] = []
+        if let vpn = accessories.vpn { widths.append(size(of: vpn).width) }
+        if let flag = accessories.flag { widths.append(flagSize(flag, font: accessories.flagFont).width) }
+        guard !widths.isEmpty else { return 0 }
+        return widths.reduce(0, +) + accessorySpacing * CGFloat(widths.count - 1)
+    }
+
+    /// Extra width the accessories add to the right of the rates. The rates are
+    /// laid out in the remaining area so they keep their usual padding.
+    private static func trailingReserve(for model: MenuBarDisplayModel) -> CGFloat {
+        guard !model.accessories.isEmpty else { return 0 }
+        let reserve = accessoryItemsWidth(model.accessories) + accessoryGap
+        // The ring dashboard's content fills its capsule edge to edge, so give
+        // the accessories their own trailing capsule padding.
+        return model.style == .dashboard ? reserve + capsulePadding : reserve
+    }
+
+    /// Right edge the accessories align to, matching each style's padding.
+    private func accessoryTrailingEdge(for model: MenuBarDisplayModel) -> CGFloat {
+        switch model.style {
+        case .stack:
+            return bounds.width - Self.stackHorizontalPadding
+        case .unified, .dashboard, .dashboardBasic:
+            return bounds.width - Self.horizontalPadding - Self.capsulePadding
+        }
+    }
+
+    private static func size(of mark: MenuBarAccessories.VPNMark) -> NSSize {
+        switch mark {
+        case .dot(_, _, let diameter):
+            return NSSize(width: diameter, height: diameter)
+        case .symbol(let image):
+            return image.size
+        }
+    }
+
+    private static func flagSize(_ flag: String, font: NSFont) -> NSSize {
+        (flag as NSString).size(withAttributes: [.font: font])
+    }
+
+    private func drawAccessories(_ model: MenuBarDisplayModel) {
+        let accessories = model.accessories
+        guard !accessories.isEmpty else { return }
+
+        var x = accessoryTrailingEdge(for: model) - Self.accessoryItemsWidth(accessories)
+        let midY = bounds.midY
+
+        if let vpn = accessories.vpn {
+            let size = Self.size(of: vpn)
+            let rect = NSRect(x: x, y: floor(midY - size.height / 2), width: size.width, height: size.height)
+            switch vpn {
+            case .dot(let active, let color, _):
+                if active {
+                    color.setFill()
+                    NSBezierPath(ovalIn: rect).fill()
+                } else {
+                    let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 0.75, dy: 0.75))
+                    ring.lineWidth = 1.5
+                    color.setStroke()
+                    ring.stroke()
+                }
+            case .symbol(let image):
+                image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            }
+            x += size.width + Self.accessorySpacing
+        }
+
+        if let flag = accessories.flag {
+            let size = Self.flagSize(flag, font: accessories.flagFont)
+            (flag as NSString).draw(
+                at: NSPoint(x: x, y: floor(midY - size.height / 2)),
+                withAttributes: [.font: accessories.flagFont]
+            )
+        }
+    }
+
+    /// Horizontal extent the rates are drawn in, leaving room for the accessories.
+    private var ratesWidthInBounds: CGFloat {
+        guard let model else { return bounds.width }
+        return bounds.width - Self.trailingReserve(for: model)
     }
 
     private func drawStack(_ model: MenuBarDisplayModel) {
@@ -199,8 +310,8 @@ private final class MenuBarRatesView: NSView {
 
         let upWidth = Self.width(of: upRuns)
         let downWidth = Self.width(of: downRuns)
-        let upX = floor((bounds.width - upWidth) / 2)
-        let downX = floor((bounds.width - downWidth) / 2)
+        let upX = floor((ratesWidthInBounds - upWidth) / 2)
+        let downX = floor((ratesWidthInBounds - downWidth) / 2)
 
         draw(runs: upRuns, at: NSPoint(x: upX, y: originY))
         draw(runs: downRuns, at: NSPoint(x: downX, y: originY + lineHeight + spacing))
@@ -235,7 +346,8 @@ private final class MenuBarRatesView: NSView {
 
         let textY = floor((bounds.height - lineHeight) / 2)
         let contentWidth = Self.width(of: runs)
-        let textX = max(capsuleRect.minX + Self.capsulePadding, floor(capsuleRect.midX - (contentWidth / 2)))
+        let contentMidX = (capsuleRect.minX + ratesWidthInBounds - Self.horizontalPadding) / 2
+        let textX = max(capsuleRect.minX + Self.capsulePadding, floor(contentMidX - (contentWidth / 2)))
         draw(runs: runs, at: NSPoint(x: textX, y: textY))
     }
 
@@ -271,11 +383,12 @@ private final class MenuBarRatesView: NSView {
         let lineHeight = Self.lineHeight(for: model.smallFont)
         let textY = floor((bounds.height - lineHeight) / 2)
         let runsWidth = Self.width(of: runs)
+        let contentMidX = (capsuleRect.minX + ratesWidthInBounds - Self.horizontalPadding) / 2
 
         if model.style == .dashboard {
             let ringSize = Self.dashboardRingSize(for: model)
             let ringRect = NSRect(
-                x: floor(capsuleRect.midX - ((ringSize + 6 + runsWidth) / 2)),
+                x: floor(contentMidX - ((ringSize + 6 + runsWidth) / 2)),
                 y: floor((bounds.height - ringSize) / 2),
                 width: ringSize,
                 height: ringSize
@@ -283,7 +396,7 @@ private final class MenuBarRatesView: NSView {
             drawRing(in: ringRect, progress: model.ringProgress, color: model.ringColor, secondaryColor: model.secondaryTextColor)
             draw(runs: runs, at: NSPoint(x: ringRect.maxX + 6, y: textY))
         } else {
-            let textX = floor(capsuleRect.midX - (runsWidth / 2))
+            let textX = floor(contentMidX - (runsWidth / 2))
             draw(runs: runs, at: NSPoint(x: textX, y: textY))
         }
     }
@@ -454,6 +567,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         let upTextColorKey: String
         let downTextColorKey: String
         let ringProgressBucket: Int
+        var accessoryKey: String = ""
     }
 
     private struct FontState: Hashable {
@@ -492,6 +606,16 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         popover.delegate = self
 
         monitor.$totals
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateLabel()
+            }
+            .store(in: &cancellables)
+
+        // VPN indicator / country flag can change between rate ticks.
+        monitor.$vpnActive
+            .combineLatest(monitor.$externalIPCountryCode)
+            .removeDuplicates { $0 == $1 }
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.updateLabel()
@@ -1083,6 +1207,14 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         let ringBlend = totalRate > 0 ? CGFloat(metrics.txRateBps / totalRate) : 0.5
         let ringColor = downColor.blended(withFraction: ringBlend, of: upColor) ?? downColor
 
+        let (accessories, accessoryKey) = menuBarAccessories(
+            style: style,
+            fontSize: fontSize,
+            defaultTextColor: defaultTextColor,
+            secondaryTextColor: secondaryTextColor,
+            isDarkAppearance: isDarkAppearance
+        )
+
         let colorKey = [
             uploadColorName,
             downloadColorName,
@@ -1104,7 +1236,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             colorKey: colorKey,
             upTextColorKey: [menuBarUploadTextColorName, menuBarUploadTextColorHex].joined(separator: ":"),
             downTextColorKey: [menuBarDownloadTextColorName, menuBarDownloadTextColorHex].joined(separator: ":"),
-            ringProgressBucket: Int((ringProgress * 100).rounded())
+            ringProgressBucket: Int((ringProgress * 100).rounded()),
+            accessoryKey: accessoryKey
         )
         if lastRenderState == renderState { return }
         lastRenderState = renderState
@@ -1134,7 +1267,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             referenceCompactText: compactTexts.reference,
             totalText: compactTexts.total,
             referenceTotalText: compactTexts.totalReference,
-            ringProgress: ringProgress
+            ringProgress: ringProgress,
+            accessories: accessories
         )
 
         let targetLength = MenuBarRatesView.preferredWidth(for: model)
@@ -1146,6 +1280,59 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         updateHighlightPlaceholder(width: targetLength, button: button)
         ratesView.update(model: model)
         layoutRatesView(in: button)
+    }
+
+    /// Builds the optional VPN indicator + country flag shown right of the
+    /// rates, plus a key describing them for render-state deduplication.
+    private func menuBarAccessories(
+        style: MenuBarDisplayStyle,
+        fontSize: Double,
+        defaultTextColor: NSColor,
+        secondaryTextColor: NSColor,
+        isDarkAppearance: Bool
+    ) -> (MenuBarAccessories, String) {
+        let defaults = UserDefaults.standard
+        let indicator = defaults.string(forKey: "menuBarVPNIndicator") ?? "off"
+        let showWhenOff = defaults.bool(forKey: "menuBarVPNShowWhenOff")
+        let showFlag = defaults.bool(forKey: "menuBarShowCountryFlag")
+        let vpnActive = monitor.vpnActive
+
+        var vpnMark: MenuBarAccessories.VPNMark?
+        var vpnKey = "none"
+        if indicator == "dot" || indicator == "shield", vpnActive || showWhenOff {
+            let colorName = defaults.string(forKey: "menuBarVPNIndicatorColor") ?? "green"
+            let colorHex = defaults.string(forKey: "menuBarVPNIndicatorColorHex") ?? ""
+            var activeColor = resolvedAccentNSColor(selection: colorName, customHex: colorHex, fallback: .systemGreen)
+            // Same substitution as the rates: labelColor is unreadable on the
+            // fixed dark dashboard capsule.
+            if colorName == "system", style == .dashboard || style == .dashboardBasic {
+                activeColor = defaultTextColor
+            }
+            let color = vpnActive ? activeColor : secondaryTextColor
+
+            if indicator == "dot" {
+                let diameter = max(5, (CGFloat(fontSize) * 0.6).rounded())
+                vpnMark = .dot(active: vpnActive, color: color, diameter: diameter)
+            } else {
+                let symbolName = vpnActive ? "lock.shield.fill" : "shield.slash"
+                let configuration = NSImage.SymbolConfiguration(pointSize: CGFloat(fontSize) + 1, weight: .medium)
+                    .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+                if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "VPN")?
+                    .withSymbolConfiguration(configuration) {
+                    vpnMark = .symbol(image)
+                }
+            }
+            vpnKey = [indicator, vpnActive ? "on" : "off", colorName, colorHex, isDarkAppearance ? "dark" : "light"]
+                .joined(separator: ":")
+        }
+
+        let flag = showFlag ? CountryFlag.emoji(for: monitor.externalIPCountryCode) : nil
+        let accessories = MenuBarAccessories(
+            vpn: vpnMark,
+            flag: flag,
+            flagFont: .systemFont(ofSize: CGFloat(fontSize) + 2)
+        )
+        return (accessories, "\(vpnKey)|\(flag ?? "")")
     }
 
     private func menuBarFont(size: Double, design: String, weight: NSFont.Weight) -> NSFont {

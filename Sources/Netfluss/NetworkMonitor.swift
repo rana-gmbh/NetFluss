@@ -33,6 +33,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
     @Published var gatewayIP: String = "—"
     @Published var externalIP: String = "—"
     @Published var externalIPCountryCode: String = ""
+    /// Whether any VPN (built-in or from another app) is up. Only maintained
+    /// while a menu bar VPN indicator or country flag is enabled.
+    @Published var vpnActive = false
     @Published var recentAppNames: [String] = []
     @Published var currentDNSServers: [String] = []
     @Published var activeDNSPresetID: String? = nil
@@ -67,6 +70,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var lastExternalIPUpdate: Date?
     private var externalIPInFlight = false
     private var lastExternalIPv6Setting: Bool?
+    private var lastNetworkFingerprint: String?
     private var processSnapshot: [String: ProcessConnectionSnapshot] = [:]
     private var processSnapshotTime: Date?
     private var topAppsTaskInFlight = false
@@ -179,6 +183,15 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let samplesByName: [String: InterfaceSample]
         let interfaceInfo: [String: InterfaceSampler.InterfaceInfo]?
         let wifiInfo: [String: InterfaceSampler.WifiInfo]?
+        let vpnSnapshot: VPNDetector.Snapshot?
+    }
+
+    private static var menuBarVPNIndicatorEnabled: Bool {
+        (UserDefaults.standard.string(forKey: "menuBarVPNIndicator") ?? "off") != "off"
+    }
+
+    private static var menuBarCountryFlagEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "menuBarShowCountryFlag")
     }
 
     override init() {
@@ -329,6 +342,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let previousUpdate = lastUpdate
         let cachedInterfaceInfo = self.cachedInterfaceInfo
         let cachedWifiInfo = self._cachedWifiInfo
+        let detectVPN = Self.menuBarVPNIndicatorEnabled || Self.menuBarCountryFlagEnabled
         forceDetailRefresh = false
 
         refreshQueue.async { [weak self] in
@@ -339,7 +353,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 cachedInterfaceInfo: cachedInterfaceInfo,
                 cachedWifiInfo: cachedWifiInfo,
                 refreshInterfaceInfo: refreshInterfaceInfo,
-                refreshWifiInfo: refreshWifiInfo
+                refreshWifiInfo: refreshWifiInfo,
+                detectVPN: detectVPN
             )
 
             DispatchQueue.main.async { [weak self] in
@@ -362,7 +377,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
         cachedInterfaceInfo: [String: InterfaceSampler.InterfaceInfo],
         cachedWifiInfo: [String: InterfaceSampler.WifiInfo],
         refreshInterfaceInfo: Bool,
-        refreshWifiInfo: Bool
+        refreshWifiInfo: Bool,
+        detectVPN: Bool
     ) -> RefreshResult {
         let samples = InterfaceSampler.fetchSamples()
         let infoMap = refreshInterfaceInfo ? InterfaceSampler.interfaceInfo() : cachedInterfaceInfo
@@ -418,7 +434,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
             totals: RateTotals(rxRateBps: totalRxRate, txRateBps: totalTxRate),
             samplesByName: Dictionary(uniqueKeysWithValues: samples.map { ($0.name, $0) }),
             interfaceInfo: refreshInterfaceInfo ? infoMap : nil,
-            wifiInfo: refreshWifiInfo ? wifiInfoMap : nil
+            wifiInfo: refreshWifiInfo ? wifiInfoMap : nil,
+            vpnSnapshot: detectVPN ? VPNDetector.snapshot() : nil
         )
     }
 
@@ -498,10 +515,16 @@ final class NetworkMonitor: NSObject, ObservableObject {
             updateTopApps()
         }
 
+        applyVPNSnapshot(result.vpnSnapshot)
+
         // Detail sections do not need background refresh while the popover is closed.
         if shouldRefreshAddressDetails {
             lastAddressDetailsRefresh = now
             updateIPsIfNeeded(force: forcedDetailRefresh)
+        } else if Self.menuBarCountryFlagEnabled {
+            // The menu bar flag stays visible with the popover closed, so keep
+            // the public IP's country current on the slow external-IP cadence.
+            updateExternalIPIfNeeded(force: false)
         }
         if shouldRefreshRouters {
             lastRouterRefresh = now
@@ -861,6 +884,35 @@ final class NetworkMonitor: NSObject, ObservableObject {
         updateIPsIfNeeded(force: true)
     }
 
+    /// Publishes the VPN state for the menu bar indicator and, when the local
+    /// addresses change (VPN up/down, network switch), refreshes the public IP
+    /// so the menu bar flag follows without waiting for the 5-minute poll.
+    private func applyVPNSnapshot(_ snapshot: VPNDetector.Snapshot?) {
+        guard let snapshot else {
+            setIfChanged(\.vpnActive, to: false)
+            lastNetworkFingerprint = nil
+            return
+        }
+        setIfChanged(\.vpnActive, to: snapshot.isVPNActive)
+
+        let previous = lastNetworkFingerprint
+        lastNetworkFingerprint = snapshot.fingerprint
+        guard Self.menuBarCountryFlagEnabled else { return }
+        guard let previous else {
+            // Flag just switched on: the cached public IP may have been
+            // fetched without a country (nothing needed a flag back then).
+            if externalIPCountryCode.isEmpty { updateExternalIPIfNeeded(force: true) }
+            return
+        }
+        guard previous != snapshot.fingerprint else { return }
+        updateExternalIPIfNeeded(force: true)
+        // Routes/DNS can take a moment to settle after a tunnel comes up.
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            self?.updateExternalIPIfNeeded(force: true)
+        }
+    }
+
     private func updateIPsIfNeeded(force: Bool) {
         setIfChanged(\.internalIP, to: InterfaceSampler.primaryInternalIP())
         setIfChanged(\.gatewayIP, to: InterfaceSampler.defaultGatewayIP(store: dynamicStore))
@@ -872,6 +924,11 @@ final class NetworkMonitor: NSObject, ObservableObject {
             updateCurrentDNS()
             lastDNSRefresh = now
         }
+        updateExternalIPIfNeeded(force: force)
+    }
+
+    private func updateExternalIPIfNeeded(force: Bool) {
+        let now = Date()
         let currentIPv6 = UserDefaults.standard.bool(forKey: "externalIPv6")
         let settingChanged = lastExternalIPv6Setting != nil && lastExternalIPv6Setting != currentIPv6
         if !force,
@@ -912,9 +969,10 @@ final class NetworkMonitor: NSObject, ObservableObject {
         guard let ip else { return nil }
 
         // Fetch the country code when something shows a flag: the connection
-        // flow view or the VPN section.
+        // flow view, the VPN section, or the menu bar.
         let needsCountry = UserDefaults.standard.string(forKey: "connectionStatusMode") == "flow"
             || UserDefaults.standard.bool(forKey: "showVPN")
+            || UserDefaults.standard.bool(forKey: "menuBarShowCountryFlag")
         if needsCountry, let url = URL(string: "https://ipwho.is/\(ip)") {
             var request = URLRequest(url: url, timeoutInterval: 8)
             request.setValue("NetFluss/1.0", forHTTPHeaderField: "User-Agent")

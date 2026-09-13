@@ -650,34 +650,12 @@ struct ConnectionStatusSection: View {
     let countryCode: String
 
     private var activeVPNs: [AdapterStatus] {
-        let vpnIPs = Self.vpnInterfaceIPs()
+        let vpnTunnels = VPNDetector.snapshot().tunnels
         return adapters.filter { adapter in
             guard adapter.type == .other, adapter.isUp else { return false }
             guard adapter.isTunnelInterface else { return false }
-            return vpnIPs[adapter.id] != nil
+            return vpnTunnels[adapter.id] != nil
         }
-    }
-
-    private static func vpnInterfaceIPs() -> [String: String] {
-        var result: [String: String] = [:]
-        var pointer: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&pointer) == 0, let first = pointer else { return result }
-        defer { freeifaddrs(pointer) }
-
-        var current: UnsafeMutablePointer<ifaddrs>? = first
-        while let entry = current?.pointee {
-            defer { current = entry.ifa_next }
-            guard let sa = entry.ifa_addr, sa.pointee.sa_family == UInt8(AF_INET) else { continue }
-            let name = String(cString: entry.ifa_name)
-            guard AdapterClassifier.isTunnelInterface(named: name) else { continue }
-            var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            guard getnameinfo(sa, socklen_t(sa.pointee.sa_len),
-                              &hostname, socklen_t(NI_MAXHOST),
-                              nil, 0, NI_NUMERICHOST) == 0 else { continue }
-            let ip = hostname.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
-            if !ip.isEmpty { result[name] = ip }
-        }
-        return result
     }
 
     var body: some View {
@@ -698,7 +676,7 @@ struct ConnectionStatusSection: View {
 
     @ViewBuilder
     private var vpnNode: some View {
-        let flag = Self.flagEmoji(for: countryCode)
+        let flag = CountryFlag.emoji(for: countryCode)
         if activeVPNs.count == 1 {
             let vpn = activeVPNs[0]
             ConnectionNode(icon: "lock.shield", label: vpn.displayName, detail: vpn.id, color: .purple, flag: flag)
@@ -706,15 +684,6 @@ struct ConnectionStatusSection: View {
             let names = activeVPNs.map(\.id).joined(separator: ", ")
             ConnectionNode(icon: "lock.shield", label: "\(activeVPNs.count) VPNs", detail: names, color: .purple, flag: flag)
         }
-    }
-
-    private static func flagEmoji(for code: String) -> String? {
-        let code = code.uppercased()
-        guard code.count == 2, code.unicodeScalars.allSatisfy({ $0.isASCII && $0.properties.isAlphabetic }) else { return nil }
-        let base: UInt32 = 0x1F1E6 - 0x41 // regional indicator A
-        let scalars = code.unicodeScalars.compactMap { UnicodeScalar(base + $0.value) }
-        guard scalars.count == 2 else { return nil }
-        return String(scalars.map { Character($0) })
     }
 }
 
