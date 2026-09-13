@@ -25,7 +25,6 @@ final class AppState {
     let wifiManager: WifiManager
     let vpnManager: VPNManager
     let statusBar: StatusBarController
-    let updateNotifier: UpdateNotifier
     private var defaultsObserver: NSObjectProtocol?
 
     init() {
@@ -90,7 +89,6 @@ final class AppState {
             "opnsenseHost": "",
             "automaticUpdateChecksEnabled": true,
             "appLanguage": AppLanguage.system.rawValue,
-            "backgroundUpdateLastNotifiedVersion": "",
             "showVPN": false,
             "menuBarVPNIndicator": "off",
             "menuBarVPNIndicatorColor": "green",
@@ -122,11 +120,7 @@ final class AppState {
             speedTestManager: speedTestManager,
             wifiManager: wifiManager
         )
-        let updateNotifier = UpdateNotifier()
-        self.updateNotifier = updateNotifier
-        Task {
-            await updateNotifier.start()
-        }
+        AppUpdater.shared.start()
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: nil,
@@ -146,11 +140,7 @@ final class AppState {
     }
 
     private func syncAutomaticUpdateChecks() {
-        let enabled = UserDefaults.standard.bool(forKey: "automaticUpdateChecksEnabled")
-        let updateNotifier = self.updateNotifier
-        Task {
-            await updateNotifier.setAutomaticChecksEnabled(enabled)
-        }
+        AppUpdater.shared.applyAutomaticChecksPreference()
     }
 
     func flushStatistics() {

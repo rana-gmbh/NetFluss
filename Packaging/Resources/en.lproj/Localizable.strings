@@ -434,3 +434,7 @@
 "Paused" = "Paused";
 "Starting time" = "Starting time";
 "Paused at" = "Paused at";
+"Check for Updates…" = "Check for Updates…";
+"Check for updates automatically" = "Check for updates automatically";
+"Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About." = "Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About.";
+"Last checked: %@" = "Last checked: %@";

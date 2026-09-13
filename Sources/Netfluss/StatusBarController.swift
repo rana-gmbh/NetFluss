@@ -835,6 +835,10 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         aboutItem.target = self
         contextMenu.addItem(aboutItem)
 
+        let updatesItem = NSMenuItem(title: L10n.text("Check for Updates…"), action: #selector(AppUpdater.checkForUpdates(_:)), keyEquivalent: "")
+        updatesItem.target = AppUpdater.shared
+        contextMenu.addItem(updatesItem)
+
         let diagnosticsItem = NSMenuItem(title: L10n.text("Copy Network Diagnostics…"), action: #selector(copyNetworkDiagnosticsFromContextMenu(_:)), keyEquivalent: "")
         diagnosticsItem.target = self
         // Only visible when the user holds the Option key while opening the

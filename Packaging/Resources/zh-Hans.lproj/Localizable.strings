@@ -434,3 +434,7 @@
 "Paused" = "已暂停";
 "Starting time" = "开始时间";
 "Paused at" = "暂停于";
+"Check for Updates…" = "检查更新…";
+"Check for updates automatically" = "自动检查更新";
+"Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About." = "NetFluss 每天在 GitHub 上检查一次新版本，并询问是否下载并安装。你也可以随时通过菜单栏图标的右键菜单或“关于”窗口手动检查。";
+"Last checked: %@" = "上次检查：%@";

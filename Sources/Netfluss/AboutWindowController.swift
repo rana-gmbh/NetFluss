@@ -33,7 +33,7 @@ final class AboutWindowController: NSObject, NSWindowDelegate {
         }
 
         // The window may have been closed — discard the stale reference
-        // and create a fresh one so UpdateChecker resets to idle.
+        // and create a fresh one.
         window = nil
 
         let hosting = NSHostingController(rootView: LocalizedRoot { AboutView() })

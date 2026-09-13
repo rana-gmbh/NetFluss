@@ -23,7 +23,7 @@ The CI workflow (`.github/workflows/release.yml`) handles this automatically on 
 
 ```bash
 swift build -c release --arch arm64 --arch x86_64
-mkdir -p NetFluss.app/Contents/{MacOS,Resources,Library/HelperTools,Library/LaunchDaemons}
+mkdir -p NetFluss.app/Contents/{MacOS,Resources,Frameworks,Library/HelperTools,Library/LaunchDaemons}
 cp .build/apple/Products/Release/Netfluss NetFluss.app/Contents/MacOS/NetFluss
 cp .build/apple/Products/Release/NetflussPrivilegedHelper NetFluss.app/Contents/Library/HelperTools/NetflussPrivilegedHelper
 cp Packaging/Info.plist NetFluss.app/Contents/Info.plist
@@ -33,6 +33,7 @@ cp Packaging/Resources/AppIcon.icns NetFluss.app/Contents/Resources/AppIcon.icns
 cp Packaging/Resources/AppIconDark.icns NetFluss.app/Contents/Resources/AppIconDark.icns
 cp -R Packaging/Resources/SpeedTest NetFluss.app/Contents/Resources/SpeedTest
 cp -R Packaging/Resources/*.lproj NetFluss.app/Contents/Resources/   # REQUIRED — see note below
+ditto .build/apple/Products/Release/Sparkle.framework NetFluss.app/Contents/Frameworks/Sparkle.framework   # REQUIRED — linked via @executable_path/../Frameworks; missing = dyld abort at launch
 # Bundle the universal (arm64 + x86_64) VPN toolchain: openvpn + WireGuard
 # (wireguard-go, wg, wg-quick, bash) and their dylib closures, all rewritten to
 # @loader_path and signed. Needs no `brew install` — it downloads pinned Homebrew
@@ -44,6 +45,13 @@ cp -R Packaging/Resources/*.lproj NetFluss.app/Contents/Resources/   # REQUIRED 
 ./Packaging/VPN/build-vpn-bundle.sh NetFluss.app/Contents/Library/VPN "Developer ID Application: Rana GmbH (D6P24X5377)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.x.x" NetFluss.app/Contents/Info.plist
 xattr -cr NetFluss.app   # strip resource-fork/Finder xattrs or codesign fails with "resource fork ... not allowed"
+# Sparkle: sign its nested helpers inside-out (never --deep), then the framework
+S=NetFluss.app/Contents/Frameworks/Sparkle.framework/Versions/B
+codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" --options=runtime --timestamp "$S/XPCServices/Installer.xpc"
+codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" --options=runtime --timestamp --preserve-metadata=entitlements "$S/XPCServices/Downloader.xpc"
+codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" --options=runtime --timestamp "$S/Autoupdate"
+codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" --options=runtime --timestamp "$S/Updater.app"
+codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" --options=runtime --timestamp NetFluss.app/Contents/Frameworks/Sparkle.framework
 codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
   --options=runtime --timestamp NetFluss.app/Contents/Library/HelperTools/NetflussPrivilegedHelper
 codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
@@ -61,7 +69,7 @@ Bundle ID: `com.local.netfluss`
 
 ## Architecture
 
-Netfluss is a pure-SwiftPM macOS menu bar app with no third-party dependencies.
+Netfluss is a pure-SwiftPM macOS menu bar app. Its only third-party dependency is Sparkle 2 (in-app updates), pinned exactly in `Package.swift`; `Sparkle.framework` must be copied into `Contents/Frameworks` and signed (see the manual release steps).
 
 ### Startup sequence (important)
 
@@ -80,7 +88,7 @@ Netfluss is a pure-SwiftPM macOS menu bar app with no third-party dependencies.
 | `Models.swift` | Value types: `AdapterStatus`, `RateTotals`, `AppTraffic`, `InterfaceSample`, `DNSPreset` |
 | `Themes.swift` | `AppTheme` struct + Dracula/Nord/Solarized presets; `Color(hex:)` extension |
 | `Formatters.swift` | `RateFormatter.formatRate()` — bits vs bytes, auto-scaling |
-| `UpdateChecker.swift` | Queries GitHub Releases API; used by `AboutView` |
+| `AppUpdater.swift` | Sparkle 2 wrapper: feed = `appcast.xml` on the latest GitHub release (`SUFeedURL`), EdDSA key `SUPublicEDKey` in `Info.plist`; only starts inside a bundled `.app` with that key, otherwise "Check for Updates" opens the releases page |
 
 ### Data flow
 

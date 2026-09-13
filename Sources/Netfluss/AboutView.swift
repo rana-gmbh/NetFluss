@@ -19,7 +19,7 @@ import SwiftUI
 import AppKit
 
 struct AboutView: View {
-    @StateObject private var checker = UpdateChecker()
+    @ObservedObject private var updater = AppUpdater.shared
 
     private var version: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.2.2"
@@ -109,8 +109,8 @@ struct AboutView: View {
 
             Divider()
 
-            // Update section — fills remaining space so it stays centered in
-            // idle state and has room for release notes when an update is found
+            // Update section — Sparkle shows its own window with the release
+            // notes and Install / Skip / Remind Me Later.
             updateSection
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
@@ -119,96 +119,24 @@ struct AboutView: View {
         .frame(width: 300, height: 520)
     }
 
-    @ViewBuilder
     private var updateSection: some View {
-        switch checker.state {
-        case .idle:
+        VStack(spacing: 8) {
             Button("Check for Updates") {
-                checker.check()
+                updater.checkForUpdates(nil)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(updater.isAvailable && !updater.canCheckForUpdates)
 
-        case .checking:
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Checking for updates…")
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-            }
-
-        case .upToDate:
-            VStack(spacing: 8) {
-                Label("You're up to date", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .font(.callout)
-                Button("Check Again") {
-                    checker.check()
-                }
-                .buttonStyle(.borderless)
+            if let lastCheck = updater.lastUpdateCheckDate {
+                Text(L10n.format(
+                    "Last checked: %@",
+                    lastCheck.formatted(
+                        .dateTime.day().month(.abbreviated).year().hour().minute()
+                            .locale(AppLanguage.selected.locale)
+                    )
+                ))
+                .font(.caption)
                 .foregroundStyle(.secondary)
-                .font(.caption)
-            }
-
-        case .available(let update):
-            VStack(alignment: .leading, spacing: 10) {
-                Label("NetFluss \(update.version) is available!", systemImage: "arrow.down.circle.fill")
-                    .foregroundStyle(Color.accentColor)
-                    .font(.callout.bold())
-                    .frame(maxWidth: .infinity, alignment: .center)
-
-                if !update.releaseNotes.isEmpty {
-                    ScrollView {
-                        Group {
-                            if let attr = try? AttributedString(
-                                markdown: update.releaseNotes,
-                                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-                            ) {
-                                Text(attr)
-                            } else {
-                                Text(update.releaseNotes)
-                            }
-                        }
-                        .font(.caption)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(2)
-                    }
-                    .frame(height: 80)
-                    .padding(8)
-                    .background(.quinary, in: RoundedRectangle(cornerRadius: 6))
-                }
-
-                HStack {
-                    Button("Release Page ↗") {
-                        NSWorkspace.shared.open(update.releasePageURL)
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-
-                    Spacer()
-
-                    Button("Download") {
-                        NSWorkspace.shared.open(update.downloadURL ?? update.releasePageURL)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
-            }
-
-        case .failed(let message):
-            VStack(spacing: 8) {
-                Label("Could not check for updates", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .font(.callout)
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Button("Try Again") {
-                    checker.check()
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
             }
         }
     }

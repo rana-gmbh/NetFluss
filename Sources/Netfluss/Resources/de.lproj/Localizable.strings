@@ -434,3 +434,7 @@
 "Paused" = "Pausiert";
 "Starting time" = "Startzeit";
 "Paused at" = "Pausiert um";
+"Check for Updates…" = "Nach Updates suchen …";
+"Check for updates automatically" = "Automatisch nach Updates suchen";
+"Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About." = "Einmal täglich sucht NetFluss auf GitHub nach einer neuen Version und fragt, ob sie heruntergeladen und installiert werden soll. Du kannst auch jederzeit über das Rechtsklick-Menü des Menüleistensymbols oder unter „Über“ suchen.";
+"Last checked: %@" = "Zuletzt geprüft: %@";

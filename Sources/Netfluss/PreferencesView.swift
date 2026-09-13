@@ -397,9 +397,9 @@ struct PreferencesView: View {
 
                     Section {
                 Toggle(isOn: $automaticUpdateChecksEnabled) {
-                    LText("Check GitHub for updates automatically")
+                    LText("Check for updates automatically")
                 }
-                LText("When enabled, NetFluss checks once per day in the background. The manual Check for Updates button in About stays available.")
+                LText("Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

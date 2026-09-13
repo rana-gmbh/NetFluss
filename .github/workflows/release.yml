@@ -37,6 +37,10 @@ jobs:
           cp Packaging/Resources/AppIconDark.icns NetFluss.app/Contents/Resources/AppIconDark.icns
           cp -R Packaging/Resources/SpeedTest NetFluss.app/Contents/Resources/SpeedTest
           cp -R Packaging/Resources/*.lproj NetFluss.app/Contents/Resources/
+          # Sparkle (in-app updates). The app links it via
+          # @executable_path/../Frameworks — without it dyld aborts at launch.
+          mkdir -p NetFluss.app/Contents/Frameworks
+          ditto .build/apple/Products/Release/Sparkle.framework NetFluss.app/Contents/Frameworks/Sparkle.framework
           VERSION="${GITHUB_REF_NAME#v}"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" NetFluss.app/Contents/Info.plist
           BUILD=$(git rev-list --count HEAD)
@@ -92,6 +96,17 @@ jobs:
 
       - name: Sign
         run: |
+          ID="Developer ID Application: Rana GmbH (D6P24X5377)"
+          test -d NetFluss.app/Contents/Frameworks/Sparkle.framework \
+            || { echo "::error::Sparkle.framework missing from the app bundle (the app would crash at launch)"; exit 1; }
+          # Sparkle's nested helpers are signed inside-out, never with --deep
+          # (per Sparkle's Developer ID signing docs).
+          SPARKLE=NetFluss.app/Contents/Frameworks/Sparkle.framework/Versions/B
+          codesign --force --sign "$ID" --options=runtime --timestamp "$SPARKLE/XPCServices/Installer.xpc"
+          codesign --force --sign "$ID" --options=runtime --timestamp --preserve-metadata=entitlements "$SPARKLE/XPCServices/Downloader.xpc"
+          codesign --force --sign "$ID" --options=runtime --timestamp "$SPARKLE/Autoupdate"
+          codesign --force --sign "$ID" --options=runtime --timestamp "$SPARKLE/Updater.app"
+          codesign --force --sign "$ID" --options=runtime --timestamp NetFluss.app/Contents/Frameworks/Sparkle.framework
           codesign --force \
             --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
             --options=runtime \
@@ -144,9 +159,49 @@ jobs:
           rm "NetFluss-${VERSION}.zip"
           ditto -c -k --sequesterRsrc --keepParent NetFluss.app "NetFluss-${VERSION}.zip"
 
+      # Sparkle appcast for in-app updates. The feed URL baked into the app is
+      # releases/latest/download/appcast.xml, so each release carries an appcast
+      # listing just itself. The zip gets an EdDSA signature from the
+      # SPARKLE_PRIVATE_KEY secret (piped via stdin, never on the command line);
+      # the release notes are the GitHub release body rendered by GitHub's own
+      # Markdown renderer and embedded in the appcast.
+      - name: Generate Sparkle appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "::error::SPARKLE_PRIVATE_KEY secret is not set — the update can't be signed for Sparkle."
+            exit 1
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          SPARKLE_BIN=.build/artifacts/sparkle/Sparkle/bin
+          test -x "$SPARKLE_BIN/generate_appcast" \
+            || { echo "::error::Sparkle's generate_appcast not found at $SPARKLE_BIN"; exit 1; }
+          mkdir -p appcast
+          cp "NetFluss-${VERSION}.zip" appcast/
+          gh release view "v${VERSION}" --json body -q .body > release-notes.md
+          gh api markdown -F text=@release-notes.md -f mode=gfm -f context="$GITHUB_REPOSITORY" \
+            > "appcast/NetFluss-${VERSION}.html"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | "$SPARKLE_BIN/generate_appcast" \
+            --ed-key-file - \
+            --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/" \
+            --link "https://github.com/${GITHUB_REPOSITORY}/releases/latest" \
+            --embed-release-notes \
+            --maximum-deltas 0 \
+            appcast
+          grep -q 'sparkle:edSignature' appcast/appcast.xml \
+            || { echo "::error::appcast.xml carries no EdDSA signature"; exit 1; }
+          grep -q "releases/download/v${VERSION}/NetFluss-${VERSION}.zip" appcast/appcast.xml \
+            || { echo "::error::appcast.xml does not point at NetFluss-${VERSION}.zip"; exit 1; }
+          cat appcast/appcast.xml
+
+      # Zip first, appcast last: the appcast must never point at a download
+      # that isn't there yet.
       - name: Upload to GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           gh release upload "v${VERSION}" "NetFluss-${VERSION}.zip" --clobber
+          gh release upload "v${VERSION}" appcast/appcast.xml --clobber
