@@ -1,0 +1,108 @@
+name: Verify Sparkle key
+
+# Manual check that the SPARKLE_PRIVATE_KEY secret belongs to the public key
+# NetFluss ships with (SUPublicEDKey). Sparkle's own sign_update signs a random
+# probe file with the secret; OpenSSL then verifies that signature against the
+# public key — the same check every installed NetFluss makes before it installs
+# an update. Only public values (public key, signature) are ever printed.
+#
+# Run: gh workflow run verify-sparkle-key.yml -f public_key=<base64 key>
+#      (leave public_key empty to use SUPublicEDKey from Packaging/Info.plist)
+
+on:
+  workflow_dispatch:
+    inputs:
+      public_key:
+        description: "Public EdDSA key to check against (empty = SUPublicEDKey from Packaging/Info.plist)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned and checksum-verified. Keep in step with Package.swift /
+      # Package.resolved: bump SPARKLE_VERSION and SPARKLE_SHA256 together.
+      - name: Fetch Sparkle's sign_update
+        run: |
+          SPARKLE_VERSION=2.9.6
+          SPARKLE_SHA256=52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192
+          if [ -f Package.resolved ]; then
+            RESOLVED=$(python3 -c 'import json; print(next(p["state"]["version"] for p in json.load(open("Package.resolved"))["pins"] if p["identity"] == "sparkle"))')
+            [ "$RESOLVED" = "$SPARKLE_VERSION" ] \
+              || { echo "::error::Package.resolved pins Sparkle $RESOLVED, this workflow pins $SPARKLE_VERSION — update SPARKLE_VERSION and SPARKLE_SHA256 together"; exit 1; }
+          fi
+          curl -fsSL -o sparkle.tar.xz \
+            "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
+          echo "${SPARKLE_SHA256}  sparkle.tar.xz" | shasum -a 256 -c -
+          mkdir sparkle
+          tar -xJf sparkle.tar.xz -C sparkle ./bin/sign_update
+          test -x sparkle/bin/sign_update
+
+      # macOS's LibreSSL can't load Ed25519 keys, so use OpenSSL 3. The
+      # self-test proves it really checks Ed25519 signatures (RFC 8032 §7.1
+      # TEST 2): the valid vector must pass and a wrong message must fail.
+      # (OpenSSL 3.6's pkeyutl refuses empty messages, so TEST 1 is unusable.)
+      - name: OpenSSL 3 + Ed25519 self-test
+        run: |
+          brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+          OSSL="$(brew --prefix openssl@3)/bin/openssl"
+          echo "OSSL=$OSSL" >> "$GITHUB_ENV"
+          "$OSSL" version
+          { printf '302a300506032b6570032100'; printf '3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c'; } | xxd -r -p > rfc.pub.der
+          printf '92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00' | xxd -r -p > rfc.sig
+          printf '72' | xxd -r -p > rfc.msg
+          printf '73' | xxd -r -p > rfc.bad
+          "$OSSL" pkeyutl -verify -pubin -keyform DER -inkey rfc.pub.der -rawin -in rfc.msg -sigfile rfc.sig >/dev/null \
+            || { echo "::error::OpenSSL rejected the valid RFC 8032 vector"; exit 1; }
+          if "$OSSL" pkeyutl -verify -pubin -keyform DER -inkey rfc.pub.der -rawin -in rfc.bad -sigfile rfc.sig >/dev/null 2>&1; then
+            echo "::error::OpenSSL accepted a signature for the wrong message"; exit 1
+          fi
+          echo "Ed25519 self-test passed"
+
+      - name: Verify SPARKLE_PRIVATE_KEY against the public key
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          INPUT_PUBLIC_KEY: ${{ inputs.public_key }}
+        run: |
+          [ -n "$SPARKLE_PRIVATE_KEY" ] || { echo "::error::SPARKLE_PRIVATE_KEY secret is not set"; exit 1; }
+
+          PUBLIC_KEY="$INPUT_PUBLIC_KEY"; SOURCE="workflow input"
+          if [ -z "$PUBLIC_KEY" ]; then
+            PUBLIC_KEY=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' Packaging/Info.plist 2>/dev/null || true)
+            SOURCE="Packaging/Info.plist"
+          fi
+          [ -n "$PUBLIC_KEY" ] || { echo "::error::No public key — pass public_key or add SUPublicEDKey to Packaging/Info.plist"; exit 1; }
+          echo "Public key ($SOURCE): $PUBLIC_KEY"
+          [ "$(printf '%s' "$PUBLIC_KEY" | base64 -D | wc -c | tr -d ' ')" = 32 ] \
+            || { echo "::error::The public key is not 32 bytes of base64"; exit 1; }
+          { printf '302a300506032b6570032100' | xxd -r -p; printf '%s' "$PUBLIC_KEY" | base64 -D; } > key.pub.der
+
+          # Sign a random probe with the secret (read from stdin, never argv).
+          head -c 4096 /dev/urandom > probe.bin
+          SIG=$(printf '%s' "$SPARKLE_PRIVATE_KEY" | sparkle/bin/sign_update --ed-key-file - -p probe.bin)
+          printf '%s' "$SIG" | base64 -D > probe.sig
+          [ "$(wc -c < probe.sig | tr -d ' ')" = 64 ] \
+            || { echo "::error::sign_update did not produce a 64-byte Ed25519 signature"; exit 1; }
+          echo "Probe signature: $SIG"
+
+          # Negative control: the same signature must NOT verify a modified probe.
+          cp probe.bin probe.bad && printf 'x' >> probe.bad
+          if "$OSSL" pkeyutl -verify -pubin -keyform DER -inkey key.pub.der -rawin -in probe.bad -sigfile probe.sig >/dev/null 2>&1; then
+            echo "::error::Negative control failed — the check would not detect a mismatch"; exit 1
+          fi
+
+          if "$OSSL" pkeyutl -verify -pubin -keyform DER -inkey key.pub.der -rawin -in probe.bin -sigfile probe.sig >/dev/null 2>&1; then
+            echo "✅ MATCH — SPARKLE_PRIVATE_KEY belongs to $PUBLIC_KEY"
+            echo "### ✅ MATCH — \`SPARKLE_PRIVATE_KEY\` belongs to \`$PUBLIC_KEY\` ($SOURCE)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::❌ MISMATCH — SPARKLE_PRIVATE_KEY does NOT belong to $PUBLIC_KEY ($SOURCE). Updates signed in CI would be rejected by the app."
+            echo "### ❌ MISMATCH — \`SPARKLE_PRIVATE_KEY\` does not belong to \`$PUBLIC_KEY\` ($SOURCE)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
