@@ -6,7 +6,33 @@
 
 A native macOS menubar app showing real-time upload and download rates, router-wide bandwidth, historical traffic statistics, and built-in speed testing.
 
-Latest release: **NetFluss 2.5**
+Latest release: **NetFluss 2.6**
+
+## New in 2.6
+
+- **VPN indicator in the menu bar — protected at a glance.** An optional dot or shield right of the upload and download rates shows whether a VPN is up. It works with the **VPN connections built into NetFluss** *and* with **external VPN clients** — Tunnelblick, the WireGuard app, Mullvad, Tailscale, the macOS VPN settings and others: NetFluss detects any active tunnel, no matter which app started it.
+  - Pick the colour, and choose whether the indicator stays visible (dimmed) while no VPN is connected.
+  - Optionally add the **flag of the country your public IP is in**, so you see your exit location without opening the popover. It updates within seconds when a VPN connects or disconnects.
+  - Enable both under Preferences → Appearance. Detection is lightweight and only runs while one of the options is on.
+
+<p align="center">
+  <img src="Screenshots/NetFluss%20VPN%20indicator.webp" width="420" alt="NetFluss VPN indicator and country flag in the menu bar">
+</p>
+
+- **Traffic Timer — measure traffic from start to stop.** A new optional popover section that works like the stopwatch on your phone: press start and it adds up download and upload from that moment on — handy for checking how much a download, a backup or a video call really moves.
+  - Pause, resume and reset with round buttons; the elapsed time, the running total, the **average download and upload rate** and a download/upload split bar are always in view.
+  - The **starting time** (and, while paused, when you paused) is shown under the total.
+  - It keeps counting while the popover is closed and survives a restart (it comes back paused). Turn it on in Preferences → Appearance, in the popover sections list.
+
+<p align="center">
+  <img src="Screenshots/NetFluss%20Traffic%20Timer.webp" width="420" alt="NetFluss Traffic Timer in the popover">
+</p>
+
+- **Auto-update** — NetFluss now keeps itself up to date. Once a day it checks for a new version and shows you what's new; one click downloads, verifies and installs the update and relaunches NetFluss — or skip it, or get reminded later. **Check for Updates…** is also in the menu bar icon's right-click menu and in About, and the daily check can be switched off in Preferences → General. Every update is verified with an EdDSA signature *and* NetFluss's Apple Developer ID before it is installed. *Coming from 2.5 or earlier? Download 2.6 once manually — from then on NetFluss updates itself.*
+
+- **Clearer router connection errors** — OPNsense, OpenWRT and UniFi now say exactly what went wrong instead of a generic "cannot reach": HTTPS refused (with the `http://` or port to enter instead), a TLS failure, or a changed router certificate — with a new **Trust Current Certificate** button in the OPNsense credential test. Addresses like `router.lan:8443` are accepted, and re-trusting a certificate now works for URL-form addresses too. (#56)
+
+- **Complete German, 简体中文 and 繁體中文 translations** — every remaining dialog and message, including router, VPN and speed-test errors, is now translated.
 
 ## New in 2.5
 
@@ -117,8 +143,7 @@ Latest release: **NetFluss 2.5**
 - Monospaced digits for stable layout
 - Configurable font size (8–16 pt), font style (Monospaced / System / Rounded), pinned unit, and decimal precision
 - **Icon mode** — switch to a single symbol in the menu bar and choose between multiple icon options, including the NetFluss app-style icon
-- **Traffic Timer** — an optional popover section styled like a phone stopwatch: start it and it adds up download and upload from that moment on, with average rates; pause, resume, or reset at any time. It keeps measuring while the popover is closed and survives a relaunch (paused)
-- **VPN indicator & country flag** — optional marks right of the rates: a VPN status dot or shield (custom colour, optionally dimmed when disconnected) that also detects VPNs started by other apps, and the flag of your public IP's country
+- **VPN indicator & country flag** — optional marks right of the rates: a VPN status dot or shield (custom colour, optionally dimmed when disconnected) that works with NetFluss' built-in VPN connections and with external VPN clients (Tunnelblick, WireGuard, Mullvad, Tailscale, macOS VPN settings, …), plus the flag of your public IP's country
 - **Launch at login** — toggle in Preferences → Launch
 
 ### Popover
@@ -154,6 +179,7 @@ Latest release: **NetFluss 2.5**
   - **Live updates while visible** — app traffic refreshes live while the popup or pinned window is open
   - **App filtering** — hide noisy background processes (e.g. mDNSResponder) from the list via Preferences or hover to hide directly
 - **Data Usage** — optional section with Upload, Download, and Total rows across a Today and a This Month column, read from the collected history and updated live while the popover is open; a chart button opens the full Bandwidth Statistics window (enable in Preferences → Statistics)
+- **Traffic Timer** — optional section styled like a phone stopwatch: start it and it adds up download and upload from that moment on, with average rates, a download/upload split bar, and the starting time; pause, resume, or reset at any time. It keeps measuring while the popover is closed and survives a relaunch (paused)
 - **Pin button** — turn the popup into a movable floating window so NetFluss can stay open like a live widget
 - **Scrollable popover** — the popover is scrollable and resizable for smaller screens, preventing overflow when many adapters or sections are active
 - **Edge-aware popover positioning** — keeps the popover fully visible when the menu bar icon sits near the left or right screen border
@@ -230,7 +256,7 @@ Latest release: **NetFluss 2.5**
 
 - Clear pane-based Preferences window with sections for General, Adapters, Statistics, Appearance, Top Apps, DNS, Wi-Fi, and Router settings
 - **Language selector** — choose English, German, Simplified Chinese, Traditional Chinese, or follow the macOS system language
-- **General** — launch at login, refresh interval (0.5 – 5 seconds), display rates in bits or bytes, and optional automatic GitHub update checks once per day
+- **General** — launch at login, refresh interval (0.5 – 5 seconds), display rates in bits or bytes, and automatic update checks once per day (can be switched off)
 - **Adapters** — show/hide inactive adapters, show/hide other adapters (VPN, virtual interfaces), adapter grace period, per-adapter visibility toggles, custom names, and drag-to-reorder
 - **Statistics** — toggle historical adapter statistics and app statistics separately
 - **Appearance** — upload/download arrow colours, upload/download number colours, menu bar style, menu bar size, font style, pinned unit, decimal places, IP address display options, and **drag-to-reorder popover sections** with per-section visibility toggles
@@ -255,8 +281,8 @@ Latest release: **NetFluss 2.5**
 - Version number with link to release notes on GitHub
 - Made by Rana GmbH — www.ranagmbh.de
 - Refreshed app icon introduced with NetFluss 2.x
-- Check for Updates — queries GitHub Releases, shows release notes and a Download button when a newer version is found
-- Optional daily background update checks with a direct link to the newest release page
+- **Auto-update** — Check for Updates (also in the menu bar icon's right-click menu) shows what's new and downloads, verifies, installs and relaunches the new version in one click; updates are verified with an EdDSA signature and the Apple Developer ID
+- Optional daily background update check that offers new versions with Install / Skip / Remind Me Later
 
 <p align="center">
   <img src="Screenshots/About%20with%20new%20icon.webp" width="420" alt="NetFluss About window with new icon">
