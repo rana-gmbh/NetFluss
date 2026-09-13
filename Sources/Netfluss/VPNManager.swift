@@ -379,7 +379,7 @@ final class VPNManager: ObservableObject {
         )
 
         guard let result, result.success else {
-            let reason = result?.stderr ?? "Could not start the VPN helper."
+            let reason = result?.stderr ?? L10n.text("Could not start the VPN helper.")
             VPNDiagnosticsLog.shared.log("Helper start FAILED (\(profile.kind.rawValue)): \(reason)")
             captureToolLog(for: profile)
             status.state = .failed(reason)
@@ -444,7 +444,7 @@ final class VPNManager: ObservableObject {
             status.bytesIn = inBytes
             status.bytesOut = outBytes
         case .needCredentials:
-            status.state = .failed("This VPN needs a username and password. Add them in the profile's settings and reconnect.")
+            status.state = .failed(L10n.text("This VPN needs a username and password. Add them in the profile's settings and reconnect."))
         case .authFailed(let message):
             failWithReason(message)
         case .disconnected:
@@ -521,7 +521,7 @@ final class VPNManager: ObservableObject {
         // Unexpected drop (or a failed reconnect attempt): retry if the profile
         // opted in, otherwise surface the failure.
         if scheduleReconnectIfEnabled(profileID: status.profileID) { return }
-        failWithReason("The VPN connection stopped.")
+        failWithReason(L10n.text("The VPN connection stopped."))
     }
 
     /// Set a provisional failure, then refine it with the real reason read from
@@ -593,7 +593,7 @@ final class VPNManager: ObservableObject {
         guard let server = profile.ikev2Server,
               let remoteID = profile.ikev2RemoteID,
               let username = profile.ikev2Username else {
-            status.state = .failed("This IKEv2 profile is missing its server settings.")
+            status.state = .failed(L10n.text("This IKEv2 profile is missing its server settings."))
             return
         }
         // Read the password back from our own Keychain and pass it to the
@@ -601,7 +601,7 @@ final class VPNManager: ObservableObject {
         // IKEv2 EAP (it would prompt every connect).
         guard let password = credentialStore.load(account: profile.keychainAccount)?.password,
               !password.isEmpty else {
-            status.state = .failed("The VPN password isn't stored — remove the profile and add it again.")
+            status.state = .failed(L10n.text("The VPN password isn't stored — remove the profile and add it again."))
             return
         }
         activeIKEv2 = true
@@ -791,7 +791,7 @@ final class VPNManager: ObservableObject {
             activeTunnelHandle = nil
         }
         VPNDiagnosticsLog.shared.log("WireGuard tunnel dropped (interface gone)")
-        status.state = .failed("The VPN connection stopped.")
+        status.state = .failed(L10n.text("The VPN connection stopped."))
     }
 
     private static func interfaceExists(_ name: String) -> Bool {
@@ -808,11 +808,11 @@ final class VPNManager: ObservableObject {
 
     private func startNativeTunnel(_ profile: VPNProfile) async {
         guard let service = profile.nativeServiceName else {
-            status.state = .failed("No system VPN service is associated with this profile.")
+            status.state = .failed(L10n.text("No system VPN service is associated with this profile."))
             return
         }
         guard NativeVPN.start(service) else {
-            status.state = .failed("Could not start the system VPN.")
+            status.state = .failed(L10n.text("Could not start the system VPN."))
             return
         }
         // Native connect is asynchronous — poll for the Connected state.
@@ -826,7 +826,7 @@ final class VPNManager: ObservableObject {
                 return
             }
         }
-        status.state = .failed("The system VPN did not connect (\(NativeVPN.status(service))).")
+        status.state = .failed(L10n.format("The system VPN did not connect (%@).", NativeVPN.status(service)))
     }
 
     /// Parse the local [Interface] Address from a WireGuard config for display.

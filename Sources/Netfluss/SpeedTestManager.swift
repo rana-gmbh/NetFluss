@@ -259,7 +259,7 @@ final class SpeedTestManager: NSObject, ObservableObject, WKNavigationDelegate, 
         let finishedAt = Date()
         self.finishedAt = finishedAt
         phase = .completed
-        phaseDetail = "\(provider.displayName) speed test complete."
+        phaseDetail = L10n.format("%@ speed test complete.", provider.displayName)
         lastErrorMessage = nil
         pendingRun = nil
 
@@ -285,8 +285,11 @@ final class SpeedTestManager: NSObject, ObservableObject, WKNavigationDelegate, 
         pendingRun = nil
         finishedAt = Date()
         phase = .failed
-        phaseDetail = message
-        lastErrorMessage = message
+        // Translate at the source: covers our own literals and the bundled
+        // test pages' messages; already-translated text passes through as is.
+        let localized = L10n.text(message)
+        phaseDetail = localized
+        lastErrorMessage = localized
         isAwaitingMLabConsent = false
         activeRunID += 1
         loadBlankPage()
@@ -402,7 +405,7 @@ final class SpeedTestManager: NSObject, ObservableObject, WKNavigationDelegate, 
             guard pendingRun.runID == self.activeRunID else { return }
 
             if let error {
-                self.finishWithError("Could not start the \(pendingRun.provider.displayName) speed test: \(error.localizedDescription)")
+                self.finishWithError(L10n.format("Could not start the %@ speed test: %@", pendingRun.provider.displayName, error.localizedDescription))
                 return
             }
 
@@ -412,12 +415,12 @@ final class SpeedTestManager: NSObject, ObservableObject, WKNavigationDelegate, 
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         guard pendingRun != nil else { return }
-        finishWithError("Could not load the speed test page: \(error.localizedDescription)")
+        finishWithError(L10n.format("Could not load the speed test page: %@", error.localizedDescription))
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard pendingRun != nil else { return }
-        finishWithError("Could not load the speed test page: \(error.localizedDescription)")
+        finishWithError(L10n.format("Could not load the speed test page: %@", error.localizedDescription))
     }
 
     private static let historyKey = "speedTestHistory"

@@ -99,7 +99,7 @@ struct ColorSwatchPicker: View {
                     }
                 }
                 .buttonStyle(.borderless)
-                .help(option.label)
+                .help(L10n.text(option.label))
             }
 
             Button {
@@ -590,7 +590,7 @@ struct PreferencesView: View {
                                             Image(nsImage: image)
                                                 .renderingMode(.template)
                                         }
-                                        Text(option.label)
+                                        Text(L10n.text(option.label))
                                     }
                                     .tag(option.id)
                                 }

@@ -57,10 +57,10 @@ final class IKEv2VPNController {
         var errorDescription: String? {
             switch self {
             case .missingPassword:
-                return "The VPN password isn't stored in the Keychain — remove the profile and add it again."
+                return L10n.text("The VPN password isn't stored in the Keychain — remove the profile and add it again.")
             case .step(let step, let error):
                 let ns = error as NSError
-                return "IKEv2 \(step) failed: \(ns.localizedDescription) [\(ns.domain) \(ns.code)]"
+                return L10n.format("IKEv2 %@ failed: %@ [%@ %ld]", step, ns.localizedDescription, ns.domain, ns.code)
             }
         }
     }

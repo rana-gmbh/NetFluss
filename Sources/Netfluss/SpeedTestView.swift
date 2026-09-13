@@ -475,7 +475,9 @@ struct SpeedTestView: View {
 
     private var serverLine: String? {
         let liveName = manager.result?.serverName ?? manager.serverName
-        let liveLocation = manager.result?.serverLocation ?? manager.serverLocation
+        // Translated on display (not when stored): the Cloudflare page reports a
+        // fixed English label; real M-Lab locations have no key and pass through.
+        let liveLocation = (manager.result?.serverLocation ?? manager.serverLocation).map(L10n.text)
 
         switch (liveName, liveLocation) {
         case let (name?, location?) where !name.isEmpty && !location.isEmpty:

@@ -1136,7 +1136,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let validChars = CharacterSet(charactersIn: "0123456789abcdefABCDEF.:[]")
         for s in preset.servers {
             guard s.unicodeScalars.allSatisfy({ validChars.contains($0) }) else {
-                dnsError = "Invalid DNS server address."
+                dnsError = L10n.text("Invalid DNS server address.")
                 return
             }
         }
@@ -1149,7 +1149,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
             guard !services.isEmpty else {
                 _ = await MainActor.run { [weak self] in
                     self?.dnsChanging = false
-                    self?.dnsError = "No active network service found."
+                    self?.dnsError = L10n.text("No active network service found.")
                 }
                 return
             }
@@ -1559,7 +1559,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 let bandwidth: UniFiBandwidth
                 if useAPIKey {
                     guard let apiKey = UniFiMonitor.loadAPIKey(host: host) else {
-                        let msg = "No API key configured"
+                        let msg = L10n.text("No API key configured")
                         self.setIfChanged(\.unifiError, to: msg)
                         self.setIfChanged(\.unifi, to: nil)
                         self.unifiInFlight = false
@@ -1568,7 +1568,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
                     bandwidth = try await UniFiMonitor.fetchBandwidth(host: host, apiKey: apiKey)
                 } else {
                     guard let creds = UniFiMonitor.loadCredentials(host: host) else {
-                        let msg = "No credentials configured"
+                        let msg = L10n.text("No credentials configured")
                         self.setIfChanged(\.unifiError, to: msg)
                         self.setIfChanged(\.unifi, to: nil)
                         self.unifiInFlight = false
@@ -1610,22 +1610,22 @@ final class NetworkMonitor: NSObject, ObservableObject {
     ) -> String {
         func withAutoHint(_ message: String) -> String {
             usesAutoHost
-                ? "\(message) Set the controller address manually if auto detection picked the wrong gateway."
+                ? "\(message) \(L10n.text("Set the controller address manually if auto detection picked the wrong gateway."))"
                 : message
         }
 
         if let unifiError = error as? UniFiError {
             switch unifiError {
             case .invalidURL:
-                return "Enter a valid UniFi controller address."
+                return L10n.text("Enter a valid UniFi controller address.")
             case .authFailed:
-                return "UniFi login failed. Check the username and password — the local API needs a local admin account, not a UI.com cloud login."
+                return L10n.text("UniFi login failed. Check the username and password — the local API needs a local admin account, not a UI.com cloud login.")
             case .twoFactorRequired:
-                return "UniFi login failed because two-factor authentication is enabled on this account. Create a local admin account without 2FA for Netfluss to use."
+                return L10n.text("UniFi login failed because two-factor authentication is enabled on this account. Create a local admin account without 2FA for Netfluss to use.")
             case .noGatewayFound:
-                return "Connected to UniFi, but no gateway device was found in the controller response."
+                return L10n.text("Connected to UniFi, but no gateway device was found in the controller response.")
             case .parseError:
-                return "UniFi returned an unexpected response."
+                return L10n.text("UniFi returned an unexpected response.")
             case .requestFailed(let urlError):
                 return withAutoHint(RouterConnectionDiagnosis.transportMessage(
                     router: "UniFi", host: host, error: urlError, allowsHTTP: false
@@ -1643,7 +1643,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         if !message.isEmpty {
             return message
         }
-        return "Cannot reach UniFi gateway."
+        return L10n.text("Cannot reach UniFi gateway.")
     }
 
     // MARK: - OpenWRT
@@ -1667,7 +1667,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
             guard let self else { return }
             do {
                 guard let creds = OpenWRTMonitor.loadCredentials(host: host) else {
-                    let msg = "No credentials configured"
+                    let msg = L10n.text("No credentials configured")
                     self.setIfChanged(\.openWRTError, to: msg)
                     self.setIfChanged(\.openWRT, to: nil)
                     self.openWRTInFlight = false
@@ -1727,7 +1727,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
             guard let self else { return }
             do {
                 guard let creds = OPNsenseMonitor.loadCredentials(host: host) else {
-                    let msg = "No credentials configured"
+                    let msg = L10n.text("No credentials configured")
                     self.setIfChanged(\.opnsenseError, to: msg)
                     self.setIfChanged(\.opnsense, to: nil)
                     self.opnsenseInFlight = false
@@ -1779,37 +1779,37 @@ final class NetworkMonitor: NSObject, ObservableObject {
             switch fritzBoxError {
             case .invalidHost:
                 return usesAutoHost
-                    ? "No Fritz!Box gateway detected. Set the router address manually."
-                    : "Enter a valid Fritz!Box address."
+                    ? L10n.text("No Fritz!Box gateway detected. Set the router address manually.")
+                    : L10n.text("Enter a valid Fritz!Box address.")
             case .invalidURL:
-                return "Enter a valid Fritz!Box address."
+                return L10n.text("Enter a valid Fritz!Box address.")
             case .requestFailed(let statusCode):
                 if let statusCode {
-                    return "Fritz!Box TR-064 request failed (HTTP \(statusCode))."
+                    return L10n.format("Fritz!Box TR-064 request failed (HTTP %ld).", statusCode)
                 }
-                return "Fritz!Box TR-064 request failed."
+                return L10n.text("Fritz!Box TR-064 request failed.")
             case .transport(let description):
                 if usesAutoHost {
-                    return "Cannot reach Fritz!Box at \(host). Set the router address manually if auto detection picked the wrong gateway."
+                    return L10n.format("Cannot reach Fritz!Box at %@. Set the router address manually if auto detection picked the wrong gateway.", host)
                 }
                 if !description.isEmpty {
                     return description
                 }
-                return "Cannot reach Fritz!Box at \(host)."
+                return L10n.format("Cannot reach Fritz!Box at %@.", host)
             case .parseError:
-                return "Fritz!Box returned an unexpected TR-064 response."
+                return L10n.text("Fritz!Box returned an unexpected TR-064 response.")
             }
         }
 
         if let urlError = error as? URLError {
             switch urlError.code {
             case .timedOut:
-                return "Fritz!Box did not respond in time."
+                return L10n.text("Fritz!Box did not respond in time.")
             case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .networkConnectionLost, .notConnectedToInternet:
                 if usesAutoHost {
-                    return "Cannot reach Fritz!Box at \(host). Set the router address manually if auto detection picked the wrong gateway."
+                    return L10n.format("Cannot reach Fritz!Box at %@. Set the router address manually if auto detection picked the wrong gateway.", host)
                 }
-                return "Cannot reach Fritz!Box at \(host)."
+                return L10n.format("Cannot reach Fritz!Box at %@.", host)
             default:
                 break
             }
@@ -1819,7 +1819,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         if !message.isEmpty {
             return message
         }
-        return "Cannot reach Fritz!Box."
+        return L10n.text("Cannot reach Fritz!Box.")
     }
 
     private nonisolated static func describeOpenWRTError(
@@ -1827,39 +1827,38 @@ final class NetworkMonitor: NSObject, ObservableObject {
         host: String,
         usesAutoHost: Bool
     ) -> String {
-        let autoHint = "Auto uses the current default gateway. Set the OpenWRT address manually if that is a different router."
+        let autoHint = L10n.text("Auto uses the current default gateway. Set the OpenWRT address manually if that is a different router.")
         func withAutoHint(_ message: String) -> String { usesAutoHost ? "\(message) \(autoHint)" : message }
 
         if let openWRTError = error as? OpenWRTError {
             switch openWRTError {
             case .invalidURL:
                 return usesAutoHost
-                    ? "No OpenWRT gateway address is available. \(autoHint)"
-                    : "Enter a valid OpenWRT address or URL."
+                    ? "\(L10n.text("No OpenWRT gateway address is available.")) \(autoHint)"
+                    : L10n.text("Enter a valid OpenWRT address or URL.")
             case .authFailed:
-                return "OpenWRT login failed. Check the router credentials."
+                return L10n.text("OpenWRT login failed. Check the router credentials.")
             case .ubusUnavailable:
+                let unavailable = L10n.format("OpenWRT ubus is not available at %@.", host)
                 return usesAutoHost
-                    ? "OpenWRT ubus is not available at \(host). \(autoHint) Install the uhttpd-mod-ubus package if needed."
-                    : "OpenWRT ubus is not available at \(host). Install the uhttpd-mod-ubus package and check the router address."
+                    ? "\(unavailable) \(autoHint) \(L10n.text("Install the uhttpd-mod-ubus package if needed."))"
+                    : "\(unavailable) \(L10n.text("Install the uhttpd-mod-ubus package and check the router address."))"
             case .httpStatus(let statusCode):
                 if statusCode == 404 {
-                    return usesAutoHost
-                        ? "OpenWRT ubus was not found at \(host). \(autoHint)"
-                        : "OpenWRT ubus was not found at \(host)."
+                    return withAutoHint(L10n.format("OpenWRT ubus was not found at %@.", host))
                 }
-                return "OpenWRT request failed (HTTP \(statusCode))."
+                return L10n.format("OpenWRT request failed (HTTP %ld).", statusCode)
             case .rpcFailure(let code, let message):
                 if code == 4 || code == 3 {
                     return usesAutoHost
-                        ? "OpenWRT network status is not available on \(host). \(autoHint)"
-                        : "OpenWRT network status is not available on this router."
+                        ? "\(L10n.format("OpenWRT network status is not available on %@.", host)) \(autoHint)"
+                        : L10n.text("OpenWRT network status is not available on this router.")
                 }
-                return "OpenWRT returned an error: \(message)."
+                return L10n.format("OpenWRT returned an error: %@.", message)
             case .noWANDevice:
-                return "OpenWRT responded, but no WAN interface could be identified."
+                return L10n.text("OpenWRT responded, but no WAN interface could be identified.")
             case .parseError:
-                return "OpenWRT returned an unexpected ubus response."
+                return L10n.text("OpenWRT returned an unexpected ubus response.")
             case .requestFailed(let urlError):
                 return withAutoHint(RouterConnectionDiagnosis.transportMessage(
                     router: "OpenWRT", host: host, error: urlError, allowsHTTP: true
@@ -1877,9 +1876,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         if !message.isEmpty {
             return message
         }
-        return usesAutoHost
-            ? "Cannot reach OpenWRT. \(autoHint)"
-            : "Cannot reach OpenWRT."
+        return withAutoHint(L10n.text("Cannot reach OpenWRT."))
     }
 
     private nonisolated static func describeOPNsenseError(
@@ -1887,26 +1884,26 @@ final class NetworkMonitor: NSObject, ObservableObject {
         host: String,
         usesAutoHost: Bool
     ) -> String {
-        let autoHint = "Auto uses the current default gateway. Set the OPNsense address manually if that is a different router."
+        let autoHint = L10n.text("Auto uses the current default gateway. Set the OPNsense address manually if that is a different router.")
         func withAutoHint(_ message: String) -> String { usesAutoHost ? "\(message) \(autoHint)" : message }
 
         if let opnsenseError = error as? OPNsenseError {
             switch opnsenseError {
             case .invalidURL:
                 return usesAutoHost
-                    ? "No OPNsense gateway address is available. \(autoHint)"
-                    : "Enter a valid OPNsense address or URL."
+                    ? "\(L10n.text("No OPNsense gateway address is available.")) \(autoHint)"
+                    : L10n.text("Enter a valid OPNsense address or URL.")
             case .authFailed:
-                return "OPNsense login failed. Check the API credentials."
+                return L10n.text("OPNsense login failed. Check the API credentials.")
             case .httpStatus(let statusCode):
                 if statusCode == 401 || statusCode == 403 {
-                    return "OPNsense authentication failed. Check the API key and secret."
+                    return L10n.text("OPNsense authentication failed. Check the API key and secret.")
                 }
-                return "OPNsense request failed (HTTP \(statusCode))."
+                return L10n.format("OPNsense request failed (HTTP %ld).", statusCode)
             case .noWANInterface:
-                return "OPNsense responded, but no WAN interface could be identified."
+                return L10n.text("OPNsense responded, but no WAN interface could be identified.")
             case .parseError:
-                return "OPNsense returned an unexpected response."
+                return L10n.text("OPNsense returned an unexpected response.")
             case .requestFailed(let urlError):
                 return withAutoHint(RouterConnectionDiagnosis.transportMessage(
                     router: "OPNsense", host: host, error: urlError, allowsHTTP: true
@@ -1924,9 +1921,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         if !message.isEmpty {
             return message
         }
-        return usesAutoHost
-            ? "Cannot reach OPNsense. \(autoHint)"
-            : "Cannot reach OPNsense."
+        return withAutoHint(L10n.text("Cannot reach OPNsense."))
     }
 }
 

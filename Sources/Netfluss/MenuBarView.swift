@@ -113,7 +113,7 @@ struct MenuBarView: View {
                         .background(.quaternary.opacity(0.5), in: Circle())
                 }
                 .buttonStyle(.plain)
-                .help(isPinned ? "Unpin window" : "Pin as window")
+                .help(L10n.text(isPinned ? "Unpin window" : "Pin as window"))
             }
             .padding(.top, 8)
             .padding(.horizontal, 10)
@@ -343,7 +343,7 @@ struct NetRateCell: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(color)
             VStack(alignment: .leading, spacing: 1) {
-                Text(label.uppercased())
+                Text(L10n.text(label).uppercased())
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
                     .tracking(0.5)
@@ -522,7 +522,7 @@ struct WifiDetailPopover: View {
             }
             if let chNum = detail.channelNumber {
                 let width = detail.channelWidth ?? ""
-                let channelStr = width.isEmpty ? "Ch \(chNum)" : "Ch \(chNum) (\(width))"
+                let channelStr = width.isEmpty ? L10n.format("Ch %@", "\(chNum)") : L10n.format("Ch %@ (%@)", "\(chNum)", width)
                 detailRow("Channel", channelStr)
             }
             if let rssi = detail.rssi {
@@ -574,7 +574,7 @@ struct WifiDetailPopover: View {
 
     private func detailRow(_ label: String, _ value: String) -> some View {
         HStack(spacing: 4) {
-            Text(label)
+            Text(L10n.text(label))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .frame(width: 60, alignment: .leading)
@@ -617,7 +617,7 @@ struct IPRow: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
-            Text(label)
+            Text(L10n.text(label))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .frame(width: 50, alignment: .leading)
@@ -687,7 +687,7 @@ struct ConnectionStatusSection: View {
             ConnectionNode(icon: "lock.shield", label: vpn.displayName, detail: vpn.id, color: .purple, flag: flag)
         } else {
             let names = activeVPNs.map(\.id).joined(separator: ", ")
-            ConnectionNode(icon: "lock.shield", label: "\(activeVPNs.count) VPNs", detail: names, color: .purple, flag: flag)
+            ConnectionNode(icon: "lock.shield", label: L10n.format("%ld VPNs", activeVPNs.count), detail: names, color: .purple, flag: flag)
         }
     }
 }
@@ -723,7 +723,7 @@ struct ConnectionNode: View {
                         .font(.system(size: 14))
                         .foregroundStyle(.primary)
                 }
-                Text(label)
+                Text(L10n.text(label))
                     .font(.system(size: 9, weight: .semibold))
                     .lineLimit(1)
                 Text(detail)
@@ -1011,7 +1011,7 @@ struct FritzBoxRateRow: View {
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(color)
                     .frame(width: 12)
-                Text(label)
+                Text(L10n.text(label))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -1198,7 +1198,7 @@ struct RouterRateRow: View {
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(color)
                     .frame(width: 12)
-                Text(label)
+                Text(L10n.text(label))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -1391,7 +1391,7 @@ struct WifiSwitcherSection: View {
                 }
                 .padding(.horizontal, 12)
             } else if wifi.networks.isEmpty {
-                Text(wifi.locationStatus == .notDetermined ? "Waiting for Location permission…" : "Scanning for networks…")
+                Text(L10n.text(wifi.locationStatus == .notDetermined ? "Waiting for Location permission…" : "Scanning for networks…"))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
@@ -1536,7 +1536,7 @@ struct WifiNetworkRow: View {
                     .rotationEffect(network.isPinned ? .degrees(-45) : .zero)
             }
             .buttonStyle(.borderless)
-            .help(network.isPinned ? "Unpin" : "Pin to top")
+            .help(L10n.text(network.isPinned ? "Unpin" : "Pin to top"))
 
             Button(action: onToggleDetail) {
                 Image(systemName: "info.circle")
@@ -1568,7 +1568,7 @@ struct WifiScanDetailPopover: View {
             }
             if let chNum = network.channelNumber {
                 let width = network.channelWidth ?? ""
-                let channelStr = width.isEmpty ? "Ch \(chNum)" : "Ch \(chNum) (\(width))"
+                let channelStr = width.isEmpty ? L10n.format("Ch %@", "\(chNum)") : L10n.format("Ch %@ (%@)", "\(chNum)", width)
                 detailRow("Channel", channelStr)
             }
             if let rssi = network.rssi {
@@ -1578,10 +1578,10 @@ struct WifiScanDetailPopover: View {
                 detailRow("BSSID", bssid)
             }
             if !network.isAvailable {
-                detailRow("Status", "Not in range")
+                detailRow("Status", L10n.text("Not in range"))
             }
             if network.isPinned {
-                detailRow("Pinned", "Yes")
+                detailRow("Pinned", L10n.text("Yes"))
             }
         }
         .padding(12)
@@ -1591,7 +1591,7 @@ struct WifiScanDetailPopover: View {
     @ViewBuilder
     private func detailRow(_ key: String, _ value: String) -> some View {
         HStack(spacing: 4) {
-            Text(key)
+            Text(L10n.text(key))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .frame(width: 60, alignment: .leading)

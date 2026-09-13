@@ -152,14 +152,16 @@ final class PinningTLSDelegate: NSObject, URLSessionDelegate {
 /// real 2.5 causes — HTTPS-only bare addresses and a changed pinned
 /// certificate (issue #56).
 enum RouterConnectionDiagnosis {
-    static let preferencesRetrustHint = "To re-trust it, re-enter the router address in Preferences."
+    static var preferencesRetrustHint: String {
+        L10n.text("To re-trust it, re-enter the router address in Preferences.")
+    }
 
     /// Non-nil when the router's pinned certificate changed.
     static func certificateChangedMessage(router: String, host: String, retrustHint: String) -> String? {
         guard TLSPinStore.certificateChanged(host: host) else { return nil }
-        return "\(router)'s TLS certificate changed since NetFluss first trusted it. "
-            + "If you didn't change the router, this could be an interception attempt. "
-            + retrustHint
+        return L10n.format("%@'s TLS certificate changed since NetFluss first trusted it.", router)
+            + " " + L10n.text("If you didn't change the router, this could be an interception attempt.")
+            + " " + retrustHint
     }
 
     /// - Parameter allowsHTTP: whether this router's monitor honours an
@@ -179,34 +181,36 @@ enum RouterConnectionDiagnosis {
         func httpHint(keepingPort: Bool) -> String {
             guard allowsHTTP, usesHTTPS else { return "" }
             let port = keepingPort ? explicitPort.map { ":\($0)" } ?? "" : ""
-            return " If its web interface uses plain HTTP, enter the address as http://\(hostName)\(port)."
+            return " " + L10n.format("If its web interface uses plain HTTP, enter the address as %@.", "http://\(hostName)\(port)")
         }
 
-        guard let error else { return "Cannot reach \(router) at \(address)." }
+        guard let error else { return L10n.format("Cannot reach %@ at %@.", router, address) }
         switch error.code {
         case .cannotConnectToHost:
             guard usesHTTPS else {
-                return "\(router) at \(address) refused the connection. Check the address and port."
+                return L10n.format("%@ at %@ refused the connection. Check the address and port.", router, address)
             }
             let portHint = explicitPort == nil
-                ? " If HTTPS runs on another port, enter https://\(hostName):<port>."
+                ? " " + L10n.format("If HTTPS runs on another port, enter %@.", "https://\(hostName):\(L10n.text("<port>"))")
                 : ""
-            return "\(router) at \(address) refused the HTTPS connection on port \(explicitPort ?? 443).\(httpHint(keepingPort: false))\(portHint)"
+            return L10n.format("%@ at %@ refused the HTTPS connection on port %ld.", router, address, explicitPort ?? 443)
+                + httpHint(keepingPort: false) + portHint
         case .timedOut:
-            return "\(router) at \(address) did not respond in time."
+            return L10n.format("%@ at %@ did not respond in time.", router, address)
         case .cannotFindHost, .dnsLookupFailed:
-            return "Cannot resolve \(hostName). Check the router address."
+            return L10n.format("Cannot resolve %@. Check the router address.", hostName)
         case .notConnectedToInternet, .networkConnectionLost:
-            return "Lost the network connection to \(router) at \(address)."
+            return L10n.format("Lost the network connection to %@ at %@.", router, address)
         case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
              .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
              .clientCertificateRejected, .clientCertificateRequired, .cancelled:
             // .cancelled is what PinningTLSDelegate's refusal surfaces as.
-            return "The HTTPS (TLS) connection to \(router) at \(address) failed.\(httpHint(keepingPort: true))"
+            return L10n.format("The HTTPS (TLS) connection to %@ at %@ failed.", router, address)
+                + httpHint(keepingPort: true)
         case .appTransportSecurityRequiresSecureConnection:
-            return "macOS blocks unencrypted HTTP to \(hostName). Use the router's IP address or HTTPS."
+            return L10n.format("macOS blocks unencrypted HTTP to %@. Use the router's IP address or HTTPS.", hostName)
         default:
-            return "Cannot reach \(router) at \(address) (\(error.localizedDescription))."
+            return L10n.format("Cannot reach %@ at %@ (%@).", router, address, error.localizedDescription)
         }
     }
 }

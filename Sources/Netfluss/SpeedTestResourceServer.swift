@@ -26,9 +26,9 @@ final class SpeedTestResourceServer {
         var errorDescription: String? {
             switch self {
             case .missingPort:
-                return "The local Speed Test server could not determine its listening port."
+                return L10n.text("The local Speed Test server could not determine its listening port.")
             case .startupTimedOut:
-                return "The local Speed Test server did not become ready in time."
+                return L10n.text("The local Speed Test server did not become ready in time.")
             }
         }
     }

@@ -48,8 +48,8 @@ enum VPNConfigImporter {
 
         var errorDescription: String? {
             switch self {
-            case .noConfigsFound(let ext): return "No .\(ext) configuration files were found."
-            case .unreadable(let detail): return "Could not read the configuration: \(detail)."
+            case .noConfigsFound(let ext): return L10n.format("No .%@ configuration files were found.", ext)
+            case .unreadable(let detail): return L10n.format("Could not read the configuration: %@.", detail)
             }
         }
     }
@@ -209,8 +209,10 @@ enum VPNConfigImporter {
     private static func warningMessages(forUnsupported directives: [String]) -> [String] {
         guard !directives.isEmpty else { return [] }
         let list = directives.map { "“\($0)”" }.joined(separator: ", ")
-        let noun = directives.count == 1 ? "option, which is" : "options, which are"
-        return ["This config uses the \(list) \(noun) part of a third-party patched OpenVPN (used by some providers for obfuscation). The bundled OpenVPN doesn't support it, so this profile won't connect. Ask your provider for a standard OpenVPN or WireGuard config."]
+        // Whole sentences per count, so translations don't have to glue fragments.
+        return [directives.count == 1
+            ? L10n.format("This config uses the %@ option, which is part of a third-party patched OpenVPN (used by some providers for obfuscation). The bundled OpenVPN doesn't support it, so this profile won't connect. Ask your provider for a standard OpenVPN or WireGuard config.", list)
+            : L10n.format("This config uses the %@ options, which are part of a third-party patched OpenVPN (used by some providers for obfuscation). The bundled OpenVPN doesn't support them, so this profile won't connect. Ask your provider for a standard OpenVPN or WireGuard config.", list)]
     }
 
     private static func parseOpenVPN(_ text: String) -> Parsed {

@@ -112,7 +112,7 @@ struct VPNSectionView: View {
                     }
                 }
                 if let ip = vpn.status.assignedIP {
-                    Text(verbatim: "Tunnel \(ip)")
+                    Text(L10n.format("Tunnel %@", ip))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
@@ -520,7 +520,7 @@ struct AddIKEv2Sheet: View {
     private func field(_ label: String, text: Binding<String>, placeholder: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             LText(label).font(.system(size: 11)).foregroundStyle(.secondary)
-            TextField("", text: text, prompt: placeholder.isEmpty ? nil : Text(placeholder))
+            TextField("", text: text, prompt: placeholder.isEmpty ? nil : Text(L10n.text(placeholder)))
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.leading)
                 .labelsHidden()
