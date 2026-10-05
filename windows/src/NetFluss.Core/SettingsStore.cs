@@ -58,7 +58,10 @@ public sealed class SettingsStore
     public AppSettings Settings { get; }
 
     /// <summary>Raised after a change has been written, so the app can re-apply live.</summary>
-    public event EventHandler? Changed;
+    public event EventHandler<SettingsChangedEventArgs>? Changed;
+
+    /// <summary>What a batch changed, collected while its notifications are held back.</summary>
+    private readonly HashSet<string> _batched = new(StringComparer.Ordinal);
 
     /// <summary>The conventional per-user location on Windows.</summary>
     public static string DefaultPath => Path.Combine(
@@ -72,6 +75,7 @@ public sealed class SettingsStore
     /// </summary>
     public void Batch(Action<AppSettings> edit)
     {
+        _batched.Clear();
         _suspended = true;
         try
         {
@@ -83,7 +87,9 @@ public sealed class SettingsStore
         }
 
         Save();
-        Changed?.Invoke(this, EventArgs.Empty);
+        var changed = _batched.ToArray();
+        _batched.Clear();
+        Changed?.Invoke(this, new SettingsChangedEventArgs(changed));
     }
 
     public void Save()
@@ -149,10 +155,40 @@ public sealed class SettingsStore
     {
         if (_suspended)
         {
+            if (e.PropertyName is { } batched)
+            {
+                _batched.Add(batched);
+            }
+
             return;
         }
 
         Save();
-        Changed?.Invoke(this, EventArgs.Empty);
+        Changed?.Invoke(this, new SettingsChangedEventArgs(e.PropertyName is { } name ? [name] : []));
     }
+}
+
+/// <summary>Which settings a write changed; empty when that is not known.</summary>
+public sealed class SettingsChangedEventArgs(IReadOnlyCollection<string> properties) : EventArgs
+{
+    public IReadOnlyCollection<string> Properties { get; } = properties;
+
+    /// <summary>
+    /// Only bookkeeping changed — a timer saved, a window moved, an update check recorded —
+    /// nothing any meter, theme or window shows. Re-applying everything for those made every
+    /// timer click, pin and widget drag re-theme the popover and re-render every surface.
+    /// </summary>
+    public bool IsStateOnly => Properties.Count > 0 && Properties.All(StateOnly.Contains);
+
+    private static readonly HashSet<string> StateOnly = new(StringComparer.Ordinal)
+    {
+        nameof(AppSettings.TrafficTimerSession),
+        nameof(AppSettings.FloatingWidgetLeft),
+        nameof(AppSettings.FloatingWidgetTop),
+        nameof(AppSettings.PinnedLeft),
+        nameof(AppSettings.PinnedTop),
+        nameof(AppSettings.LastUpdateCheck),
+        nameof(AppSettings.LastNotifiedVersion),
+        nameof(AppSettings.FirstLaunchHintShown),
+    };
 }

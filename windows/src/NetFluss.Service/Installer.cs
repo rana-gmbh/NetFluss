@@ -174,16 +174,30 @@ internal static unsafe class Installer
 
         Directory.CreateDirectory(target);
 
-        // Only the helper's own files. It ships in a folder of its own beside the app, so
-        // that folder is exactly what it needs.
+        // Only the helper's own files, by name. The source is the per-user install folder,
+        // which the user can write to: copying everything in it would let any program of the
+        // user's drop a DLL (a version.dll, say) next to a service that runs as SYSTEM, where
+        // Windows' search order loads it. Each file is opened without sharing write or delete
+        // access, so it cannot be swapped while it is copied.
         var walk = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint };
         var shipped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in Directory.EnumerateFiles(source, "*", walk))
         {
             var relative = Path.GetRelativePath(source, file);
+            if (!IsHelperFile(relative))
+            {
+                Console.Error.WriteLine($"skipped {relative}: not one of the helper's files");
+                continue;
+            }
+
             var destination = Path.Combine(target, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            File.Copy(file, destination, overwrite: true);
+            using (var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                input.CopyTo(output);
+            }
+
             shipped.Add(relative);
         }
 
@@ -209,6 +223,41 @@ internal static unsafe class Installer
             {
                 Directory.Delete(directory);
             }
+        }
+    }
+
+    /// <summary>
+    /// The helper's own files: NetFluss.* executables, libraries, runtime configuration and
+    /// symbols at the top level (a release is the single NetFluss.Service.exe; a development
+    /// build has the separate assemblies), and NetFluss satellite resources in culture
+    /// folders. Nothing else is copied into Program Files, whatever lies beside it.
+    /// </summary>
+    internal static bool IsHelperFile(string relative)
+    {
+        var parts = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var name = parts[^1];
+        if (!name.StartsWith("NetFluss.", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return parts.Length switch
+        {
+            1 => Path.GetExtension(name).ToLowerInvariant() is ".exe" or ".dll" or ".json" or ".pdb",
+            2 => name.EndsWith(".resources.dll", StringComparison.OrdinalIgnoreCase) && IsCulture(parts[0]),
+            _ => false,
+        };
+    }
+
+    private static bool IsCulture(string folder)
+    {
+        try
+        {
+            return !string.IsNullOrEmpty(System.Globalization.CultureInfo.GetCultureInfo(folder, predefinedOnly: true).Name);
+        }
+        catch (System.Globalization.CultureNotFoundException)
+        {
+            return false;
         }
     }
 

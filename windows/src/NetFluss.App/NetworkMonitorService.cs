@@ -367,7 +367,7 @@ public sealed class NetworkMonitorService : INotifyPropertyChanged, IDisposable
         }
 
         OnPropertyChanged(nameof(AllAdapters));
-        Ticked?.Invoke(this, EventArgs.Empty);
+        RaiseTicked();
     }
 
     /// <summary>
@@ -538,6 +538,49 @@ public sealed class NetworkMonitorService : INotifyPropertyChanged, IDisposable
         _publicIp.Dispose();
     }
 
+    /// <summary>
+    /// Every listener in turn, each on its own. The tray icon, the meters, statistics and the
+    /// popover all hang off these two events; one of them throwing — the tray while Explorer
+    /// restarts, say — used to cancel every listener after it and the rest of the tick with it.
+    /// </summary>
     private void OnPropertyChanged([CallerMemberName] string? name = null)
-        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    {
+        if (PropertyChanged is not { } handlers)
+        {
+            return;
+        }
+
+        var args = new PropertyChangedEventArgs(name);
+        foreach (var handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((PropertyChangedEventHandler)handler)(this, args);
+            }
+            catch (Exception e)
+            {
+                CrashLog.Write($"tick ({name})", e);
+            }
+        }
+    }
+
+    private void RaiseTicked()
+    {
+        if (Ticked is not { } handlers)
+        {
+            return;
+        }
+
+        foreach (var handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler)handler)(this, EventArgs.Empty);
+            }
+            catch (Exception e)
+            {
+                CrashLog.Write("tick", e);
+            }
+        }
+    }
 }

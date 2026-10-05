@@ -77,6 +77,23 @@ public partial class NetFlussApplication : Application
         base.OnStartup(e);
         CrashLog.Install(this);
 
+        // The UI-thread handler above marks exceptions handled so a broken section cannot take
+        // the meter down. During startup that is the wrong call: it stopped startup half-way
+        // and left a process with no icon and no meter that still held the single-instance
+        // lock, so every later launch handed over to it and quit. Fail whole instead.
+        try
+        {
+            Start(e);
+        }
+        catch (Exception exception)
+        {
+            CrashLog.Write("startup", exception);
+            Shutdown(1);
+        }
+    }
+
+    private void Start(StartupEventArgs e)
+    {
         // One NetFluss per session. A second launch hands its arguments to the first and
         // leaves — which, with no arguments, opens the popover of the one already running.
         _instance = SingleInstance.Acquire();
@@ -127,7 +144,13 @@ public partial class NetFlussApplication : Application
 
         // Preferences writes, then everything re-reads. One direction, so there is no way
         // for the tray and the settings file to disagree about what is configured.
-        _store.Changed += (_, _) => ApplySettings();
+        _store.Changed += (_, change) =>
+        {
+            if (!change.IsStateOnly)
+            {
+                ApplySettings();
+            }
+        };
 
         // Surfaces repaint on the same tick that drives the tray meter.
         _monitor.PropertyChanged += (_, args) =>
@@ -197,6 +220,34 @@ public partial class NetFlussApplication : Application
             if (quiet is { } value)
             {
                 Dispatcher.BeginInvoke(() => _monitor.Quiet = value);
+            }
+        };
+
+        // Windows switching between light and dark, or changing its accent, changes the taskbar
+        // the meters are drawn for and the surface of every window — until now only a
+        // NetFluss setting change or a restart picked that up. Windows sends several of these
+        // per switch, so they are gathered into one repaint.
+        var themeChanged = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        themeChanged.Tick += (_, _) =>
+        {
+            themeChanged.Stop();
+            if (!_exiting)
+            {
+                ApplySettings();
+                _preferences?.ApplySystemTheme();
+            }
+        };
+
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (_, args) =>
+        {
+            if (args.Category is Microsoft.Win32.UserPreferenceCategory.General or Microsoft.Win32.UserPreferenceCategory.Color or
+                Microsoft.Win32.UserPreferenceCategory.VisualStyle)
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    themeChanged.Stop();
+                    themeChanged.Start();
+                });
             }
         };
 
@@ -696,6 +747,20 @@ public partial class NetFlussApplication : Application
                 {
                     _tray.IsVisible = true;
                 }
+
+                // The icon was the static glyph while the overlay carried the rates; it has to
+                // carry them now. Deferred: this is raised from inside a placement.
+                Dispatcher.BeginInvoke(ApplySettings);
+            };
+
+            // And back: the tray returns to the glyph (or hides, if the user asked), and the
+            // "showing in the notification area instead" notice goes.
+            _overlay.AnchorRegained += (_, _) =>
+            {
+                if (OverlayFellBackToTray)
+                {
+                    Dispatcher.BeginInvoke(ApplySettings);
+                }
             };
 
             _overlay.Start();
@@ -724,7 +789,7 @@ public partial class NetFlussApplication : Application
     {
         if (!settings.ShowFloatingWidget)
         {
-            _widget?.Close();
+            _widget?.CloseForGood();
             _widget = null;
             return;
         }
@@ -737,6 +802,17 @@ public partial class NetFlussApplication : Application
             };
 
             _widget.Clicked += (_, _) => TogglePopover(Screens.WindowAnchor(new WindowInteropHelper(_widget).Handle));
+
+            // Alt+F4 turns the widget off, as the Preferences switch does. Deferred, because WPF
+            // also closes every window when the app quits — before OnExit sets _exiting — and a
+            // quit must not switch the widget off for the next start.
+            _widget.CloseRequested += (_, _) => Dispatcher.BeginInvoke(() =>
+            {
+                if (!_exiting && _store is not null)
+                {
+                    _store.Settings.ShowFloatingWidget = false;
+                }
+            });
             _widget.Show();
             _widget.Place();
         }
@@ -987,7 +1063,7 @@ public partial class NetFlussApplication : Application
 
         _overlay?.Stop();
         _overlay?.Close();
-        _widget?.Close();
+        _widget?.CloseForGood();
         _tray?.Dispose();
         _traffic?.Dispose();
         _statistics?.Dispose();

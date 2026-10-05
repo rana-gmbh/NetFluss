@@ -108,6 +108,17 @@ internal sealed class TaskbarOverlayWindow : Window
     /// </summary>
     internal event EventHandler? AnchorLost;
 
+    /// <summary>
+    /// The taskbar is back after <see cref="AnchorLost"/> — or there for the first time, when
+    /// NetFluss started before it. The app puts the tray icon back the way the meter wants it.
+    /// </summary>
+    internal event EventHandler? AnchorRegained;
+
+    /// <summary>Not anchored yet, or lost: the next successful placement is a regain.</summary>
+    private bool _unanchored = true;
+
+    private bool _closed;
+
     /// <summary>True while the overlay is actually placed on the taskbar.</summary>
     internal bool IsAnchored => _placement is not null;
 
@@ -188,6 +199,13 @@ internal sealed class TaskbarOverlayWindow : Window
 
     private void Reanchor()
     {
+        // Queued from a display change or a restarted Explorer, it can arrive after the meter
+        // surface was switched and this window closed — where touching it throws.
+        if (_closed)
+        {
+            return;
+        }
+
         // Never paint over a game or a presentation. The overlay is topmost, so this is the
         // difference between a meter and a defect report.
         if (TaskbarAnchor.IsFullScreenAppActive())
@@ -206,6 +224,7 @@ internal sealed class TaskbarOverlayWindow : Window
             if (_placement is not null)
             {
                 _placement = null;
+                _unanchored = true;
                 AnchorLost?.Invoke(this, EventArgs.Empty);
             }
 
@@ -214,6 +233,12 @@ internal sealed class TaskbarOverlayWindow : Window
 
         _placement = target;
         Visibility = Visibility.Visible;
+
+        if (_unanchored)
+        {
+            _unanchored = false;
+            AnchorRegained?.Invoke(this, EventArgs.Empty);
+        }
 
         var handle = new WindowInteropHelper(this).Handle;
         if (handle == nint.Zero)
@@ -237,6 +262,7 @@ internal sealed class TaskbarOverlayWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _closed = true;
         _reanchor.Stop();
         base.OnClosed(e);
     }

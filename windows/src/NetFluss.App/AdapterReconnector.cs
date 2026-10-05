@@ -2,6 +2,7 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Net.NetworkInformation;
 using NetFluss.Core;
 using NetFluss.Native;
@@ -70,15 +71,22 @@ internal static class AdapterReconnector
             return Localization.L("That adapter's name cannot be used from a script.");
         }
 
-        var arguments = $"/c netsh interface set interface name=\"{name}\" admin=disabled & " +
-                        $"timeout /t 2 /nobreak >nul & netsh interface set interface name=\"{name}\" admin=enabled";
+        // Full paths: a bare "netsh" is looked up through the current folder and the user's
+        // PATH first. Once disabled, the adapter is enabled again whatever the wait did — a
+        // failed timeout must never leave the PC offline — and cmd's exit code is netsh's.
+        var netsh = "\"" + Path.Combine(Environment.SystemDirectory, "netsh.exe") + "\"";
+        var timeout = "\"" + Path.Combine(Environment.SystemDirectory, "timeout.exe") + "\"";
+        var command = $"{netsh} interface set interface name=\"{name}\" admin=disabled && " +
+                      $"({timeout} /t 2 /nobreak >nul & {netsh} interface set interface name=\"{name}\" admin=enabled)";
 
         try
         {
+            // /d skips the user's cmd AutoRun, which would otherwise run elevated as well.
             using var process = Process.Start(new ProcessStartInfo
             {
-                FileName = "cmd.exe",
-                Arguments = arguments,
+                FileName = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                Arguments = $"/d /s /c \"{command}\"",
+                WorkingDirectory = Environment.SystemDirectory,
                 UseShellExecute = true,
                 Verb = "runas",
                 WindowStyle = ProcessWindowStyle.Hidden,
@@ -90,7 +98,7 @@ internal static class AdapterReconnector
             }
 
             await process.WaitForExitAsync();
-            return null;
+            return process.ExitCode == 0 ? null : Localization.L("Windows did not restart {0}.", name);
         }
         catch (Win32Exception e) when (e.NativeErrorCode == 1223)
         {

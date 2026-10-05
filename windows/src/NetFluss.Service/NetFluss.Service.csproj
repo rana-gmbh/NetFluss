@@ -32,6 +32,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="NetFluss.Native.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../NetFluss.Core/NetFluss.Core.csproj" />
     <ProjectReference Include="../NetFluss.Native/NetFluss.Native.csproj" />
   </ItemGroup>

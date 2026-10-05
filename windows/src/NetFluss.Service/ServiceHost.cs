@@ -86,12 +86,30 @@ internal static unsafe class ServiceHost
         {
             // Fall through to STOPPED with an exit code so the SCM's recovery action (restart)
             // applies, rather than leaving a service that says it runs and does nothing.
-            server?.Dispose();
+            try
+            {
+                server?.Dispose();
+            }
+            catch (Exception)
+            {
+            }
+
             Report(StateStopped, 0, exitCode: 1064);
             return;
         }
 
-        server.Dispose();
+        // ServiceMain is called from native code: an exception escaping it ends the process at
+        // once, the service manager never hears STOPPED, and a normal stop is logged as a crash.
+        // Tearing down VPN tunnels can fail or take a while, so it gets a generous hint too.
+        try
+        {
+            Report(StateStopPending, 0, waitHint: 60_000);
+            server.Dispose();
+        }
+        catch (Exception)
+        {
+        }
+
         Report(StateStopped, 0);
     }
 

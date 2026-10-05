@@ -41,6 +41,11 @@ internal sealed class HelperServer : IDisposable
     private readonly List<Client> _clients = [];
     private readonly ProcessNames _names = new();
     private readonly VpnTunnels _vpn = new();
+
+    /// <summary>When each adapter was last restarted, for the cooldown between restarts.</summary>
+    private readonly Dictionary<string, long> _restarts = new(StringComparer.OrdinalIgnoreCase);
+
+    private const long AdapterRestartCooldownMs = 15_000;
     private KernelNetworkTrace? _trace;
     private Timer? _sampler;
     private string _traceStatus = "Idle";
@@ -109,6 +114,16 @@ internal sealed class HelperServer : IDisposable
             {
                 await server.DisposeAsync();
                 return;
+            }
+            catch (Exception e)
+            {
+                // A client that connects and leaves before the call completes (ERROR_NO_DATA),
+                // or any other fault, must cost this one instance — not the loop. Faulting
+                // here would leave a service that reports Running and never answers again.
+                Log?.Invoke($"pipe connection failed: {e.Message}");
+                await server.DisposeAsync();
+                await Task.Delay(250);
+                continue;
             }
 
             var client = new Client(server);
@@ -424,6 +439,19 @@ internal sealed class HelperServer : IDisposable
         if (name.Contains('"') || name.Contains('%'))
         {
             return Result(false, "That adapter's name cannot be used from a script.");
+        }
+
+        // Any signed-in user may ask for this, and each request takes the adapter offline for
+        // a moment; without a pause between them, a script could keep a PC off the network.
+        lock (_restarts)
+        {
+            var now = Environment.TickCount64;
+            if (_restarts.TryGetValue(name, out var last) && now - last < AdapterRestartCooldownMs)
+            {
+                return Result(false, "That adapter was restarted a moment ago.");
+            }
+
+            _restarts[name] = now;
         }
 
         foreach (var state in new[] { "disabled", "enabled" })

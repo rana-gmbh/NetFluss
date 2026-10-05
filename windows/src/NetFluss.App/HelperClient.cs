@@ -157,9 +157,19 @@ internal sealed class HelperClient : IDisposable
         {
             while (!_stop.IsCancellationRequested && !IsConnected)
             {
-                if (await TryConnectAsync())
+                try
                 {
-                    return;
+                    if (await TryConnectAsync())
+                    {
+                        return;
+                    }
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    // A helper stopped or updated mid-handshake, or one that never answers:
+                    // drop what was opened and try again, rather than end the loop and with
+                    // it every later attempt (_connecting would stay set for good).
+                    Disconnect();
                 }
 
                 await Task.Delay(RetryInterval, _stop.Token);
@@ -174,14 +184,38 @@ internal sealed class HelperClient : IDisposable
         }
     }
 
+    /// <summary>
+    /// Development only: a helper run with "NetFluss.Service console" is no service, so the
+    /// identity check below would refuse it.
+    /// </summary>
+    private static bool ConsoleHelperAllowed => Environment.GetEnvironmentVariable("NETFLUSS_ALLOW_CONSOLE_HELPER") == "1";
+
     private async Task<bool> TryConnectAsync()
     {
+        // The helper is a service. When it is not running there is no pipe to wait for, and
+        // ConnectAsync would spin on CreateFile for its whole timeout every few seconds — for
+        // every user without the helper, all day. Asking the service manager costs nothing.
+        var servicePid = ServiceStatus.ProcessId(HelperProtocol.ServiceName);
+        if (servicePid is null && !ConsoleHelperAllowed)
+        {
+            return false;
+        }
+
         var pipe = new NamedPipeClientStream(".", HelperProtocol.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         try
         {
             await pipe.ConnectAsync(500, _stop.Token);
         }
         catch (Exception e) when (e is TimeoutException or IOException or UnauthorizedAccessException)
+        {
+            await pipe.DisposeAsync();
+            return false;
+        }
+
+        // Only NetFluss's own service may answer. Any program of this user's can create a pipe
+        // of this name before the service does and pose as the helper: it would be sent VPN
+        // configurations and could report privileged actions done that were not.
+        if (!ConsoleHelperAllowed && ServiceStatus.PipeServerProcessId(pipe.SafePipeHandle) != servicePid)
         {
             await pipe.DisposeAsync();
             return false;
@@ -198,7 +232,8 @@ internal sealed class HelperClient : IDisposable
         }
 
         // The hello answer carries the versions; nothing counts as connected without it.
-        var line = await ReadLineAsync(reader);
+        // Bounded: a pipe that accepts and never answers must not hold the loop forever.
+        var line = await ReadLineAsync(reader).WaitAsync(TimeSpan.FromSeconds(5), _stop.Token);
         var hello = line is null ? null : HelperProtocol.Deserialize<HelperMessage>(line);
         if (hello is not { Type: "hello" })
         {
@@ -356,6 +391,14 @@ internal sealed class HelperClient : IDisposable
         if (wasConnected)
         {
             Post(() => ConnectionChanged?.Invoke(this, EventArgs.Empty));
+
+            // A helper that restarts — updated, or the service recovered — is found again
+            // without waiting for a feature to ask for it; until then every DNS change would
+            // ask for administrator approval although the helper is back.
+            if (!_stop.IsCancellationRequested)
+            {
+                EnsureConnecting();
+            }
         }
     }
 
@@ -369,8 +412,9 @@ internal sealed class HelperClient : IDisposable
 
     public void Dispose()
     {
+        // Not disposed: a connect loop still unwinding reads its token, and a cancelled
+        // source without timers holds nothing worth freeing.
         _stop.Cancel();
         Disconnect();
-        _stop.Dispose();
     }
 }

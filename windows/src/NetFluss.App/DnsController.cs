@@ -167,19 +167,22 @@ internal sealed class DnsController : IDnsApplier
             return DnsApplyResult.Fail(Localization.L("That adapter's name cannot be used from a script."));
         }
 
-        var script = BuildScript(adapterName, servers);
-        var path = Path.Combine(Path.GetTempPath(), $"netfluss-dns-{Guid.NewGuid():N}.cmd");
+        // No script file: a .cmd written to %TEMP% and run elevated could be rewritten by any
+        // process of this user while the UAC prompt is open. The commands travel on the
+        // command line instead, which nothing can change once the prompt has started.
+        var command = BuildCommand(adapterName, servers);
 
         try
         {
-            await File.WriteAllTextAsync(path, script);
-
             // "runas" is what raises the UAC prompt. Without UseShellExecute it is ignored
             // and the process simply starts unelevated, where every netsh call fails.
+            // /d skips the user's cmd AutoRun, which would otherwise run elevated too; /s /c
+            // takes everything inside the outer quotes literally.
             var info = new ProcessStartInfo
             {
-                FileName = "cmd.exe",
-                Arguments = $"/c \"\"{path}\"\"",
+                FileName = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                Arguments = $"/d /s /c \"{command}\"",
+                WorkingDirectory = Environment.SystemDirectory,
                 UseShellExecute = true,
                 Verb = "runas",
                 CreateNoWindow = true,
@@ -210,51 +213,47 @@ internal sealed class DnsController : IDnsApplier
         {
             return DnsApplyResult.Fail(e.Message);
         }
-        finally
-        {
-            try
-            {
-                File.Delete(path);
-            }
-            catch (IOException)
-            {
-                // A temp file left behind is not worth failing the operation over.
-            }
-        }
     }
 
     /// <summary>
-    /// The netsh script. IPv4 and IPv6 are separate stores in Windows, so a preset carrying
-    /// both has to write both — and "System Default" has to clear both, or an IPv6 resolver
-    /// left behind would keep answering and the change would look like it did nothing.
+    /// The netsh commands, chained for one elevated cmd. IPv4 and IPv6 are separate stores in
+    /// Windows, so a preset carrying both has to write both — and "System Default" has to clear
+    /// both, or an IPv6 resolver left behind would keep answering and the change would look
+    /// like it did nothing.
+    ///
+    /// <para>The IPv4 steps are joined with &amp;&amp;: if one fails, the chain stops and cmd exits
+    /// with netsh's code, so a failure is reported as one. IPv6 is best effort — an adapter
+    /// with IPv6 turned off refuses those commands, and that is not a failed switch. Programs
+    /// are named by full path: a bare "netsh" is looked up through the current folder and the
+    /// user's PATH first. The adapter name has no quote or %, and inside quotes cmd takes
+    /// &amp; | &lt; &gt; ^ literally; the servers are canonical addresses.</para>
     /// </summary>
-    private static string BuildScript(string adapterName, IReadOnlyList<string> servers)
+    internal static string BuildCommand(string adapterName, IReadOnlyList<string> servers)
     {
-        var lines = new List<string> { "@echo off" };
+        var netsh = "\"" + Path.Combine(Environment.SystemDirectory, "netsh.exe") + "\"";
+        var ipconfig = "\"" + Path.Combine(Environment.SystemDirectory, "ipconfig.exe") + "\"";
 
-        var v4 = servers.Where(s => !s.Contains(':')).ToList();
-        var v6 = servers.Where(s => s.Contains(':')).ToList();
-
-        foreach (var (family, list) in new[] { ("ipv4", v4), ("ipv6", v6) })
+        List<string> Family(string family, List<string> list)
         {
             if (list.Count == 0)
             {
-                lines.Add($"netsh interface {family} set dnsservers name=\"{adapterName}\" source=dhcp");
-                continue;
+                return [$"{netsh} interface {family} set dnsservers name=\"{adapterName}\" source=dhcp"];
             }
 
-            lines.Add($"netsh interface {family} set dnsservers name=\"{adapterName}\" static {list[0]} primary validate=no");
-
+            var commands = new List<string> { $"{netsh} interface {family} set dnsservers name=\"{adapterName}\" static {list[0]} primary validate=no" };
             for (var i = 1; i < list.Count; i++)
             {
-                lines.Add($"netsh interface {family} add dnsservers name=\"{adapterName}\" address={list[i]} index={i + 1} validate=no");
+                commands.Add($"{netsh} interface {family} add dnsservers name=\"{adapterName}\" address={list[i]} index={i + 1} validate=no");
             }
+
+            return commands;
         }
 
-        // Stale entries would otherwise keep resolving from cache after the switch.
-        lines.Add("ipconfig /flushdns");
-        lines.Add("exit /b 0");
+        var v4 = Family("ipv4", [.. servers.Where(s => !s.Contains(':'))]);
+        var v6 = Family("ipv6", [.. servers.Where(s => s.Contains(':'))]);
 
-        return string.Join("\r\n", lines) + "\r\n";
+        // Stale entries would otherwise keep resolving from cache after the switch; it runs
+        // last, so its exit code (0) is the chain's when IPv4 went through.
+        return $"{string.Join(" && ", v4)} && ({string.Join(" & ", v6)} & {ipconfig} /flushdns)";
     }
 }

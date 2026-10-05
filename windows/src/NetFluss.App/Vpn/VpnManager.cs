@@ -292,8 +292,12 @@ internal sealed class VpnManager : IDisposable
                     break;
             }
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or SocketException or InvalidOperationException)
+        catch (Exception e)
         {
+            // Anything at all: this runs as a discarded task, so an exception the filter let
+            // through — an adapter appearing just as the tunnel came up throws
+            // NetworkInformationException — vanished and left the profile "Connecting" for good.
+            VpnDiagnosticsLog.Log("Connect failed: " + e);
             if (generation == _generation)
             {
                 Fail(e.Message);
@@ -541,10 +545,21 @@ internal sealed class VpnManager : IDisposable
 
     /// <summary>A tunnel adapter's IPv4 address, found by the adapter's name.</summary>
     private static string? AdapterAddress(string name)
-        => NetworkInterface.GetAllNetworkInterfaces()
-            .FirstOrDefault(n => n.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?
-            .GetIPProperties().UnicastAddresses
-            .FirstOrDefault(a => a.Address.AddressFamily == AddressFamily.InterNetwork)?.Address.ToString();
+    {
+        try
+        {
+            return NetworkInterface.GetAllNetworkInterfaces()
+                .FirstOrDefault(n => n.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?
+                .GetIPProperties().UnicastAddresses
+                .FirstOrDefault(a => a.Address.AddressFamily == AddressFamily.InterNetwork)?.Address.ToString();
+        }
+        catch (NetworkInformationException)
+        {
+            // The adapter list is changing — the tunnel has only just come up. The address
+            // is a detail; the connection is not worth failing over it.
+            return null;
+        }
+    }
 
     private void Connected(string? assignedIp, VpnProfile profile)
     {
@@ -586,10 +601,19 @@ internal sealed class VpnManager : IDisposable
             return;
         }
 
-        var adapter = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n =>
-            (_nativeEntry is not null && n.Name.Equals(_nativeEntry, StringComparison.OrdinalIgnoreCase)) ||
-            (_wireGuardService is not null && n.Name.Equals(_wireGuardService["WireGuardTunnel$".Length..], StringComparison.OrdinalIgnoreCase)) ||
-            (assignedIp is not null && n.GetIPProperties().UnicastAddresses.Any(a => a.Address.ToString() == assignedIp)));
+        NetworkInterface? adapter;
+        try
+        {
+            adapter = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n =>
+                (_nativeEntry is not null && n.Name.Equals(_nativeEntry, StringComparison.OrdinalIgnoreCase)) ||
+                (_wireGuardService is not null && n.Name.Equals(_wireGuardService["WireGuardTunnel$".Length..], StringComparison.OrdinalIgnoreCase)) ||
+                (assignedIp is not null && n.GetIPProperties().UnicastAddresses.Any(a => a.Address.ToString() == assignedIp)));
+        }
+        catch (NetworkInformationException)
+        {
+            // Adapters still settling right after the tunnel came up.
+            adapter = null;
+        }
 
         if (adapter is null)
         {

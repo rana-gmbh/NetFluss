@@ -3,6 +3,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using NetFluss.Core;
 
@@ -77,7 +78,13 @@ internal sealed class FloatingWidgetWindow : Window
             if (before == new Point(Left, Top))
             {
                 Clicked?.Invoke(this, EventArgs.Empty);
+                return;
             }
+
+            // Remembered once the drag is over, so it survives a restart the way the macOS
+            // pin does — not on every pixel of it, where each write saved settings.json.
+            _settings.FloatingWidgetLeft = Left;
+            _settings.FloatingWidgetTop = Top;
         };
 
         // Same reasoning as the overlay: this can be the only NetFluss window on screen.
@@ -94,19 +101,34 @@ internal sealed class FloatingWidgetWindow : Window
             e.Handled = true;
         };
 
-        // Position is remembered, so it survives a restart the way the macOS pin does.
-        LocationChanged += (_, _) =>
-        {
-            if (IsLoaded)
-            {
-                _settings.FloatingWidgetLeft = Left;
-                _settings.FloatingWidgetTop = Top;
-            }
-        };
     }
 
     /// <summary>Raised on a click that was not a drag, to toggle the popover.</summary>
     internal event EventHandler? Clicked;
+
+    /// <summary>Alt+F4 on the widget: the user wants it gone, which is the Preferences switch.</summary>
+    internal event EventHandler? CloseRequested;
+
+    private bool _closeAllowed;
+
+    /// <summary>Closes it for real; anything else asking to close it becomes <see cref="CloseRequested"/>.</summary>
+    internal void CloseForGood()
+    {
+        _closeAllowed = true;
+        Close();
+    }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (!_closeAllowed)
+        {
+            // Closed here, the app would keep a dead window and never show the widget again.
+            e.Cancel = true;
+            CloseRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        base.OnClosing(e);
+    }
 
     internal void ApplySettings(AppSettings settings, ThemeColor download, ThemeColor upload, SurfacePalette surface)
     {
@@ -153,10 +175,31 @@ internal sealed class FloatingWidgetWindow : Window
 
     /// <summary>
     /// A remembered position can be off-screen after a monitor is unplugged, which would
-    /// leave the widget invisible and the preference apparently broken.
+    /// leave the widget invisible and the preference apparently broken. On any monitor that
+    /// still exists it stays where it was put — measured against that monitor, not the
+    /// primary one, or a widget on a second screen jumped back at every start.
     /// </summary>
     private void ClampToScreen()
     {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle != nint.Zero && Screens.WindowRect(handle) is { } rect && Screens.MonitorWorkArea(handle) is { } work)
+        {
+            var centreX = (rect.Left + rect.Right) / 2;
+            var centreY = (rect.Top + rect.Bottom) / 2;
+            if (centreX >= work.Left && centreX < work.Right && centreY >= work.Top && centreY < work.Bottom)
+            {
+                return;
+            }
+
+            var width = rect.Right - rect.Left;
+            var height = rect.Bottom - rect.Top;
+            Screens.MoveWindow(
+                handle,
+                Math.Clamp(rect.Left, work.Left, Math.Max(work.Left, work.Right - width)),
+                Math.Clamp(rect.Top, work.Top, Math.Max(work.Top, work.Bottom - height)));
+            return;
+        }
+
         var workArea = SystemParameters.WorkArea;
 
         if (Left < workArea.Left || Left > workArea.Right - 60)

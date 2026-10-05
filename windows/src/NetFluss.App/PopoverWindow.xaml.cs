@@ -574,6 +574,20 @@ public partial class PopoverWindow : Window
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 
+    /// <summary>
+    /// Alt+F4 hides rather than closes. There is one popover for the life of the app; once
+    /// closed, WPF refuses to show it again, so every later click failed silently — while the
+    /// sections it had switched on (Wi-Fi scans, router polling, the traffic trace) ran on,
+    /// because hiding is what switches them off. Shutdown still closes it: WPF ignores Cancel
+    /// while the application exits.
+    /// </summary>
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        e.Cancel = true;
+        HideAndNotify();
+        base.OnClosing(e);
+    }
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);

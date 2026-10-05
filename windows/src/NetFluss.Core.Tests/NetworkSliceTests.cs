@@ -110,6 +110,23 @@ public sealed class NetworkSliceTests
         Assert.Equal("203.0.113.20", hosts[0].Id);
     }
 
+    [Fact]
+    public void ConnectionsStayBoundedAndKeepTheHeaviest()
+    {
+        var slice = new NetworkSlice();
+
+        // A browser's day: one heavy download, then thousands of short-lived sockets.
+        slice.Ingest([Flow("chrome", "203.0.113.1", 443, 1_000_000, 0, localPort: 40000)], Second);
+        for (var batch = 0; batch < 10; batch++)
+        {
+            slice.Ingest(Enumerable.Range(0, 1000).Select(i => Flow("chrome", "203.0.113.2", 443, 1, 0, localPort: 1 + (batch * 1000) + i)), Second);
+        }
+
+        var kept = slice.Connections(SliceKind.App, "chrome");
+        Assert.True(kept.Count <= NetworkSlice.MaximumConnections + 1000, $"{kept.Count} connections kept");
+        Assert.Equal(1_000_000UL, kept[0].Received);
+    }
+
     [Theory]
     [InlineData(50000, 443, "https")]
     [InlineData(5353, 5353, "zeroconf")]

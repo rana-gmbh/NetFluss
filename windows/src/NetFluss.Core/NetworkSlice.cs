@@ -69,6 +69,9 @@ public sealed class NetworkSlice
 {
     public const int MaximumVisibleEntries = 12;
 
+    /// <summary>Connections kept for the drill-down before the lightest are let go.</summary>
+    public const int MaximumConnections = 4000;
+
     private readonly Dictionary<string, (ulong Rx, ulong Tx)> _hostTotals = [];
     private readonly Dictionary<string, (ulong Rx, ulong Tx)> _serviceTotals = [];
     private readonly Dictionary<string, (ulong Rx, ulong Tx)> _programTotals = [];
@@ -157,6 +160,18 @@ public sealed class NetworkSlice
             _connections[id] = _connections.TryGetValue(id, out var existing)
                 ? existing with { Received = existing.Received + rx, Sent = existing.Sent + tx }
                 : new SliceConnection(id, remote ?? "*", local ?? "*", localPort, remotePort, protocol, service, flow.Process, rx, tx);
+        }
+
+        // Every new socket is a new key — local ephemeral port included — so a window left
+        // open for days kept a browser's thousands of connections an hour, and scanned them
+        // all on every drill-down. Past the cap the lightest half goes; the drill-down lists
+        // the heaviest first anyway.
+        if (_connections.Count > MaximumConnections)
+        {
+            foreach (var light in _connections.Values.OrderBy(c => c.Total).Take(_connections.Count / 2).Select(c => c.Id).ToList())
+            {
+                _connections.Remove(light);
+            }
         }
 
         Merge(_hostTotals, hosts);

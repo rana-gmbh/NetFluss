@@ -262,6 +262,13 @@ internal sealed class PreferencesWindow : Window
         Resources["AccentBrush"] = new SolidColorBrush(accent);
     }
 
+    /// <summary>Windows switched between light and dark, or changed its accent: repaint to match.</summary>
+    internal void ApplySystemTheme()
+    {
+        ApplyPalette();
+        ThemeBrushes.ApplyFrame(this, !SystemTheme.IsAppLight());
+    }
+
     /// <summary>
     /// Windows 11 22H2+ Mica. Silently skipped elsewhere — the solid page brush underneath is
     /// a complete look on its own, so this is polish, never a requirement.

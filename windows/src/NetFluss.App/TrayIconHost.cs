@@ -46,7 +46,7 @@ public sealed class TrayIconHost : IDisposable
         // Space on the icon must open the popover just as a click does.
         _icon.TrayKeyboardSelect += (_, _) => LeftClicked?.Invoke(this, EventArgs.Empty);
         _icon.TrayBalloonTipClicked += (_, _) => NotificationClicked?.Invoke(this, EventArgs.Empty);
-        _icon.ForceCreate();
+        CreateIcon();
 
         _monitor.PropertyChanged += (_, e) =>
         {
@@ -58,6 +58,37 @@ public sealed class TrayIconHost : IDisposable
 
         Update(_monitor.Totals);
     }
+
+    /// <summary>
+    /// Adds the icon to the notification area. That fails while Explorer is starting or
+    /// restarting — at sign-in NetFluss can be up first — and a failure here used to abort
+    /// the app's whole startup, leaving a process with nothing on screen that still held the
+    /// single-instance lock. Instead it tries again every two seconds until the shell is there.
+    /// </summary>
+    private void CreateIcon()
+    {
+        try
+        {
+            _icon.ForceCreate();
+            _created = true;
+            _retry?.Stop();
+            Redraw();
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            if (_retry is null)
+            {
+                CrashLog.Write("tray", e);
+                _retry = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                _retry.Tick += (_, _) => CreateIcon();
+            }
+
+            _retry.Start();
+        }
+    }
+
+    private bool _created;
+    private System.Windows.Threading.DispatcherTimer? _retry;
 
     public event EventHandler? LeftClicked;
 
@@ -89,7 +120,21 @@ public sealed class TrayIconHost : IDisposable
     public bool IsVisible
     {
         get => _icon.Visibility == Visibility.Visible;
-        set => _icon.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+        set
+        {
+            if (value == IsVisible)
+            {
+                return;
+            }
+
+            _icon.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+
+            // A hidden icon is not repainted, so one coming back needs a fresh frame.
+            if (value)
+            {
+                Redraw();
+            }
+        }
     }
 
     /// <summary>
@@ -107,15 +152,26 @@ public sealed class TrayIconHost : IDisposable
 
     public void Update(RateTotals totals)
     {
+        // Every change below is a synchronous message to Explorer. A hidden icon, or one the
+        // shell has not taken yet, has nothing to show.
+        if (!_created || !IsVisible)
+        {
+            return;
+        }
+
         var size = Dpi.TrayIconSize();
         var options = Options with { Size = size };
 
         // Repainting an identical bitmap costs a GDI round trip and a shell redraw for
-        // nothing. On an idle machine this skips the overwhelming majority of ticks.
-        var text = string.Concat(
-            RateFormatter.FormatCompact(totals.RxRateBps, options.UseBits),
-            "/",
-            RateFormatter.FormatCompact(totals.TxRateBps, options.UseBits));
+        // nothing. On an idle machine this skips the overwhelming majority of ticks — and
+        // with the taskbar meter carrying the rates, the icon is a fixed glyph that never
+        // needs repainting for traffic at all.
+        var text = options.Layout == TrayMeterLayout.Icon
+            ? "icon"
+            : string.Concat(
+                RateFormatter.FormatCompact(totals.RxRateBps, options.UseBits),
+                "/",
+                RateFormatter.FormatCompact(totals.TxRateBps, options.UseBits));
 
         if (size == _lastRenderedSize && text == _lastRenderedText && _currentIcon is not null)
         {
@@ -123,17 +179,29 @@ public sealed class TrayIconHost : IDisposable
             return;
         }
 
-        _lastRenderedSize = size;
-        _lastRenderedText = text;
-
         var handle = _renderer.RenderIconHandle(totals, options);
         var previousHandle = _currentIconHandle;
         var previousIcon = _currentIcon;
-
         var icon = Icon.FromHandle(handle);
+
+        try
+        {
+            _icon.Icon = icon;
+        }
+        catch (InvalidOperationException)
+        {
+            // The shell refused the update — Explorer restarting or hung. Keep the icon it
+            // still has, free the one it did not take, and try again on the next tick.
+            icon.Dispose();
+            Dpi.DestroyIcon(handle);
+            _lastRenderedText = string.Empty;
+            return;
+        }
+
+        _lastRenderedSize = size;
+        _lastRenderedText = text;
         _currentIconHandle = handle;
         _currentIcon = icon;
-        _icon.Icon = icon;
 
         // Only now is the old handle unreferenced by the shell.
         previousIcon?.Dispose();
@@ -172,8 +240,31 @@ public sealed class TrayIconHost : IDisposable
             text += "\n" + (vpn.Country is { Length: > 0 } country ? $"{state} ({country})" : state);
         }
 
-        _icon.ToolTipText = text;
+        // Only when it reads differently, and with live rates at most every few seconds: each
+        // change is another synchronous message to Explorer, and a tooltip is read on hover.
+        var now = Environment.TickCount64;
+        if (text == _lastTooltip || (_vpnStatus == _lastTooltipVpn && now - _lastTooltipAt < TooltipIntervalMs))
+        {
+            return;
+        }
+
+        try
+        {
+            _icon.ToolTipText = text;
+            _lastTooltip = text;
+            _lastTooltipVpn = _vpnStatus;
+            _lastTooltipAt = now;
+        }
+        catch (InvalidOperationException)
+        {
+            // Explorer is not answering; the next tick tries again.
+        }
     }
+
+    private const long TooltipIntervalMs = 3000;
+    private string _lastTooltip = string.Empty;
+    private (bool Active, string? Country)? _lastTooltipVpn;
+    private long _lastTooltipAt;
 
     public void Dispose()
     {
