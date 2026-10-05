@@ -218,7 +218,8 @@ public sealed class NetworkMonitorService : INotifyPropertyChanged, IDisposable
 
     private bool _meterShowsCountry;
     private DateTime? _settleRefreshAt;
-    private static readonly TimeSpan VpnInterval = TimeSpan.FromSeconds(5);
+    // A safety net only: an address change already triggers a read at once (OnNetworkChanged).
+    private static readonly TimeSpan VpnInterval = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// True while the popover, a pinned popover or another detail view is on screen. The
@@ -406,30 +407,20 @@ public sealed class NetworkMonitorService : INotifyPropertyChanged, IDisposable
     /// <summary>Wi-Fi details, local addresses and the public address, each on its own cadence.</summary>
     private void RefreshDetails(DateTime now)
     {
-        if (_detailMonitoring && now - _lastWifiRefresh >= WifiDetailInterval)
+        if (_detailMonitoring && !_wifiReadInFlight && now - _lastWifiRefresh >= WifiDetailInterval)
         {
             _lastWifiRefresh = now;
-            RefreshWifiDetails();
+            _ = RefreshWifiDetailsAsync();
         }
 
         // Addresses are read while the popover is open, and — on a faster cadence — whenever
         // the meter shows a VPN mark or the exit country, since those change with the network
         // whether or not anything else is on screen.
         var addressInterval = DetectVpn ? VpnInterval : AddressInterval;
-        if ((_detailMonitoring || DetectVpn) && now - _lastAddressRefresh >= addressInterval)
+        if ((_detailMonitoring || DetectVpn) && !_addressReadInFlight && now - _lastAddressRefresh >= addressInterval)
         {
             _lastAddressRefresh = now;
-            var previous = _addresses.Fingerprint;
-            Addresses = NetworkAddresses.Read();
-
-            // A different set of local addresses means a VPN came up or went down or the
-            // network changed: the public address and its country follow now, and once more
-            // a moment later because routes and DNS take a little while to settle.
-            if (_meterShowsCountry && previous.Length > 0 && previous != _addresses.Fingerprint)
-            {
-                _lastPublicIpRefresh = DateTime.MinValue;
-                _settleRefreshAt = now + TimeSpan.FromSeconds(2.5);
-            }
+            _ = RefreshAddressesAsync();
         }
 
         if (_settleRefreshAt is { } settle && now >= settle && !_publicIpInFlight)
@@ -445,14 +436,62 @@ public sealed class NetworkMonitorService : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void RefreshWifiDetails()
+    // Both reads below are synchronous Windows calls — the adapter list with its addresses,
+    // the WLAN service — that take milliseconds to a good part of a second on a busy machine.
+    // They run on the thread pool; their results are applied back here, on the UI thread.
+    private bool _addressReadInFlight;
+    private bool _wifiReadInFlight;
+
+    private async Task RefreshAddressesAsync()
+    {
+        _addressReadInFlight = true;
+        try
+        {
+            var previous = _addresses.Fingerprint;
+            Addresses = await Task.Run(NetworkAddresses.Read);
+
+            // A different set of local addresses means a VPN came up or went down or the
+            // network changed: the public address and its country follow now, and once more
+            // a moment later because routes and DNS take a little while to settle.
+            if (_meterShowsCountry && previous.Length > 0 && previous != _addresses.Fingerprint)
+            {
+                _lastPublicIpRefresh = DateTime.MinValue;
+                _settleRefreshAt = DateTime.UtcNow + TimeSpan.FromSeconds(2.5);
+            }
+        }
+        catch (Exception e)
+        {
+            CrashLog.Write("addresses", e);
+        }
+        finally
+        {
+            _addressReadInFlight = false;
+        }
+    }
+
+    private async Task RefreshWifiDetailsAsync()
+    {
+        _wifiReadInFlight = true;
+        try
+        {
+            (_wifiAccess, _wifiDetails) = await Task.Run(ReadWifiDetails);
+        }
+        catch (Exception e)
+        {
+            CrashLog.Write("wifi details", e);
+        }
+        finally
+        {
+            _wifiReadInFlight = false;
+        }
+    }
+
+    private static (WlanAccess Access, IReadOnlyDictionary<string, WifiDetail> Details) ReadWifiDetails()
     {
         using var client = WlanClient.TryOpen();
         if (client is null)
         {
-            _wifiAccess = WlanAccess.NoAdapter;
-            _wifiDetails = new Dictionary<string, WifiDetail>();
-            return;
+            return (WlanAccess.NoAdapter, new Dictionary<string, WifiDetail>());
         }
 
         var details = new Dictionary<string, WifiDetail>(StringComparer.OrdinalIgnoreCase);
@@ -477,8 +516,7 @@ public sealed class NetworkMonitorService : INotifyPropertyChanged, IDisposable
             }
         }
 
-        _wifiAccess = access;
-        _wifiDetails = details;
+        return (access, details);
     }
 
     private IReadOnlyList<AdapterStatus> AttachWifi(IReadOnlyList<AdapterStatus> sampled)

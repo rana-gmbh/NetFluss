@@ -202,12 +202,28 @@ public partial class PopoverWindow : Window
         }
 
         PrepareHeightLimit(anchor);
-        SetSectionsActive(true);
         Show();
+        RefreshSections();
         UpdateLayout();
         PlaceBesideAnchor();
         Activate();
+        ActivateSectionsAfterFirstFrame();
     }
+
+    /// <summary>
+    /// Switching the sections on starts their lookups — the Wi-Fi radio and network list,
+    /// addresses, DNS — which are synchronous Windows calls that can take a good part of a
+    /// second with busy Wi-Fi or many virtual adapters. They used to run before the popover
+    /// appeared; now it appears at once with what NetFluss already knows, and fills in.
+    /// </summary>
+    private void ActivateSectionsAfterFirstFrame()
+        => Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, () =>
+        {
+            if (IsVisible)
+            {
+                SetSectionsActive(true);
+            }
+        });
 
     /// <summary>
     /// Lays the popover out off-screen, live but never activated, for <see cref="Snapshot"/>.
@@ -253,10 +269,11 @@ public partial class PopoverWindow : Window
     /// <summary>Shows the pinned window where it was left, kept on a monitor that still exists.</summary>
     private void ShowPinned(double left, double top)
     {
-        SetSectionsActive(true);
         Left = left;
         Top = top;
         Show();
+        RefreshSections();
+        ActivateSectionsAfterFirstFrame();
         UpdateLayout();
 
         // The monitor it was pinned on may be gone; bring it back to the nearest work area.
