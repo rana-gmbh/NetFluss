@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "binaries": NetFluss's own executables for both
+  architectures, as build-release.ps1 -Stage Publish gathers them and GitHub's
+  upload-artifact zips them. Paste into SignPath under Project → Artifact configurations.
+
+  The version parameter comes from the release workflow; every file must carry it as its
+  product version and "NetFluss" as its product name (SignPath Foundation's metadata rule).
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="x64/NetFluss.exe" product-name="NetFluss" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="x64/NetFluss.Service.exe" product-name="NetFluss" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="arm64/NetFluss.exe" product-name="NetFluss" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="arm64/NetFluss.Service.exe" product-name="NetFluss" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

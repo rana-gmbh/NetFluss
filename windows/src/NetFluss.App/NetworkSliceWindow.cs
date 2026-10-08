@@ -282,7 +282,8 @@ internal sealed class NetworkSliceWindow : Window
                 _ = LookupName(host);
             }
 
-            if (!_slice.IsPrivate(host) && !_slice.HasCountry(host) && _lookupsInFlight.Add("geo|" + host))
+            // api.country.is sees every address asked about: only with the user's consent.
+            if (_store.Settings.AllowIpLookups && !_slice.IsPrivate(host) && !_slice.HasCountry(host) && _lookupsInFlight.Add("geo|" + host))
             {
                 _ = LookupCountry(host);
             }

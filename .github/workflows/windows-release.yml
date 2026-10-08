@@ -19,13 +19,18 @@ on:
 
 permissions:
   contents: write
+  # SignPath fetches the uploaded artifacts with this workflow's token.
+  actions: read
 
 jobs:
   release:
     runs-on: windows-latest
     env:
       # Secrets cannot appear in an if: condition; a flag derived from one can.
-      HAS_SIGNING: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 != '' }}
+      # Code signing through SignPath, once its secret and repository variables are set:
+      # secret SIGNPATH_API_TOKEN; variables SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG,
+      # SIGNPATH_SIGNING_POLICY_SLUG (the test policy first, the release policy later).
+      HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -53,26 +58,80 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
 
-      - name: Prepare signing certificate
-        if: env.HAS_SIGNING == 'true'
+      # Code signing through SignPath (SignPath Foundation's free certificate for open source).
+      # In two rounds, because SignPath cannot sign inside an Inno Setup installer: first
+      # NetFluss.exe and the helper, then the installers built from those signed files. Each
+      # round waits for an approver to approve it in SignPath — the Foundation requires a manual
+      # approval for every release. Until the secret and variables named in the job env are set,
+      # releases are built unsigned. The artifact configurations: windows/Packaging/signpath/*.xml.
+      - name: Publish
         shell: pwsh
-        env:
-          SIGN_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
-        run: |
-          $path = Join-Path $env:RUNNER_TEMP 'signing.pfx'
-          [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
-          "NETFLUSS_SIGN_PFX=$path" >> $env:GITHUB_ENV
+        run: ./windows/Packaging/build-release.ps1 -Version ${{ steps.version.outputs.version }} -Stage Publish
 
-      - name: Build release files
+      - name: Upload the executables for signing
+        id: upload-binaries
+        if: env.HAS_SIGNPATH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: netfluss-${{ steps.version.outputs.version }}-binaries-unsigned
+          path: windows/artifacts/sign/binaries
+          if-no-files-found: error
+
+      - name: Sign the executables
+        if: env.HAS_SIGNPATH == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: binaries
+          github-artifact-id: ${{ steps.upload-binaries.outputs.artifact-id }}
+          wait-for-completion: true
+          # Time for the approver to approve the request.
+          wait-for-completion-timeout-in-seconds: 14400
+          output-artifact-directory: windows/artifacts/signed/binaries
+          parameters: |
+            version: ${{ toJSON(steps.version.outputs.version) }}
+
+      - name: Package
+        shell: pwsh
+        run: ./windows/Packaging/build-release.ps1 -Version ${{ steps.version.outputs.version }} -Stage Package
+
+      - name: Upload the installers for signing
+        id: upload-installers
+        if: env.HAS_SIGNPATH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: netfluss-${{ steps.version.outputs.version }}-installers-unsigned
+          path: windows/artifacts/sign/installers
+          if-no-files-found: error
+
+      - name: Sign the installers
+        if: env.HAS_SIGNPATH == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: installers
+          github-artifact-id: ${{ steps.upload-installers.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 14400
+          output-artifact-directory: windows/artifacts/signed/installers
+          parameters: |
+            version: ${{ toJSON(steps.version.outputs.version) }}
+
+      - name: Checksums and update signature
         shell: pwsh
         env:
-          NETFLUSS_SIGN_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
           # Signs SHA256SUMS.txt for the in-app updater (NetFluss.Core/UpdateSignature.cs).
           NETFLUSS_UPDATE_SIGNING_KEY: ${{ secrets.NETFLUSS_UPDATE_SIGNING_KEY }}
         run: |
           # A release without the signature could never be installed by the in-app updater.
           if (-not $env:NETFLUSS_UPDATE_SIGNING_KEY) { throw 'The NETFLUSS_UPDATE_SIGNING_KEY secret is missing.' }
-          ./windows/Packaging/build-release.ps1 -Version ${{ steps.version.outputs.version }}
+          ./windows/Packaging/build-release.ps1 -Version ${{ steps.version.outputs.version }} -Stage Checksums
 
       - name: Upload to the release
         shell: pwsh

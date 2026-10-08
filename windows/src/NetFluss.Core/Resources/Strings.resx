@@ -2467,4 +2467,16 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="Installed, version {0} — newer than this NetFluss ({1}). Update NetFluss, or reinstall the helper from this version." xml:space="preserve">
     <value>Installed, version {0} — newer than this NetFluss ({1}). Update NetFluss, or reinstall the helper from this version.</value>
   </data>
+  <data name="Privacy" xml:space="preserve">
+    <value>Privacy</value>
+  </data>
+  <data name="Privacy Policy" xml:space="preserve">
+    <value>Privacy Policy</value>
+  </data>
+  <data name="Look up public IP addresses and countries" xml:space="preserve">
+    <value>Look up public IP addresses and countries</value>
+  </data>
+  <data name="Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." xml:space="preserve">
+    <value>Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty.</value>
+  </data>
 </root>

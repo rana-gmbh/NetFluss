@@ -75,6 +75,16 @@ internal static class GeneralPage
             Kit.L("Once a day, NetFluss looks for a new Windows release on GitHub and tells you once when one is available. You can also check any time in About."),
             Kit.Row(check, Kit.Switch(settings, nameof(AppSettings.AutomaticUpdateChecks)))));
 
+        // The installer asks about the same two things; SignPath Foundation's privacy rules
+        // want every lookup the user did not ask for to be described and to be switchable off.
+        page.Children.Add(Kit.Header(Kit.L("Privacy")));
+        var policy = Kit.Button(Kit.L("Privacy Policy"), () => Open(PrivacyPolicyUrl));
+        policy.Margin = new Thickness(0, 0, 12, 0);
+        page.Children.Add(Kit.Card(
+            Kit.L("Look up public IP addresses and countries"),
+            Kit.L("Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty."),
+            Kit.Row(policy, Kit.Switch(settings, nameof(AppSettings.AllowIpLookups)))));
+
         var footer = Kit.Caption(Kit.L("Settings are stored in {0}", SettingsStore.DefaultPath));
         footer.Margin = new Thickness(2, 18, 0, 0);
         page.Children.Add(footer);
@@ -219,6 +229,8 @@ internal static class GeneralPage
         card.Unloaded += (_, _) => context.Helper.ConnectionChanged -= OnConnection;
         return card;
     }
+
+    internal const string PrivacyPolicyUrl = "https://github.com/rana-gmbh/NetFluss/blob/main/PRIVACY.md";
 
     private static void Open(string uri)
     {

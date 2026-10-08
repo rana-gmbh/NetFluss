@@ -1,0 +1,13 @@
+﻿NetFluss and your privacy
+
+NetFluss has no account, no analytics and no telemetry. Everything it records stays on this PC (%LOCALAPPDATA%\NetFluss).
+
+It contacts these services on its own. On the next page you can switch them off; Preferences > General can change it later:
+
+- Update check, once a day: GitHub (api.github.com) sees your IP address and the NetFluss version.
+- Public IP address and its country, shown in the popover and optionally on the taskbar: ipify (api.ipify.org) and ipwho.is see your IP address.
+- Server countries in the Network Slice window: country.is (api.country.is) sees your IP address and the addresses of the servers your PC talks to.
+
+Only when you ask for them: the speed test (M-Lab, which publishes tests including your IP address, or Cloudflare), downloading an update, the routers you configure, and the VPN servers in your profiles.
+
+Full privacy policy: https://github.com/rana-gmbh/NetFluss/blob/main/PRIVACY.md

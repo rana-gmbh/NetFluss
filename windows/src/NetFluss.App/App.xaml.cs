@@ -112,6 +112,7 @@ public partial class NetFlussApplication : Application
         _ownsSession = true;
 
         _store = new SettingsStore(SettingsStore.DefaultPath);
+        ApplyInstallerChoices(_store);
         NetFluss.Core.Localization.Use(_store.Settings.Language);
         _lastIPv6 = _store.Settings.ExternalIPv6;
 
@@ -273,6 +274,47 @@ public partial class NetFlussApplication : Application
 
         // At idle, once the meter has been placed, so the hint can say where it really is.
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () => AfterStartup(uncleanSince));
+    }
+
+    /// <summary>
+    /// The privacy choices made in the installer (NetFluss.iss writes them only from an
+    /// interactive installation), taken over once and then removed, so Preferences stays in
+    /// charge afterwards.
+    /// </summary>
+    private static void ApplyInstallerChoices(SettingsStore store)
+    {
+        const string key = @"Software\NetFluss\InstallerChoices";
+        try
+        {
+            using (var choices = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(key))
+            {
+                if (choices is null)
+                {
+                    return;
+                }
+
+                var updates = choices.GetValue("AutomaticUpdateChecks") as int?;
+                var lookups = choices.GetValue("AllowIpLookups") as int?;
+                store.Batch(settings =>
+                {
+                    if (updates is { } update)
+                    {
+                        settings.AutomaticUpdateChecks = update != 0;
+                    }
+
+                    if (lookups is { } lookup)
+                    {
+                        settings.AllowIpLookups = lookup != 0;
+                    }
+                });
+            }
+
+            Microsoft.Win32.Registry.CurrentUser.DeleteSubKey(key, throwOnMissingSubKey: false);
+        }
+        catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException or System.IO.IOException)
+        {
+            CrashLog.Write("installer choices", e);
+        }
     }
 
     /// <summary>What can wait until NetFluss is up: the crash report and the first-launch hint.</summary>
@@ -660,6 +702,7 @@ public partial class NetFlussApplication : Application
         _monitor.PreferIPv6 = settings.ExternalIPv6;
         _monitor.DetectVpn = settings.NeedsVpnDetection;
         _monitor.MeterShowsCountry = settings.ShowCountryFlag;
+        _monitor.AllowIpLookups = settings.AllowIpLookups;
 
         // Switching IPv4/IPv6 must show the other address now, not after the five-minute
         // cache runs out — on macOS the setting change triggers the same refetch.

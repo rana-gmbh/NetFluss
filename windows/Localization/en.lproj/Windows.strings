@@ -246,3 +246,7 @@
 "This NetFluss is older than its helper. Update NetFluss, or reinstall the helper from this version, to see which apps are using the network." = "This NetFluss is older than its helper. Update NetFluss, or reinstall the helper from this version, to see which apps are using the network.";
 "This NetFluss is older than its helper. Update NetFluss, or reinstall the helper from this version, to see who this PC is talking to." = "This NetFluss is older than its helper. Update NetFluss, or reinstall the helper from this version, to see who this PC is talking to.";
 "Installed, version %@ — newer than this NetFluss (%@). Update NetFluss, or reinstall the helper from this version." = "Installed, version %@ — newer than this NetFluss (%@). Update NetFluss, or reinstall the helper from this version.";
+"Privacy" = "Privacy";
+"Privacy Policy" = "Privacy Policy";
+"Look up public IP addresses and countries" = "Look up public IP addresses and countries";
+"Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." = "Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty.";

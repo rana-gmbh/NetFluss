@@ -1,4 +1,4 @@
-; NetFluss for Windows — installer.
+﻿; NetFluss for Windows — installer.
 ;
 ; Built by windows/Packaging/build-release.ps1, which passes:
 ;   /DAppVersion=1.2.3      the version (from the win-vX.Y.Z tag; may be 1.2.3-beta.1)
@@ -51,6 +51,11 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 VersionInfoVersion={#NumericVersion}
+; The full version (2.6.0-beta.1) as product and file version text, as NetFluss.exe and the
+; helper carry it: code signing checks that every signed file names the same product version.
+VersionInfoTextVersion={#AppVersion}
+VersionInfoProductVersion={#NumericVersion}
+VersionInfoProductTextVersion={#AppVersion}
 VersionInfoCompany=Rana GmbH
 VersionInfoProductName=NetFluss
 #if Arch == "arm64"
@@ -63,17 +68,27 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.19041
 
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "german"; MessagesFile: "compiler:Languages\German.isl"
+; The privacy page comes before the installation, as SignPath Foundation's rules require for
+; an app that contacts services on its own; the tasks page then lets the user switch them off.
+Name: "english"; MessagesFile: "compiler:Default.isl"; InfoBeforeFile: "privacy.txt"
+Name: "german"; MessagesFile: "compiler:Languages\German.isl"; InfoBeforeFile: "privacy.de.txt"
 
 [CustomMessages]
 english.AutoStart=Start NetFluss when I sign in
 german.AutoStart=NetFluss bei der Anmeldung starten
 english.LaunchNow=Launch NetFluss
 german.LaunchNow=NetFluss starten
+english.Privacy=Privacy:
+german.Privacy=Datenschutz:
+english.UpdateCheck=Check for updates once a day (GitHub)
+german.UpdateCheck=Einmal täglich nach Updates suchen (GitHub)
+english.IpLookups=Look up public IP addresses and countries (ipify, ipwho.is, country.is)
+german.IpLookups=Öffentliche IP-Adressen und Länder abfragen (ipify, ipwho.is, country.is)
 
 [Tasks]
 Name: "autostart"; Description: "{cm:AutoStart}"
+Name: "updatecheck"; Description: "{cm:UpdateCheck}"; GroupDescription: "{cm:Privacy}"
+Name: "iplookups"; Description: "{cm:IpLookups}"; GroupDescription: "{cm:Privacy}"
 
 [Files]
 Source: "{#Source}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -84,6 +99,13 @@ Name: "{autoprograms}\NetFluss"; Filename: "{app}\NetFluss.exe"
 [Registry]
 ; The same value the app's own "Start with Windows" switch writes, so the two agree.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "NetFluss"; ValueData: """{app}\NetFluss.exe"""; Tasks: autostart; Flags: uninsdeletevalue
+; The privacy choices, read once by NetFluss at its next start and then removed. Only from an
+; interactive installation: an in-app update runs silently and must not undo a change made
+; in Preferences since.
+Root: HKCU; Subkey: "Software\NetFluss\InstallerChoices"; ValueType: dword; ValueName: "AutomaticUpdateChecks"; ValueData: "1"; Tasks: updatecheck; Check: not WizardSilent; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\NetFluss\InstallerChoices"; ValueType: dword; ValueName: "AutomaticUpdateChecks"; ValueData: "0"; Tasks: not updatecheck; Check: not WizardSilent; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\NetFluss\InstallerChoices"; ValueType: dword; ValueName: "AllowIpLookups"; ValueData: "1"; Tasks: iplookups; Check: not WizardSilent; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\NetFluss\InstallerChoices"; ValueType: dword; ValueName: "AllowIpLookups"; ValueData: "0"; Tasks: not iplookups; Check: not WizardSilent; Flags: uninsdeletekey
 
 [Run]
 Filename: "{app}\NetFluss.exe"; Description: "{cm:LaunchNow}"; Flags: nowait postinstall skipifsilent

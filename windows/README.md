@@ -79,7 +79,7 @@ pre-releases, with `--prerelease`. Versions are ordered by semver (2.6.0-beta.1 
 never see a beta and beta testers get the next beta and then the release, which returns
 them to the stable channel. `NETFLUSS_UPDATE_PRERELEASES=1` opts any build into
 pre-releases, for trying an update end to end on a throwaway pre-release first.
-Release notes live in `windows/Packaging/release-notes/`.
+Release notes live in `windows/Packaging/release-notes/`. Each release's notes end with `release-notes/code-signing-policy.md`: SignPath Foundation, which signs the Windows builds, requires the code signing policy on every download page. Signing runs in the release workflow through SignPath in two rounds (executables, then installers), each approved by hand; the artifact configurations are in `windows/Packaging/signpath/`.
 
 **`--latest=false` is not optional.** The macOS app's Sparkle feed is
 `releases/latest/download/appcast.xml`, so a Windows release marked "latest" would cut every

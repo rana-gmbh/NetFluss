@@ -22,6 +22,12 @@
     <Product>NetFluss</Product>
     <Copyright>Copyright © 2026 Rana GmbH</Copyright>
     <Version>0.1.0</Version>
+    <!--
+      The product version is the release version and nothing else: the SDK would append
+      "+<commit>", and code signing (SignPath Foundation) requires every signed file of a
+      release — app, helper and installer — to carry the same product version.
+    -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <!-- Matches the macOS app's GPLv3 licensing. -->
     <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
   </PropertyGroup>

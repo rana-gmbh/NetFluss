@@ -151,6 +151,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     private string _lastNotifiedVersion = string.Empty;
     private DateTimeOffset? _lastUpdateCheck;
     private bool _firstLaunchHintShown;
+    private bool _allowIpLookups = true;
     private bool _popoverPinned;
     private double? _pinnedLeft;
     private double? _pinnedTop;
@@ -806,6 +807,19 @@ public sealed class AppSettings : INotifyPropertyChanged
     {
         get => _lastUpdateCheck;
         set => Set(ref _lastUpdateCheck, value);
+    }
+
+    /// <summary>
+    /// Whether NetFluss may ask online services about IP addresses: the public address and its
+    /// country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice
+    /// (api.country.is). Those services see the address asked about. Off, the public address,
+    /// the VPN exit country and the country badges stay empty — a choice the installer offers
+    /// too, as SignPath Foundation's privacy rules require.
+    /// </summary>
+    public bool AllowIpLookups
+    {
+        get => _allowIpLookups;
+        set => Set(ref _allowIpLookups, value);
     }
 
     /// <summary>

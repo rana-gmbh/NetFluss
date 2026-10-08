@@ -113,6 +113,25 @@ public sealed class NetworkMonitorService : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// Whether the public address may be looked up online (the AllowIpLookups setting).
+    /// Switching it off also forgets the one already shown.
+    /// </summary>
+    public bool AllowIpLookups
+    {
+        get => _allowIpLookups;
+        set
+        {
+            _allowIpLookups = value;
+            if (!value)
+            {
+                PublicAddress = null;
+            }
+        }
+    }
+
+    private bool _allowIpLookups = true;
+
     public PublicIp? PublicAddress
     {
         get => _publicAddress;
@@ -429,7 +448,7 @@ public sealed class NetworkMonitorService : INotifyPropertyChanged, IDisposable
             _lastPublicIpRefresh = DateTime.MinValue;
         }
 
-        if ((_detailMonitoring || _meterShowsCountry) && !_publicIpInFlight && now - _lastPublicIpRefresh >= PublicIpInterval)
+        if (AllowIpLookups && (_detailMonitoring || _meterShowsCountry) && !_publicIpInFlight && now - _lastPublicIpRefresh >= PublicIpInterval)
         {
             _lastPublicIpRefresh = now;
             _ = RefreshPublicAddressAsync();

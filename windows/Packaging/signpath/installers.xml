@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "installers": the two setups, built by
+  build-release.ps1 -Stage Package from executables already signed through "binaries".
+  SignPath cannot sign inside an Inno Setup installer, hence the second round.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="NetFluss-Setup-${version}-x64.exe" product-name="NetFluss" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="NetFluss-Setup-${version}-arm64.exe" product-name="NetFluss" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

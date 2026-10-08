@@ -24,6 +24,17 @@ NetFluss now runs on Windows too: a native Windows 10 and 11 app with the same f
 
 Updating from Beta 1: the installed version offers Beta 2 by itself (About → Install and Relaunch). Top Apps then asks once to update the helper, which needs administrator approval.
 
+### Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). This covers NetFluss for Windows; the macOS app is signed and notarized with Rana GmbH's Apple Developer ID.
+
+- **Committers and reviewers:** [Robert Rudolph](https://github.com/rana-gmbh) (Rana GmbH)
+- **Approvers:** [Robert Rudolph](https://github.com/rana-gmbh) (Rana GmbH)
+
+Every release is built from this repository by [GitHub Actions](.github/workflows/windows-release.yml) and signed only after a manual approval.
+
+**Privacy:** see the [privacy policy](PRIVACY.md). NetFluss sends no telemetry. The few online lookups it makes on its own — the daily update check and the public IP and country lookups — are listed there, and each can be switched off in the installer and in Preferences.
+
 ## New in 2.6
 
 - **VPN indicator in the menu bar — protected at a glance.** An optional dot or shield right of the upload and download rates shows whether a VPN is up. It works with the **VPN connections built into NetFluss** *and* with **external VPN clients** — Tunnelblick, the WireGuard app, Mullvad, Tailscale, the macOS VPN settings and others: NetFluss detects any active tunnel, no matter which app started it.

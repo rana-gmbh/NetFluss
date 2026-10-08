@@ -1,0 +1,13 @@
+﻿NetFluss und Ihre Privatsphäre
+
+NetFluss hat kein Konto, keine Analyse und keine Telemetrie. Alles, was es aufzeichnet, bleibt auf diesem PC (%LOCALAPPDATA%\NetFluss).
+
+Diese Dienste kontaktiert es von sich aus. Auf der nächsten Seite können Sie sie abschalten; später unter Einstellungen > Allgemein:
+
+- Update-Prüfung, einmal täglich: GitHub (api.github.com) sieht Ihre IP-Adresse und die NetFluss-Version.
+- Öffentliche IP-Adresse und ihr Land, im Popover und optional in der Taskleiste: ipify (api.ipify.org) und ipwho.is sehen Ihre IP-Adresse.
+- Länder der Server im Fenster Network Slice: country.is (api.country.is) sieht Ihre IP-Adresse und die Adressen der Server, mit denen Ihr PC spricht.
+
+Nur auf Ihren Wunsch: der Geschwindigkeitstest (M-Lab, das Tests samt Ihrer IP-Adresse veröffentlicht, oder Cloudflare), das Laden eines Updates, die Router, die Sie einrichten, und die VPN-Server in Ihren Profilen.
+
+Vollständige Datenschutzerklärung: https://github.com/rana-gmbh/NetFluss/blob/main/PRIVACY.md

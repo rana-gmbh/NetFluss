@@ -2467,4 +2467,16 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Installed, version {0} — newer than this NetFluss ({1}). Update NetFluss, or reinstall the helper from this version." xml:space="preserve">
     <value>Installiert, Version {0} – neuer als dieses NetFluss ({1}). Aktualisiere NetFluss oder installiere den Helfer dieser Version neu.</value>
   </data>
+  <data name="Privacy" xml:space="preserve">
+    <value>Datenschutz</value>
+  </data>
+  <data name="Privacy Policy" xml:space="preserve">
+    <value>Datenschutzerklärung</value>
+  </data>
+  <data name="Look up public IP addresses and countries" xml:space="preserve">
+    <value>Öffentliche IP-Adressen und Länder abfragen</value>
+  </data>
+  <data name="Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." xml:space="preserve">
+    <value>Zeigt deine öffentliche Adresse und ihr Land (api.ipify.org, ipwho.is) sowie die Länder der Server in Network Slice (api.country.is). Diese Dienste sehen die abgefragten Adressen. Ausgeschaltet bleiben diese Angaben leer.</value>
+  </data>
 </root>

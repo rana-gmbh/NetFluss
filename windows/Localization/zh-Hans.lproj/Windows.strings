@@ -242,3 +242,7 @@
 "This NetFluss is older than its helper. Update NetFluss, or reinstall the helper from this version, to see which apps are using the network." = "此 NetFluss 比其辅助工具旧。请更新 NetFluss，或重新安装此版本的辅助工具，以查看哪些 App 正在使用网络。";
 "This NetFluss is older than its helper. Update NetFluss, or reinstall the helper from this version, to see who this PC is talking to." = "此 NetFluss 比其辅助工具旧。请更新 NetFluss，或重新安装此版本的辅助工具，以查看此电脑正在与谁通信。";
 "Installed, version %@ — newer than this NetFluss (%@). Update NetFluss, or reinstall the helper from this version." = "已安装，版本 %@ —— 比此 NetFluss（%@）新。请更新 NetFluss，或重新安装此版本的辅助工具。";
+"Privacy" = "隐私";
+"Privacy Policy" = "隐私政策";
+"Look up public IP addresses and countries" = "查询公网 IP 地址和国家/地区";
+"Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." = "显示你的公网地址及其所在国家/地区（api.ipify.org、ipwho.is），以及 Network Slice 中服务器的国家/地区（api.country.is）。这些服务能看到所查询的地址。关闭后，这些信息将保持空白。";

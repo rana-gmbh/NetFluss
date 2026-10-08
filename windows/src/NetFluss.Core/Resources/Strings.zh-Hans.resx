@@ -2467,4 +2467,16 @@
   <data name="Installed, version {0} — newer than this NetFluss ({1}). Update NetFluss, or reinstall the helper from this version." xml:space="preserve">
     <value>已安装，版本 {0} —— 比此 NetFluss（{1}）新。请更新 NetFluss，或重新安装此版本的辅助工具。</value>
   </data>
+  <data name="Privacy" xml:space="preserve">
+    <value>隐私</value>
+  </data>
+  <data name="Privacy Policy" xml:space="preserve">
+    <value>隐私政策</value>
+  </data>
+  <data name="Look up public IP addresses and countries" xml:space="preserve">
+    <value>查询公网 IP 地址和国家/地区</value>
+  </data>
+  <data name="Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." xml:space="preserve">
+    <value>显示你的公网地址及其所在国家/地区（api.ipify.org、ipwho.is），以及 Network Slice 中服务器的国家/地区（api.country.is）。这些服务能看到所查询的地址。关闭后，这些信息将保持空白。</value>
+  </data>
 </root>
