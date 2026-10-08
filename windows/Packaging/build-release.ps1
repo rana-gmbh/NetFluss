@@ -68,6 +68,19 @@ function Use-Signed([string] $From, [string] $To) {
     Write-Host "signed: $To"
 }
 
+# Inno Setup pads its version strings with spaces to fixed widths — product name 60, product
+# version 50 — and SignPath's metadata check compares the exact text (signpath/installers.xml
+# expects exactly this). A different Inno Setup could change the widths; failing here says why.
+function Assert-InstallerVersionInfo([string] $Setup) {
+    $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($Setup)
+    if ($info.ProductName.TrimEnd() -ne 'NetFluss' -or $info.ProductName.Length -ne 60 -or
+        $info.ProductVersion.TrimEnd() -ne $Version -or $info.ProductVersion.Length -ne 50) {
+        throw ("$Setup has product name '$($info.ProductName)' ($($info.ProductName.Length) characters) and version " +
+            "'$($info.ProductVersion)' ($($info.ProductVersion.Length)); signpath/installers.xml expects 'NetFluss' padded " +
+            "to 60 and '$Version' padded to 50. Update the configuration in SignPath for this Inno Setup version.")
+    }
+}
+
 function Publish {
     if (Test-Path $artifacts) { Remove-Item $artifacts -Recurse -Force }
     New-Item -ItemType Directory -Force $release | Out-Null
@@ -120,6 +133,7 @@ function Package {
         # Windows' file-version field is numbers only; a beta's suffix stays in AppVersion.
         Invoke-Checked $iscc @("/DAppVersion=$Version", "/DNumericVersion=$($Version -replace '-.*', '')", "/DArch=$arch", "/DSource=$publish", (Join-Path $PSScriptRoot 'NetFluss.iss'))
         $setup = Join-Path $release "NetFluss-Setup-$Version-$arch.exe"
+        Assert-InstallerVersionInfo $setup
         Sign @($setup)
 
         # The layout the SignPath artifact configuration "installers" describes.

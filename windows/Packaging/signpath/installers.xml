@@ -3,16 +3,23 @@
   SignPath artifact configuration "installers": the two setups, built by
   build-release.ps1 -Stage Package from executables already signed through "binaries".
   SignPath cannot sign inside an Inno Setup installer, hence the second round.
+
+  Inno Setup writes its version strings into fixed-width slots and pads them with spaces:
+  the product name to 60 characters and the product version to 50. SignPath compares the
+  exact text, so the expected values are padded the same way — the name here, the version
+  by the release workflow (parameter installerProductVersion). build-release.ps1 checks
+  the widths, so a different Inno Setup fails the build there rather than here.
 -->
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
   <parameters>
     <parameter name="version" required="true" />
+    <parameter name="installerProductVersion" required="true" />
   </parameters>
   <zip-file>
-    <pe-file path="NetFluss-Setup-${version}-x64.exe" product-name="NetFluss" product-version="${version}">
+    <pe-file path="NetFluss-Setup-${version}-x64.exe" product-name="NetFluss                                                    " product-version="${installerProductVersion}">
       <authenticode-sign />
     </pe-file>
-    <pe-file path="NetFluss-Setup-${version}-arm64.exe" product-name="NetFluss" product-version="${version}">
+    <pe-file path="NetFluss-Setup-${version}-arm64.exe" product-name="NetFluss                                                    " product-version="${installerProductVersion}">
       <authenticode-sign />
     </pe-file>
   </zip-file>
