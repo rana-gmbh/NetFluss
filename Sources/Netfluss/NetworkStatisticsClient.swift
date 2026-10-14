@@ -48,8 +48,8 @@ final class NetworkStatisticsClient {
     /// are absent from the breakdown but still included in the total.
     var onSample: ((_ totalRxRateBps: Double, _ ratesByInterface: [String: Double], _ at: Date) -> Void)?
 
-    /// `true` if the kernel rejected our subscription (e.g. the private message
-    /// layout changed on a future macOS). The caller should fall back to the
+    /// `true` if the kernel rejected a subscription or counts query (e.g. the
+    /// private message layout changed). The caller should fall back to the
     /// `nettop`-based collector when this is observed. Thread-safe.
     var subscriptionFailed: Bool { queue.sync { _subscriptionFailed } }
     private var _subscriptionFailed = false
@@ -183,6 +183,7 @@ final class NetworkStatisticsClient {
 
     private func subscribe(provider: UInt32) {
         var msg = [UInt8](repeating: 0, count: 56)
+        writeU64(&msg, UInt64(Self.MSG_ADD_ALL_SRCS), at: 0) // echoed in error replies
         writeU32(&msg, Self.MSG_ADD_ALL_SRCS, at: 8)   // hdr.type
         writeU16(&msg, 56, at: 12)                     // hdr.length
         writeU32(&msg, provider, at: 32)               // provider
@@ -191,6 +192,7 @@ final class NetworkStatisticsClient {
 
     private func query() {
         var msg = [UInt8](repeating: 0, count: 24)
+        writeU64(&msg, UInt64(Self.MSG_QUERY_SRC), at: 0)
         writeU32(&msg, Self.MSG_QUERY_SRC, at: 8)
         writeU16(&msg, 24, at: 12)
         writeU64(&msg, Self.srcRefAll, at: 16)         // srcref = ALL
@@ -201,6 +203,7 @@ final class NetworkStatisticsClient {
     /// interface. Requested once per srcref; the reply is an SRC_DESC message.
     private func requestDescriptor(_ srcref: UInt64) {
         var msg = [UInt8](repeating: 0, count: 24)
+        writeU64(&msg, UInt64(Self.MSG_GET_SRC_DESC), at: 0)
         writeU32(&msg, Self.MSG_GET_SRC_DESC, at: 8)
         writeU16(&msg, 24, at: 12)
         writeU64(&msg, srcref, at: 16)
@@ -221,11 +224,25 @@ final class NetworkStatisticsClient {
     private func send(_ bytes: [UInt8]) {
         guard fd >= 0 else { return }
         let n = bytes.withUnsafeBytes { Darwin.send(fd, $0.baseAddress, bytes.count, 0) }
-        // ENOBUFS/EAGAIN on a request is non-fatal; the next poll retries.
-        if n < 0 && errno == EINVAL {
-            // Kernel rejected a request outright — treat as a layout mismatch.
-            _subscriptionFailed = true
+        if n < 0 {
+            let sendError = errno
+            if Self.errorRequiresFallback(context: readU64(bytes, 0), error: sendError) {
+                _subscriptionFailed = true
+            }
         }
+    }
+
+    /// A descriptor only enriches interface attribution; losing a source while
+    /// looking it up (ENOENT), or failing to enqueue its reply (ENOBUFS), does
+    /// not invalidate the TCP/UDP subscriptions or the system-wide byte counts.
+    /// Polls retry transient failures next tick. Subscriptions are sent once,
+    /// so a rejected subscription must still activate the fallback.
+    static func errorRequiresFallback(context: UInt64, error: Int32) -> Bool {
+        if context == UInt64(MSG_GET_SRC_DESC) { return false }
+        if context == UInt64(MSG_QUERY_SRC), error == ENOBUFS || error == EAGAIN {
+            return false
+        }
+        return true
     }
 
     // MARK: - Receive
@@ -273,7 +290,15 @@ final class NetworkStatisticsClient {
                 srcToIfIndex.removeValue(forKey: srcref)
                 descRequested.remove(srcref)
             case Self.MSG_ERROR:
-                _subscriptionFailed = true
+                // nstat_msg_error is a 16-byte header, errno and 4 reserved
+                // bytes. Do not read past a truncated error into the next frame.
+                if len >= 24,
+                   Self.errorRequiresFallback(
+                       context: readU64(readBuffer, off),
+                       error: Int32(bitPattern: readU32(readBuffer, off + 16))
+                   ) {
+                    _subscriptionFailed = true
+                }
             default:
                 break
             }
