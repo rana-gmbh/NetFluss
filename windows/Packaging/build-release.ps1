@@ -68,16 +68,20 @@ function Use-Signed([string] $From, [string] $To) {
     Write-Host "signed: $To"
 }
 
-# Inno Setup pads its version strings with spaces to fixed widths — product name 60, product
-# version 50 — and SignPath's metadata check compares the exact text (signpath/installers.xml
-# expects exactly this). A different Inno Setup could change the widths; failing here says why.
+# Inno Setup pads its version strings with spaces to fixed widths, and SignPath's metadata
+# check compares the exact text: signpath/installers.xml expects the product name padded to 60
+# characters, as Inno Setup 6.7.1 writes it. A different Inno Setup could change the width;
+# failing here says why. The product version is checked here only — SignPath cannot check it
+# on the installers (see installers.xml) — trimmed, so its padding does not matter.
 function Assert-InstallerVersionInfo([string] $Setup) {
     $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($Setup)
-    if ($info.ProductName.TrimEnd() -ne 'NetFluss' -or $info.ProductName.Length -ne 60 -or
-        $info.ProductVersion.TrimEnd() -ne $Version -or $info.ProductVersion.Length -ne 50) {
-        throw ("$Setup has product name '$($info.ProductName)' ($($info.ProductName.Length) characters) and version " +
-            "'$($info.ProductVersion)' ($($info.ProductVersion.Length)); signpath/installers.xml expects 'NetFluss' padded " +
-            "to 60 and '$Version' padded to 50. Update the configuration in SignPath for this Inno Setup version.")
+    if ($info.ProductName.TrimEnd() -ne 'NetFluss' -or $info.ProductName.Length -ne 60) {
+        throw ("$Setup has product name '$($info.ProductName)' ($($info.ProductName.Length) characters); " +
+            "signpath/installers.xml expects 'NetFluss' padded to 60. Update the configuration in SignPath for this Inno Setup version.")
+    }
+
+    if ($info.ProductVersion.Trim() -ne $Version) {
+        throw "$Setup has product version '$($info.ProductVersion.Trim())', not '$Version'."
     }
 }
 

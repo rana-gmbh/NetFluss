@@ -48,10 +48,6 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           # A beta, alpha or rc is a GitHub pre-release: only pre-release builds are offered it.
           "prerelease=$($version.Contains('-').ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
-          # The installer's product version as Inno Setup writes it: padded with spaces to 50
-          # characters (see windows/Packaging/signpath/installers.xml). A delimited output,
-          # so the trailing spaces survive.
-          "installer_product_version<<EOF`n$($version.PadRight(50))`nEOF" >> $env:GITHUB_OUTPUT
 
       - name: Verify generated resources are current
         run: dotnet run --project windows/tools/StringsToResx --configuration Release -- --check
@@ -113,16 +109,6 @@ jobs:
           path: windows/artifacts/sign/installers
           if-no-files-found: error
 
-      - name: Check the padded installer version
-        if: env.HAS_SIGNPATH == 'true'
-        shell: pwsh
-        env:
-          PADDED: ${{ steps.version.outputs.installer_product_version }}
-        run: |
-          if ($env:PADDED.Length -ne 50 -or $env:PADDED.TrimEnd() -ne '${{ steps.version.outputs.version }}') {
-            throw "installer_product_version is '$($env:PADDED)' ($($env:PADDED.Length) characters), not the version padded to 50."
-          }
-
       - name: Sign the installers
         if: env.HAS_SIGNPATH == 'true'
         uses: signpath/github-action-submit-signing-request@v3
@@ -138,7 +124,6 @@ jobs:
           output-artifact-directory: windows/artifacts/signed/installers
           parameters: |
             version: ${{ toJSON(steps.version.outputs.version) }}
-            installerProductVersion: ${{ toJSON(steps.version.outputs.installer_product_version) }}
 
       - name: Checksums and update signature
         shell: pwsh
