@@ -426,6 +426,8 @@
 "Shield" = "Shield";
 "VPN indicator color" = "VPN indicator color";
 "Show when VPN is off" = "Show when VPN is off";
+"VPN indicator size" = "VPN indicator size";
+"Show flag only while a VPN is active" = "Show flag only while a VPN is active";
 "Country flag" = "Country flag";
 "Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is)." = "Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is).";
 "Traffic Timer" = "Traffic Timer";

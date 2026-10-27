@@ -1261,6 +1261,12 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Show when VPN is off" xml:space="preserve">
     <value>Auch anzeigen, wenn VPN aus ist</value>
   </data>
+  <data name="VPN indicator size" xml:space="preserve">
+    <value>Größe der VPN-Anzeige</value>
+  </data>
+  <data name="Show flag only while a VPN is active" xml:space="preserve">
+    <value>Flagge nur bei aktivem VPN anzeigen</value>
+  </data>
   <data name="Country flag" xml:space="preserve">
     <value>Länderflagge</value>
   </data>

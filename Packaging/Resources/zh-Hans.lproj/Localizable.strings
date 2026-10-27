@@ -426,6 +426,8 @@
 "Shield" = "盾牌";
 "VPN indicator color" = "VPN 指示器颜色";
 "Show when VPN is off" = "VPN 关闭时也显示";
+"VPN indicator size" = "VPN 指示器大小";
+"Show flag only while a VPN is active" = "仅在 VPN 活动时显示旗帜";
 "Country flag" = "国家/地区旗帜";
 "Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is)." = "显示在速率右侧。VPN 指示器也能检测由其他应用启动的 VPN。国家/地区旗帜显示你的公网 IP 所在位置（通过 ipify.org 和 ipwho.is 查询）。";
 "Traffic Timer" = "流量计时器";

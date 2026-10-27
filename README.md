@@ -37,7 +37,7 @@ Every release is built from this repository by [GitHub Actions](.github/workflow
 
 ## New in 2.6
 
-- **VPN indicator in the menu bar — protected at a glance.** An optional dot or shield right of the upload and download rates shows whether a VPN is up. It works with the **VPN connections built into NetFluss** *and* with **external VPN clients** — Tunnelblick, the WireGuard app, Mullvad, Tailscale, the macOS VPN settings and others: NetFluss detects any active tunnel, no matter which app started it.
+- **VPN indicator in the menu bar — protected at a glance.** An optional dot or shield right of the upload and download rates shows whether a VPN is up, in a size you pick (10–20 pt) so it stays readable next to the rates. It works with the **VPN connections built into NetFluss** *and* with **external VPN clients** — Tunnelblick, the WireGuard app, Mullvad, Tailscale, the macOS VPN settings and others: NetFluss detects any active tunnel, no matter which app started it.
   - Pick the colour, and choose whether the indicator stays visible (dimmed) while no VPN is connected.
   - Optionally add the **flag of the country your public IP is in**, so you see your exit location without opening the popover. It updates within seconds when a VPN connects or disconnects.
   - Enable both under Preferences → Appearance. Detection is lightweight and only runs while one of the options is on.
@@ -170,7 +170,7 @@ Every release is built from this repository by [GitHub Actions](.github/workflow
 - Monospaced digits for stable layout
 - Configurable font size (8–16 pt), font style (Monospaced / System / Rounded), pinned unit, and decimal precision
 - **Icon mode** — switch to a single symbol in the menu bar and choose between multiple icon options, including the NetFluss app-style icon
-- **VPN indicator & country flag** — optional marks right of the rates: a VPN status dot or shield (custom colour, optionally dimmed when disconnected) that works with NetFluss' built-in VPN connections and with external VPN clients (Tunnelblick, WireGuard, Mullvad, Tailscale, macOS VPN settings, …), plus the flag of your public IP's country
+- **VPN indicator & country flag** — optional marks right of the rates: a VPN status dot or shield (custom colour, dimmed while the tunnel is down, optionally hidden altogether when disconnected) that works with NetFluss' built-in VPN connections and with external VPN clients (Tunnelblick, WireGuard, Mullvad, Tailscale, macOS VPN settings, …), plus the flag of your public IP's country, which can be limited to the times a tunnel is actually up. Both marks share one size setting, independent of the rate font.
 - **Launch at login** — toggle in Preferences → Launch
 
 ### Popover

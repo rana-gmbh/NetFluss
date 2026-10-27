@@ -1261,6 +1261,12 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="Show when VPN is off" xml:space="preserve">
     <value>Show when VPN is off</value>
   </data>
+  <data name="VPN indicator size" xml:space="preserve">
+    <value>VPN indicator size</value>
+  </data>
+  <data name="Show flag only while a VPN is active" xml:space="preserve">
+    <value>Show flag only while a VPN is active</value>
+  </data>
   <data name="Country flag" xml:space="preserve">
     <value>Country flag</value>
   </data>

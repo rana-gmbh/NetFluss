@@ -271,7 +271,9 @@ struct PreferencesView: View {
     @AppStorage("menuBarVPNIndicatorColor") private var menuBarVPNIndicatorColor: String = "green"
     @AppStorage("menuBarVPNIndicatorColorHex") private var menuBarVPNIndicatorColorHex: String = ""
     @AppStorage("menuBarVPNShowWhenOff") private var menuBarVPNShowWhenOff: Bool = true
+    @AppStorage("menuBarVPNIndicatorSize") private var menuBarVPNIndicatorSize: Double = 14
     @AppStorage("menuBarShowCountryFlag") private var menuBarShowCountryFlag: Bool = false
+    @AppStorage("menuBarCountryFlagOnlyWithVPN") private var menuBarCountryFlagOnlyWithVPN: Bool = false
     @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "flow"
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
     @AppStorage("excludeTunnelAdaptersFromTotals") private var excludeTunnelAdaptersFromTotals: Bool = false
@@ -681,8 +683,28 @@ struct PreferencesView: View {
                             LText("Show when VPN is off")
                         }
                     }
+                    if menuBarVPNIndicator != "off" || menuBarShowCountryFlag {
+                        LabeledContent {
+                            TrailingPreferenceControl(width: appearanceControlWidth) {
+                                HStack(spacing: 8) {
+                                    Text("\(Int(menuBarVPNIndicatorSize)) pt")
+                                        .monospacedDigit()
+                                        .frame(width: 36, alignment: .trailing)
+                                    Stepper("", value: $menuBarVPNIndicatorSize, in: 10...18, step: 1)
+                                        .labelsHidden()
+                                }
+                            }
+                        } label: {
+                            LText("VPN indicator size")
+                        }
+                    }
                     Toggle(isOn: $menuBarShowCountryFlag) {
                         LText("Country flag")
+                    }
+                    if menuBarShowCountryFlag {
+                        Toggle(isOn: $menuBarCountryFlagOnlyWithVPN) {
+                            LText("Show flag only while a VPN is active")
+                        }
                     }
                     if menuBarVPNIndicator != "off" || menuBarShowCountryFlag {
                         LText("Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is).")

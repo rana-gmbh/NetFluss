@@ -94,7 +94,9 @@ final class AppState {
             "menuBarVPNIndicatorColor": "green",
             "menuBarVPNIndicatorColorHex": "",
             "menuBarVPNShowWhenOff": true,
+            "menuBarVPNIndicatorSize": 14.0,
             "menuBarShowCountryFlag": false,
+            "menuBarCountryFlagOnlyWithVPN": false,
             "networkSliceHostsLive": false,
             "networkSliceServicesLive": false,
             "networkSliceAppsLive": false

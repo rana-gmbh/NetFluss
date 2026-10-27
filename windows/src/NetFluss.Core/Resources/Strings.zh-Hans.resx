@@ -1261,6 +1261,12 @@
   <data name="Show when VPN is off" xml:space="preserve">
     <value>VPN 关闭时也显示</value>
   </data>
+  <data name="VPN indicator size" xml:space="preserve">
+    <value>VPN 指示器大小</value>
+  </data>
+  <data name="Show flag only while a VPN is active" xml:space="preserve">
+    <value>仅在 VPN 活动时显示旗帜</value>
+  </data>
   <data name="Country flag" xml:space="preserve">
     <value>国家/地区旗帜</value>
   </data>

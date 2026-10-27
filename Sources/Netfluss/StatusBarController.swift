@@ -75,6 +75,8 @@ private struct MenuBarDisplayModel {
 
 /// Optional status marks drawn to the right of the rates: a VPN indicator
 /// (dot or shield) and the flag of the public IP's country (issue #60).
+/// Both are sized from `menuBarVPNIndicatorSize`, not from the rate font, so
+/// they can be read at a glance in a 22 pt menu bar.
 private struct MenuBarAccessories {
     enum VPNMark {
         case dot(active: Bool, color: NSColor, diameter: CGFloat)
@@ -96,7 +98,7 @@ private final class MenuBarRatesView: NSView {
     private static let stackSpacing: CGFloat = 1
     private static let capsulePadding: CGFloat = 7
     private static let accessoryGap: CGFloat = 5
-    private static let accessorySpacing: CGFloat = 4
+    private static let accessorySpacing: CGFloat = 3
 
     private struct TextRun {
         let text: String
@@ -1213,9 +1215,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
 
         let (accessories, accessoryKey) = menuBarAccessories(
             style: style,
-            fontSize: fontSize,
             defaultTextColor: defaultTextColor,
-            secondaryTextColor: secondaryTextColor,
             isDarkAppearance: isDarkAppearance
         )
 
@@ -1290,15 +1290,15 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     /// rates, plus a key describing them for render-state deduplication.
     private func menuBarAccessories(
         style: MenuBarDisplayStyle,
-        fontSize: Double,
         defaultTextColor: NSColor,
-        secondaryTextColor: NSColor,
         isDarkAppearance: Bool
     ) -> (MenuBarAccessories, String) {
         let defaults = UserDefaults.standard
         let indicator = defaults.string(forKey: "menuBarVPNIndicator") ?? "off"
         let showWhenOff = defaults.bool(forKey: "menuBarVPNShowWhenOff")
         let showFlag = defaults.bool(forKey: "menuBarShowCountryFlag")
+        let flagOnlyWithVPN = defaults.bool(forKey: "menuBarCountryFlagOnlyWithVPN")
+        let markSize = Self.indicatorSize(from: defaults)
         let vpnActive = monitor.vpnActive
 
         var vpnMark: MenuBarAccessories.VPNMark?
@@ -1312,14 +1312,21 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             if colorName == "system", style == .dashboard || style == .dashboardBasic {
                 activeColor = defaultTextColor
             }
-            let color = vpnActive ? activeColor : secondaryTextColor
+            // The chosen colour applies in both states, dimmed while the tunnel
+            // is down: the slashed shield / hollow dot already carries "off",
+            // and tying the swatch to the active state alone made it look
+            // broken to anyone configuring it without a VPN up.
+            let color = vpnActive ? activeColor : activeColor.withAlphaComponent(0.45)
 
             if indicator == "dot" {
-                let diameter = max(5, (CGFloat(fontSize) * 0.6).rounded())
+                let diameter = max(5, (markSize * 0.6).rounded())
                 vpnMark = .dot(active: vpnActive, color: color, diameter: diameter)
             } else {
-                let symbolName = vpnActive ? "lock.shield.fill" : "shield.slash"
-                let configuration = NSImage.SymbolConfiguration(pointSize: CGFloat(fontSize) + 1, weight: .medium)
+                // `shield.slash` is the shape from the issue's mockup; the lock
+                // inside `lock.shield.fill` turns to mush below ~16 pt, so the
+                // active state is the plain filled shield.
+                let symbolName = vpnActive ? "shield.fill" : "shield.slash"
+                let configuration = NSImage.SymbolConfiguration(pointSize: markSize, weight: .semibold)
                     .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
                 if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "VPN")?
                     .withSymbolConfiguration(configuration) {
@@ -1330,13 +1337,28 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
                 .joined(separator: ":")
         }
 
-        let flag = showFlag ? CountryFlag.emoji(for: monitor.externalIPCountryCode) : nil
+        // The flag reads as the VPN's exit country, so it can be limited to the
+        // times a tunnel is actually up.
+        let wantsFlag = showFlag && (vpnActive || !flagOnlyWithVPN)
+        let flag = wantsFlag ? CountryFlag.emoji(for: monitor.externalIPCountryCode) : nil
         let accessories = MenuBarAccessories(
             vpn: vpnMark,
             flag: flag,
-            flagFont: .systemFont(ofSize: CGFloat(fontSize) + 2)
+            // Emoji render a good bit smaller than their point size, so the flag
+            // needs a nudge to match the shield next to it.
+            flagFont: .systemFont(ofSize: markSize + 2)
         )
-        return (accessories, "\(vpnKey)|\(flag ?? "")")
+        return (accessories, "\(vpnKey)|\(flag ?? "")|\(String(format: "%.1f", markSize))")
+    }
+
+    /// Menu bar VPN indicator / flag size, clamped to what fits the menu bar.
+    /// A symbol's image box runs about a third taller than its point size, so
+    /// 18 pt is the largest that still clears a 22 pt menu bar unclipped.
+    private static func indicatorSize(from defaults: UserDefaults) -> CGFloat {
+        let raw = defaults.double(forKey: "menuBarVPNIndicatorSize")
+        let size = CGFloat(raw > 0 ? raw : 14)
+        let maxSize = max(10, NSStatusBar.system.thickness - 4)
+        return min(max(size, 10), min(18, maxSize))
     }
 
     private func menuBarFont(size: Double, design: String, weight: NSFont.Weight) -> NSFont {
