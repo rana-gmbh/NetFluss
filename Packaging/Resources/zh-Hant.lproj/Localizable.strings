@@ -426,7 +426,6 @@
 "Shield" = "盾牌";
 "VPN indicator color" = "VPN 指示器顏色";
 "Show when VPN is off" = "VPN 關閉時也顯示";
-"VPN indicator size" = "VPN 指示器大小";
 "Show flag only while a VPN is active" = "僅在 VPN 啟用時顯示旗幟";
 "Country flag" = "國家/地區旗幟";
 "Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is)." = "顯示在速率右側。VPN 指示器也能偵測由其他 App 啟動的 VPN。國家/地區旗幟顯示你的公用 IP 所在位置（透過 ipify.org 和 ipwho.is 查詢）。";
@@ -617,3 +616,14 @@
 "The controller did not answer in time." = "控制器未及時回應。";
 "Could not reach the proxy controller." = "無法連線到代理控制器。";
 "The controller's answer was not in the expected format." = "控制器的回應格式不符合預期。";
+
+/* Menu bar link indicator */
+"Link indicator" = "連線指示器";
+"A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic." = "速率右側的 Wi-Fi 或網路線圖示，顏色表示連線狀態：已連線、已連線但無網路，或未連線。圖示會跟隨目前承載流量的介面。";
+"Indicator size" = "指示器大小";
+"No internet" = "無網路";
+"Check internet access" = "檢查網際網路存取";
+"Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing." = "不啟用此檢查時，圖示僅表示介面是否啟用。啟用後，NetFluss 會存取 Apple 的強制網路門戶位址（macOS 本身也使用該位址），頻率足以發現飯店登入頁或上游中斷，又低到幾乎沒有開銷。";
+"Check address" = "檢查位址";
+"Internet Check Address" = "網際網路檢查位址";
+"URL to check (empty uses Apple's)" = "要檢查的 URL（留空則使用 Apple 的）";

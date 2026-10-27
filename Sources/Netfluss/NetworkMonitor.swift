@@ -33,6 +33,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
     @Published var gatewayIP: String = "—"
     @Published var externalIP: String = "—"
     @Published var externalIPCountryCode: String = ""
+    /// Health and medium of the interface carrying the default route. Only
+    /// maintained while the menu bar link indicator is enabled.
+    @Published var linkStatus: LinkStatus = .offline
     /// Whether any VPN (built-in or from another app) is up. Only maintained
     /// while a menu bar VPN indicator or country flag is enabled.
     @Published var vpnActive = false
@@ -193,6 +196,18 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private static var menuBarCountryFlagEnabled: Bool {
         UserDefaults.standard.bool(forKey: "menuBarShowCountryFlag")
     }
+
+    private static var menuBarLinkIndicatorEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "menuBarLinkIndicator")
+    }
+
+    private lazy var linkHealthTracker: LinkHealthTracker = {
+        let tracker = LinkHealthTracker()
+        tracker.onChange = { [weak self] status in
+            self?.setIfChanged(\.linkStatus, to: status)
+        }
+        return tracker
+    }()
 
     override init() {
         super.init()
@@ -516,6 +531,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         }
 
         applyVPNSnapshot(result.vpnSnapshot)
+        updateLinkHealth()
 
         // Detail sections do not need background refresh while the popover is closed.
         if shouldRefreshAddressDetails {
@@ -911,6 +927,33 @@ final class NetworkMonitor: NSObject, ObservableObject {
             try? await Task.sleep(nanoseconds: 2_500_000_000)
             self?.updateExternalIPIfNeeded(force: true)
         }
+    }
+
+    /// Feeds the menu bar link indicator (issue from the 2.6 feedback thread).
+    ///
+    /// The two address lookups are cheap — `getifaddrs` and an SCDynamicStore
+    /// read — so unlike the popover's detail section this can run on every tick
+    /// while the indicator is on. Without it the indicator would freeze
+    /// whenever the popover is closed, which is when it matters most.
+    private func updateLinkHealth() {
+        guard Self.menuBarLinkIndicatorEnabled else {
+            if linkStatus != .offline { linkStatus = .offline }
+            linkHealthTracker.reset()
+            return
+        }
+
+        setIfChanged(\.internalIP, to: InterfaceSampler.primaryInternalIP())
+        setIfChanged(\.gatewayIP, to: InterfaceSampler.defaultGatewayIP(store: dynamicStore))
+
+        let defaults = UserDefaults.standard
+        linkHealthTracker.ingest(
+            primaryInterface: Self.primaryInterfaceName(store: dynamicStore),
+            adapters: adapters,
+            gatewayIP: gatewayIP,
+            internalIP: internalIP,
+            checkInternet: defaults.bool(forKey: "menuBarLinkCheckInternet"),
+            probeURL: defaults.string(forKey: "menuBarLinkProbeURL") ?? ""
+        )
     }
 
     private func updateIPsIfNeeded(force: Bool) {

@@ -426,7 +426,6 @@
 "Shield" = "Schild";
 "VPN indicator color" = "Farbe der VPN-Anzeige";
 "Show when VPN is off" = "Auch anzeigen, wenn VPN aus ist";
-"VPN indicator size" = "Größe der VPN-Anzeige";
 "Show flag only while a VPN is active" = "Flagge nur bei aktivem VPN anzeigen";
 "Country flag" = "Länderflagge";
 "Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is)." = "Wird rechts neben den Raten angezeigt. Die VPN-Anzeige erkennt auch VPNs, die von anderen Apps gestartet wurden. Die Länderflagge zeigt, wo sich deine öffentliche IP befindet (ermittelt über ipify.org und ipwho.is).";
@@ -617,3 +616,14 @@
 "The controller did not answer in time." = "Der Controller hat nicht rechtzeitig geantwortet.";
 "Could not reach the proxy controller." = "Der Proxy-Controller ist nicht erreichbar.";
 "The controller's answer was not in the expected format." = "Die Antwort des Controllers hatte nicht das erwartete Format.";
+
+/* Menu bar link indicator */
+"Link indicator" = "Verbindungsanzeige";
+"A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic." = "Ein WLAN- oder Kabelsymbol rechts neben den Raten, in der Farbe des Verbindungszustands: verbunden, verbunden ohne Internet oder nicht verbunden. Das Symbol richtet sich nach der Schnittstelle, über die der Verkehr läuft.";
+"Indicator size" = "Größe der Anzeigen";
+"No internet" = "Kein Internet";
+"Check internet access" = "Internetzugang prüfen";
+"Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing." = "Ohne diese Prüfung zeigt das Symbol nur, ob die Schnittstelle aktiv ist. Mit ihr fragt NetFluss die Captive-Portal-Adresse von Apple ab — dieselbe, die macOS selbst verwendet — oft genug, um eine Hotel-Anmeldeseite oder eine tote Leitung zu bemerken, und selten genug, dass es nichts kostet.";
+"Check address" = "Prüfadresse";
+"Internet Check Address" = "Adresse für die Internetprüfung";
+"URL to check (empty uses Apple's)" = "Zu prüfende URL (leer = Apple)";

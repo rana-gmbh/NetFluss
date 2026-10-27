@@ -1261,9 +1261,6 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Show when VPN is off" xml:space="preserve">
     <value>Auch anzeigen, wenn VPN aus ist</value>
   </data>
-  <data name="VPN indicator size" xml:space="preserve">
-    <value>Größe der VPN-Anzeige</value>
-  </data>
   <data name="Show flag only while a VPN is active" xml:space="preserve">
     <value>Flagge nur bei aktivem VPN anzeigen</value>
   </data>
@@ -1827,6 +1824,33 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   </data>
   <data name="The controller&apos;s answer was not in the expected format." xml:space="preserve">
     <value>Die Antwort des Controllers hatte nicht das erwartete Format.</value>
+  </data>
+  <data name="Link indicator" xml:space="preserve">
+    <value>Verbindungsanzeige</value>
+  </data>
+  <data name="A Wi-Fi or cable symbol right of the rates, in the colour of the connection&apos;s state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic." xml:space="preserve">
+    <value>Ein WLAN- oder Kabelsymbol rechts neben den Raten, in der Farbe des Verbindungszustands: verbunden, verbunden ohne Internet oder nicht verbunden. Das Symbol richtet sich nach der Schnittstelle, über die der Verkehr läuft.</value>
+  </data>
+  <data name="Indicator size" xml:space="preserve">
+    <value>Größe der Anzeigen</value>
+  </data>
+  <data name="No internet" xml:space="preserve">
+    <value>Kein Internet</value>
+  </data>
+  <data name="Check internet access" xml:space="preserve">
+    <value>Internetzugang prüfen</value>
+  </data>
+  <data name="Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple&apos;s captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing." xml:space="preserve">
+    <value>Ohne diese Prüfung zeigt das Symbol nur, ob die Schnittstelle aktiv ist. Mit ihr fragt NetFluss die Captive-Portal-Adresse von Apple ab — dieselbe, die Windows selbst verwendet — oft genug, um eine Hotel-Anmeldeseite oder eine tote Leitung zu bemerken, und selten genug, dass es nichts kostet.</value>
+  </data>
+  <data name="Check address" xml:space="preserve">
+    <value>Prüfadresse</value>
+  </data>
+  <data name="Internet Check Address" xml:space="preserve">
+    <value>Adresse für die Internetprüfung</value>
+  </data>
+  <data name="URL to check (empty uses Apple&apos;s)" xml:space="preserve">
+    <value>Zu prüfende URL (leer = Apple)</value>
   </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>„{0}“ ist bereits vorhanden.</value>

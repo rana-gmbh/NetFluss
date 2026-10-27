@@ -83,13 +83,16 @@ private struct MenuBarAccessories {
         case symbol(NSImage)
     }
 
+    /// Wi-Fi / cable glyph, coloured by link health. Drawn leftmost so the row
+    /// reads "which connection, is it tunnelled, where does it come out".
+    let link: NSImage?
     let vpn: VPNMark?
     let flag: String?
     let flagFont: NSFont
 
-    static let none = MenuBarAccessories(vpn: nil, flag: nil, flagFont: .systemFont(ofSize: 10))
+    static let none = MenuBarAccessories(link: nil, vpn: nil, flag: nil, flagFont: .systemFont(ofSize: 10))
 
-    var isEmpty: Bool { vpn == nil && flag == nil }
+    var isEmpty: Bool { link == nil && vpn == nil && flag == nil }
 }
 
 private final class MenuBarRatesView: NSView {
@@ -206,6 +209,7 @@ private final class MenuBarRatesView: NSView {
     /// Width of the accessory items themselves, including the spacing between them.
     private static func accessoryItemsWidth(_ accessories: MenuBarAccessories) -> CGFloat {
         var widths: [CGFloat] = []
+        if let link = accessories.link { widths.append(link.size.width) }
         if let vpn = accessories.vpn { widths.append(size(of: vpn).width) }
         if let flag = accessories.flag { widths.append(flagSize(flag, font: accessories.flagFont).width) }
         guard !widths.isEmpty else { return 0 }
@@ -251,6 +255,17 @@ private final class MenuBarRatesView: NSView {
 
         var x = accessoryTrailingEdge(for: model) - Self.accessoryItemsWidth(accessories)
         let midY = bounds.midY
+
+        if let link = accessories.link {
+            let rect = NSRect(
+                x: x,
+                y: floor(midY - link.size.height / 2),
+                width: link.size.width,
+                height: link.size.height
+            )
+            link.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            x += link.size.width + Self.accessorySpacing
+        }
 
         if let vpn = accessories.vpn {
             let size = Self.size(of: vpn)
@@ -618,6 +633,16 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         monitor.$vpnActive
             .combineLatest(monitor.$externalIPCountryCode)
             .removeDuplicates { $0 == $1 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateLabel()
+            }
+            .store(in: &cancellables)
+
+        // Link health changes on its own schedule: a probe verdict can land
+        // between rate ticks, and the glyph must not wait for the next byte.
+        monitor.$linkStatus
+            .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.updateLabel()
@@ -1337,18 +1362,64 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
                 .joined(separator: ":")
         }
 
+        var linkImage: NSImage?
+        var linkKey = "none"
+        if defaults.bool(forKey: "menuBarLinkIndicator") {
+            let status = monitor.linkStatus
+            let (colorName, colorHex, fallback) = Self.linkColorSetting(for: status.health, defaults: defaults)
+            var color = resolvedAccentNSColor(selection: colorName, customHex: colorHex, fallback: fallback)
+            if colorName == "system", style == .dashboard || style == .dashboardBasic {
+                color = defaultTextColor
+            }
+            linkImage = LinkHealthGlyph.image(
+                medium: status.medium,
+                health: status.health,
+                pointSize: markSize,
+                color: color
+            )
+            linkKey = [status.medium.rawValue, status.health.rawValue, colorName, colorHex].joined(separator: ":")
+        }
+
         // The flag reads as the VPN's exit country, so it can be limited to the
         // times a tunnel is actually up.
         let wantsFlag = showFlag && (vpnActive || !flagOnlyWithVPN)
         let flag = wantsFlag ? CountryFlag.emoji(for: monitor.externalIPCountryCode) : nil
         let accessories = MenuBarAccessories(
+            link: linkImage,
             vpn: vpnMark,
             flag: flag,
             // Emoji render a good bit smaller than their point size, so the flag
             // needs a nudge to match the shield next to it.
             flagFont: .systemFont(ofSize: markSize + 2)
         )
-        return (accessories, "\(vpnKey)|\(flag ?? "")|\(String(format: "%.1f", markSize))")
+        return (accessories, "\(linkKey)|\(vpnKey)|\(flag ?? "")|\(String(format: "%.1f", markSize))")
+    }
+
+    /// Colour preference for one link state, with the traffic-light defaults.
+    private static func linkColorSetting(
+        for health: LinkHealth,
+        defaults: UserDefaults
+    ) -> (name: String, hex: String, fallback: NSColor) {
+        switch health {
+        case .online:
+            return (
+                defaults.string(forKey: "menuBarLinkColorOnline") ?? "green",
+                defaults.string(forKey: "menuBarLinkColorOnlineHex") ?? "",
+                .systemGreen
+            )
+        case .limited:
+            return (
+                defaults.string(forKey: "menuBarLinkColorLimited") ?? "orange",
+                defaults.string(forKey: "menuBarLinkColorLimitedHex") ?? "",
+                .systemOrange
+            )
+        case .offline:
+            return (
+                defaults.string(forKey: "menuBarLinkColorOffline") ?? "red",
+                defaults.string(forKey: "menuBarLinkColorOfflineHex") ?? "",
+                .systemRed
+            )
+        }
     }
 
     /// Menu bar VPN indicator / flag size, clamped to what fits the menu bar.

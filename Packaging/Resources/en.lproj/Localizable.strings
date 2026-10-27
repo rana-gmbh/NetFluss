@@ -426,7 +426,6 @@
 "Shield" = "Shield";
 "VPN indicator color" = "VPN indicator color";
 "Show when VPN is off" = "Show when VPN is off";
-"VPN indicator size" = "VPN indicator size";
 "Show flag only while a VPN is active" = "Show flag only while a VPN is active";
 "Country flag" = "Country flag";
 "Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is)." = "Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is).";
@@ -617,3 +616,14 @@
 "The controller did not answer in time." = "The controller did not answer in time.";
 "Could not reach the proxy controller." = "Could not reach the proxy controller.";
 "The controller's answer was not in the expected format." = "The controller's answer was not in the expected format.";
+
+/* Menu bar link indicator */
+"Link indicator" = "Link indicator";
+"A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic." = "A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic.";
+"Indicator size" = "Indicator size";
+"No internet" = "No internet";
+"Check internet access" = "Check internet access";
+"Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing." = "Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing.";
+"Check address" = "Check address";
+"Internet Check Address" = "Internet Check Address";
+"URL to check (empty uses Apple's)" = "URL to check (empty uses Apple's)";

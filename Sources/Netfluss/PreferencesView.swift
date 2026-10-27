@@ -247,6 +247,43 @@ private enum PreferencePane: String, CaseIterable, Identifiable {
     }
 }
 
+/// Explanatory text under a preference row.
+///
+/// These are plain `Text` inside a `Form`, which truncates to a single line
+/// instead of wrapping — several explanations were being cut off mid-sentence
+/// with an ellipsis. `fixedSize` lets the text claim the height it needs, and
+/// the tooltip covers what a narrow window or a longer translation can still
+/// clip.
+private struct PreferenceNote: View {
+    @AppStorage("appLanguage") private var appLanguage: String = AppLanguage.system.rawValue
+    private let key: String
+
+    init(_ key: String) {
+        self.key = key
+    }
+
+    var body: some View {
+        let language = AppLanguage.current(from: appLanguage)
+        let text = NSLocalizedString(key, bundle: language.bundle, value: key, comment: "")
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help(text)
+    }
+}
+
+private extension View {
+    /// Same treatment for status and error lines, whose text is computed rather
+    /// than looked up — those are exactly the ones that run long.
+    func preferenceNote(fullText: String) -> some View {
+        fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help(fullText)
+    }
+}
+
 struct PreferencesView: View {
     @AppStorage("refreshInterval") private var refreshInterval: Double = 1.0
     @AppStorage("showInactive") private var showInactive: Bool = false
@@ -273,6 +310,15 @@ struct PreferencesView: View {
     @AppStorage("menuBarVPNShowWhenOff") private var menuBarVPNShowWhenOff: Bool = true
     @AppStorage("menuBarVPNIndicatorSize") private var menuBarVPNIndicatorSize: Double = 14
     @AppStorage("menuBarShowCountryFlag") private var menuBarShowCountryFlag: Bool = false
+    @AppStorage("menuBarLinkIndicator") private var menuBarLinkIndicator: Bool = false
+    @AppStorage("menuBarLinkCheckInternet") private var menuBarLinkCheckInternet: Bool = true
+    @AppStorage("menuBarLinkProbeURL") private var menuBarLinkProbeURL: String = ""
+    @AppStorage("menuBarLinkColorOnline") private var menuBarLinkColorOnline: String = "green"
+    @AppStorage("menuBarLinkColorOnlineHex") private var menuBarLinkColorOnlineHex: String = ""
+    @AppStorage("menuBarLinkColorLimited") private var menuBarLinkColorLimited: String = "orange"
+    @AppStorage("menuBarLinkColorLimitedHex") private var menuBarLinkColorLimitedHex: String = ""
+    @AppStorage("menuBarLinkColorOffline") private var menuBarLinkColorOffline: String = "red"
+    @AppStorage("menuBarLinkColorOfflineHex") private var menuBarLinkColorOfflineHex: String = ""
     @AppStorage("menuBarCountryFlagOnlyWithVPN") private var menuBarCountryFlagOnlyWithVPN: Bool = false
     @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "flow"
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
@@ -350,9 +396,7 @@ struct PreferencesView: View {
                 } label: {
                     LText("Language")
                 }
-                LText("System Default follows the language selected in macOS.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("System Default follows the language selected in macOS.")
             } header: {
                 LText("Language")
             }
@@ -407,9 +451,7 @@ struct PreferencesView: View {
                 Toggle(isOn: $automaticUpdateChecksEnabled) {
                     LText("Check for updates automatically")
                 }
-                LText("Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About.")
             } header: {
                 LText("Update")
             }
@@ -503,12 +545,8 @@ struct PreferencesView: View {
                 Toggle(isOn: $excludeTunnelAdaptersFromTotals) {
                     LText("Exclude VPN/tunnel adapters from totals")
                 }
-                LText("When enabled, the Download/Upload summary and menu bar use only adapters that are visible here.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                LText("When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("When enabled, the Download/Upload summary and menu bar use only adapters that are visible here.")
+                PreferenceNote("When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list.")
             } header: {
                 LText("Adapters")
             }
@@ -519,32 +557,24 @@ struct PreferencesView: View {
                 Toggle(isOn: $collectStatistics) {
                     LText("Collect historical statistics")
                 }
-                LText("Disabled by default to avoid extra background work and energy use. When enabled, NetFluss keeps hourly and daily rollups for adapters and optional app traffic analysis.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Disabled by default to avoid extra background work and energy use. When enabled, NetFluss keeps hourly and daily rollups for adapters and optional app traffic analysis.")
 
                 Toggle(isOn: $showUsageSummary) {
                     LText("Display usage summary on popover")
                 }
                 .disabled(!collectStatistics)
-                LText("Shows today's and this month's upload, download, and total data in the popover. Requires historical statistics collection.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Shows today's and this month's upload, download, and total data in the popover. Requires historical statistics collection.")
 
                 if collectStatistics {
                     Toggle(isOn: $collectAppStatistics) {
                         LText("Collect app statistics")
                     }
-                    LText("App statistics are on by default and may increase energy consumption because NetFluss periodically samples per-app network usage in the background.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    PreferenceNote("App statistics are on by default and may increase energy consumption because NetFluss periodically samples per-app network usage in the background.")
 
                     Toggle(isOn: $collectProxyNodeStatistics) {
                         LText("Collect proxy node statistics")
                     }
-                    LText("Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    PreferenceNote("Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription.")
 
                     if collectProxyNodeStatistics {
                         proxyNodeSettings
@@ -700,7 +730,14 @@ struct PreferencesView: View {
                             LText("Show when VPN is off")
                         }
                     }
-                    if menuBarVPNIndicator != "off" || menuBarShowCountryFlag {
+                    Toggle(isOn: $menuBarLinkIndicator) {
+                        LText("Link indicator")
+                    }
+                    PreferenceNote("A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic.")
+                    if menuBarLinkIndicator {
+                        linkIndicatorSettings
+                    }
+                    if menuBarVPNIndicator != "off" || menuBarShowCountryFlag || menuBarLinkIndicator {
                         LabeledContent {
                             TrailingPreferenceControl(width: appearanceControlWidth) {
                                 HStack(spacing: 8) {
@@ -712,7 +749,7 @@ struct PreferencesView: View {
                                 }
                             }
                         } label: {
-                            LText("VPN indicator size")
+                            LText("Indicator size")
                         }
                     }
                     Toggle(isOn: $menuBarShowCountryFlag) {
@@ -724,14 +761,10 @@ struct PreferencesView: View {
                         }
                     }
                     if menuBarVPNIndicator != "off" || menuBarShowCountryFlag {
-                        LText("Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is).")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        PreferenceNote("Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is).")
                     }
                 }
-                LText("Dashboard uses router-wide traffic when Fritz!Box, UniFi, OpenWRT, or OPNsense bandwidth is enabled and available.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Dashboard uses router-wide traffic when Fritz!Box, UniFi, OpenWRT, or OPNsense bandwidth is enabled and available.")
             } header: {
                 LText("Appearance")
             }
@@ -768,9 +801,7 @@ struct PreferencesView: View {
 
                     Section {
                         PopoverSectionsReorderEditor()
-                        LText("Drag to reorder sections in the popover. Toggling a row mirrors the corresponding pref in DNS, Wi-Fi, Router, or Top Apps panels.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        PreferenceNote("Drag to reorder sections in the popover. Toggling a row mirrors the corresponding pref in DNS, Wi-Fi, Router, or Top Apps panels.")
                     } header: {
                         LText("Popover sections")
                     }
@@ -782,9 +813,7 @@ struct PreferencesView: View {
                     LText("Show top apps by network usage")
                 }
                 if showTopApps {
-                    LText("Shows the top 5 processes ranked by current network traffic.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("Shows the top 5 processes ranked by current network traffic.")
                     Toggle(isOn: $topAppsGracePeriodEnabled) {
                         LText("Keep apps visible after traffic stops")
                     }
@@ -818,9 +847,7 @@ struct PreferencesView: View {
                     LText("Show DNS switcher in popover")
                 }
                 if showDNSSwitcher {
-                    LText("DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.")
 
                     ForEach(sortedDNSPresets) { preset in
                         HStack(spacing: 8) {
@@ -917,9 +944,7 @@ struct PreferencesView: View {
                     LText("Show Wi-Fi networks in popover")
                 }
                 if showWifiSwitcher {
-                    LText("Lists nearby Wi-Fi networks from the system's cached scan. Tap a row to join — saved networks reconnect immediately, new secured networks prompt for a password.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("Lists nearby Wi-Fi networks from the system's cached scan. Tap a row to join — saved networks reconnect immediately, new secured networks prompt for a password.")
 
                     Toggle(isOn: $wifiLimitEnabled) {
                         LText("Only show the strongest networks")
@@ -935,9 +960,7 @@ struct PreferencesView: View {
                         } label: {
                             LText("Maximum networks shown")
                         }
-                        LText("Pinned networks and the currently-connected network always appear regardless of this limit.")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
+                        PreferenceNote("Pinned networks and the currently-connected network always appear regardless of this limit.")
                     }
                 }
             } header: {
@@ -978,9 +1001,7 @@ struct PreferencesView: View {
                     } label: {
                         LText("Router address")
                     }
-                    LText("Queries your Fritz!Box via TR-064 (no authentication needed for bandwidth data). Auto uses the current default gateway. Set a fixed address if your Fritz!Box is reachable at a different IP. Port 49000 must be reachable.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("Queries your Fritz!Box via TR-064 (no authentication needed for bandwidth data). Auto uses the current default gateway. Set a fixed address if your Fritz!Box is reachable at a different IP. Port 49000 must be reachable.")
                     if let error = monitor.fritzBoxError {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -989,6 +1010,7 @@ struct PreferencesView: View {
                             Text(error)
                                 .foregroundStyle(.secondary)
                                 .font(.caption)
+                                .preferenceNote(fullText: error)
                         }
                     }
                 }
@@ -1070,13 +1092,9 @@ struct PreferencesView: View {
                         LText(unifiUseAPIKey ? "API key" : "Credentials")
                     }
                     if unifiUseAPIKey {
-                        LText("Queries your UniFi gateway via its local API (HTTPS) using a Network API key. Create one in the UniFi Network app under Settings → Control Plane → Integrations. API keys work with 2FA enabled and never expire.")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
+                        PreferenceNote("Queries your UniFi gateway via its local API (HTTPS) using a Network API key. Create one in the UniFi Network app under Settings → Control Plane → Integrations. API keys work with 2FA enabled and never expire.")
                     } else {
-                        LText("Queries your UniFi gateway via its local API (HTTPS). Requires a local admin account on the UniFi controller. If the account has 2FA enabled, use an API key instead — password login cannot complete a 2FA challenge.")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
+                        PreferenceNote("Queries your UniFi gateway via its local API (HTTPS). Requires a local admin account on the UniFi controller. If the account has 2FA enabled, use an API key instead — password login cannot complete a 2FA challenge.")
                     }
                     if let error = monitor.unifiError {
                         HStack(spacing: 4) {
@@ -1086,6 +1104,7 @@ struct PreferencesView: View {
                             Text(error)
                                 .foregroundStyle(.secondary)
                                 .font(.caption)
+                                .preferenceNote(fullText: error)
                         }
                     }
                 }
@@ -1153,9 +1172,7 @@ struct PreferencesView: View {
                     } label: {
                         LText("Credentials")
                     }
-                    LText("Queries your OpenWRT router via ubus JSON-RPC over HTTPS. Auto uses the current default gateway, which may be the wrong router on dual-router setups. Set a fixed OpenWRT IP or URL if needed — for plain HTTP, enter http://<IP>. Requires the router's admin credentials and the uhttpd-mod-ubus package.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("Queries your OpenWRT router via ubus JSON-RPC over HTTPS. Auto uses the current default gateway, which may be the wrong router on dual-router setups. Set a fixed OpenWRT IP or URL if needed — for plain HTTP, enter http://<IP>. Requires the router's admin credentials and the uhttpd-mod-ubus package.")
                     if let error = monitor.openWRTError {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -1164,6 +1181,7 @@ struct PreferencesView: View {
                             Text(error)
                                 .foregroundStyle(.secondary)
                                 .font(.caption)
+                                .preferenceNote(fullText: error)
                         }
                     }
                 }
@@ -1227,9 +1245,7 @@ struct PreferencesView: View {
                     } label: {
                         LText("API Credentials")
                     }
-                    LText("Queries your OPNsense router via its REST API over HTTPS. Auto uses the current default gateway. If the web interface uses plain HTTP or a different port, enter the full URL (e.g. http://192.168.1.1 or https://192.168.1.1:8443). Requires an API key and secret configured in OPNsense.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("Queries your OPNsense router via its REST API over HTTPS. Auto uses the current default gateway. If the web interface uses plain HTTP or a different port, enter the full URL (e.g. http://192.168.1.1 or https://192.168.1.1:8443). Requires an API key and secret configured in OPNsense.")
                     if let error = monitor.opnsenseError {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -1238,6 +1254,7 @@ struct PreferencesView: View {
                             Text(error)
                                 .foregroundStyle(.secondary)
                                 .font(.caption)
+                                .preferenceNote(fullText: error)
                         }
                     }
                 }
@@ -1305,6 +1322,57 @@ struct PreferencesView: View {
     /// Re-read the router "credentials configured?" flags from the keychain.
     /// Called on appear, when hosts/mode change, and after an editor saves — so
     /// `body` never touches the keychain on its 1 Hz re-evaluation.
+    @ViewBuilder
+    private var linkIndicatorSettings: some View {
+        LabeledContent {
+            TrailingPreferenceControl(width: appearanceControlWidth) {
+                ColorSwatchPicker(selection: $menuBarLinkColorOnline, customHex: $menuBarLinkColorOnlineHex)
+            }
+        } label: {
+            LText("Connected")
+        }
+        LabeledContent {
+            TrailingPreferenceControl(width: appearanceControlWidth) {
+                ColorSwatchPicker(selection: $menuBarLinkColorLimited, customHex: $menuBarLinkColorLimitedHex)
+            }
+        } label: {
+            LText("No internet")
+        }
+        LabeledContent {
+            TrailingPreferenceControl(width: appearanceControlWidth) {
+                ColorSwatchPicker(selection: $menuBarLinkColorOffline, customHex: $menuBarLinkColorOfflineHex)
+            }
+        } label: {
+            LText("Not connected")
+        }
+        Toggle(isOn: $menuBarLinkCheckInternet) {
+            LText("Check internet access")
+        }
+        PreferenceNote("Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing.")
+        if menuBarLinkCheckInternet {
+            LabeledContent {
+                HStack(spacing: 6) {
+                    Text(menuBarLinkProbeURL.isEmpty ? "captive.apple.com" : menuBarLinkProbeURL)
+                        .font(.system(size: 12))
+                        .foregroundStyle(menuBarLinkProbeURL.isEmpty ? Color.secondary : Color.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Button("Edit…") {
+                        EditRouterHostController.shared.show(
+                            title: "Internet Check Address",
+                            placeholder: "URL to check (empty uses Apple's)",
+                            currentHost: menuBarLinkProbeURL
+                        ) { newURL in
+                            menuBarLinkProbeURL = newURL
+                        }
+                    }
+                }
+            } label: {
+                LText("Check address")
+            }
+        }
+    }
+
     /// Pulled out of the Form: inline, the address/secret/test rows blew past
     /// the type-checker's budget for a single expression.
     @ViewBuilder
@@ -1365,13 +1433,12 @@ struct PreferencesView: View {
                 Text(status)
                     .font(.caption)
                     .foregroundStyle(clashTestSucceeded ? Color.secondary : Color.orange)
+                    .preferenceNote(fullText: status)
             }
             Spacer()
         }
 
-        LText("The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        PreferenceNote("The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already.")
     }
 
     /// What the sampler will actually talk to, so the pane and the collector
@@ -1849,9 +1916,7 @@ private struct SystemAccessControls: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                LText("Required to list nearby Wi-Fi networks. macOS uses the same gate for its own Wi-Fi menu.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Required to list nearby Wi-Fi networks. macOS uses the same gate for its own Wi-Fi menu.")
             }
 
             Divider()
@@ -1878,12 +1943,11 @@ private struct SystemAccessControls: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
+                            .help(helperStatus)
                             .multilineTextAlignment(.trailing)
                     }
                 }
-                LText("Used to change DNS servers and to persist new Wi-Fi credentials into macOS's Known Networks. macOS may show a \"Background Items Added\" approval prompt the first time.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Used to change DNS servers and to persist new Wi-Fi credentials into macOS's Known Networks. macOS may show a \"Background Items Added\" approval prompt the first time.")
             }
         }
     }

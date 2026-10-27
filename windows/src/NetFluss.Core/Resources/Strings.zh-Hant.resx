@@ -1261,9 +1261,6 @@
   <data name="Show when VPN is off" xml:space="preserve">
     <value>VPN 關閉時也顯示</value>
   </data>
-  <data name="VPN indicator size" xml:space="preserve">
-    <value>VPN 指示器大小</value>
-  </data>
   <data name="Show flag only while a VPN is active" xml:space="preserve">
     <value>僅在 VPN 啟用時顯示旗幟</value>
   </data>
@@ -1827,6 +1824,33 @@
   </data>
   <data name="The controller&apos;s answer was not in the expected format." xml:space="preserve">
     <value>控制器的回應格式不符合預期。</value>
+  </data>
+  <data name="Link indicator" xml:space="preserve">
+    <value>連線指示器</value>
+  </data>
+  <data name="A Wi-Fi or cable symbol right of the rates, in the colour of the connection&apos;s state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic." xml:space="preserve">
+    <value>速率右側的 Wi-Fi 或網路線圖示，顏色表示連線狀態：已連線、已連線但無網路，或未連線。圖示會跟隨目前承載流量的介面。</value>
+  </data>
+  <data name="Indicator size" xml:space="preserve">
+    <value>指示器大小</value>
+  </data>
+  <data name="No internet" xml:space="preserve">
+    <value>無網路</value>
+  </data>
+  <data name="Check internet access" xml:space="preserve">
+    <value>檢查網際網路存取</value>
+  </data>
+  <data name="Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple&apos;s captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing." xml:space="preserve">
+    <value>不啟用此檢查時，圖示僅表示介面是否啟用。啟用後，NetFluss 會存取 Apple 的強制網路門戶位址（Windows 本身也使用該位址），頻率足以發現飯店登入頁或上游中斷，又低到幾乎沒有開銷。</value>
+  </data>
+  <data name="Check address" xml:space="preserve">
+    <value>檢查位址</value>
+  </data>
+  <data name="Internet Check Address" xml:space="preserve">
+    <value>網際網路檢查位址</value>
+  </data>
+  <data name="URL to check (empty uses Apple&apos;s)" xml:space="preserve">
+    <value>要檢查的 URL（留空則使用 Apple 的）</value>
   </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>「{0}」已存在。</value>

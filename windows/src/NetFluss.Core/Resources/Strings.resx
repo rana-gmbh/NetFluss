@@ -1261,9 +1261,6 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="Show when VPN is off" xml:space="preserve">
     <value>Show when VPN is off</value>
   </data>
-  <data name="VPN indicator size" xml:space="preserve">
-    <value>VPN indicator size</value>
-  </data>
   <data name="Show flag only while a VPN is active" xml:space="preserve">
     <value>Show flag only while a VPN is active</value>
   </data>
@@ -1827,6 +1824,33 @@ No network traffic is sent — only local counters from your machine are recorde
   </data>
   <data name="The controller&apos;s answer was not in the expected format." xml:space="preserve">
     <value>The controller's answer was not in the expected format.</value>
+  </data>
+  <data name="Link indicator" xml:space="preserve">
+    <value>Link indicator</value>
+  </data>
+  <data name="A Wi-Fi or cable symbol right of the rates, in the colour of the connection&apos;s state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic." xml:space="preserve">
+    <value>A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic.</value>
+  </data>
+  <data name="Indicator size" xml:space="preserve">
+    <value>Indicator size</value>
+  </data>
+  <data name="No internet" xml:space="preserve">
+    <value>No internet</value>
+  </data>
+  <data name="Check internet access" xml:space="preserve">
+    <value>Check internet access</value>
+  </data>
+  <data name="Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple&apos;s captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing." xml:space="preserve">
+    <value>Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one Windows itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing.</value>
+  </data>
+  <data name="Check address" xml:space="preserve">
+    <value>Check address</value>
+  </data>
+  <data name="Internet Check Address" xml:space="preserve">
+    <value>Internet Check Address</value>
+  </data>
+  <data name="URL to check (empty uses Apple&apos;s)" xml:space="preserve">
+    <value>URL to check (empty uses Apple's)</value>
   </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>'{0}' already exists.</value>
