@@ -134,6 +134,44 @@ actor StatisticsStore {
         saveIfNeeded(now: date)
     }
 
+    /// Per-proxy-node traffic from the Clash API (issue #61).
+    func recordNodeDeltas(_ deltas: [StatisticsNodeDelta], at date: Date) async {
+        guard !deltas.isEmpty else { return }
+        ensureLoaded()
+        let minuteKey = Self.minuteKey(for: date, calendar: calendar)
+        let hourKey = Self.hourKey(for: date, calendar: calendar)
+        let dayKey = Self.dayKey(for: date, calendar: calendar)
+
+        for delta in deltas where delta.downloadBytes > 0 || delta.uploadBytes > 0 {
+            accumulate(
+                into: &archive.nodeMinute,
+                bucketKey: minuteKey,
+                itemKey: delta.name,
+                downloadBytes: delta.downloadBytes,
+                uploadBytes: delta.uploadBytes
+            )
+            accumulate(
+                into: &archive.nodeHourly,
+                bucketKey: hourKey,
+                itemKey: delta.name,
+                downloadBytes: delta.downloadBytes,
+                uploadBytes: delta.uploadBytes
+            )
+            accumulate(
+                into: &archive.nodeDaily,
+                bucketKey: dayKey,
+                itemKey: delta.name,
+                downloadBytes: delta.downloadBytes,
+                uploadBytes: delta.uploadBytes
+            )
+        }
+
+        archive.lastNodeSampleAt = date
+        hasPendingChanges = true
+        prune(now: date)
+        saveIfNeeded(now: date)
+    }
+
     func flush(force: Bool = false) {
         guard hasPendingChanges else { return }
         let now = Date()
@@ -152,6 +190,7 @@ actor StatisticsStore {
         ensureLoaded()
         let adapterSource: [String: [String: StatisticsTrafficAmounts]]
         let appSource: [String: [String: StatisticsTrafficAmounts]]
+        let nodeSource: [String: [String: StatisticsTrafficAmounts]]
         let relevantKeys: [String]
         let timelineGranularity: StatisticsTimelineGranularity
         let timelineStart: Date
@@ -160,30 +199,35 @@ actor StatisticsStore {
         case .lastHour:
             adapterSource = archive.adapterMinute
             appSource = archive.appMinute
+            nodeSource = archive.nodeMinute
             relevantKeys = Self.minuteKeys(endingAt: now, count: 60, calendar: calendar)
             timelineGranularity = .minute
             timelineStart = calendar.date(byAdding: .minute, value: -59, to: now) ?? now
         case .last24Hours:
             adapterSource = archive.adapterHourly
             appSource = archive.appHourly
+            nodeSource = archive.nodeHourly
             relevantKeys = Self.hourKeys(endingAt: now, count: 24, calendar: calendar)
             timelineGranularity = .hour
             timelineStart = calendar.date(byAdding: .hour, value: -23, to: now) ?? now
         case .last7Days:
             adapterSource = archive.adapterDaily
             appSource = archive.appDaily
+            nodeSource = archive.nodeDaily
             relevantKeys = Self.dayKeys(endingAt: now, count: 7, calendar: calendar)
             timelineGranularity = .day
             timelineStart = calendar.date(byAdding: .day, value: -6, to: now) ?? now
         case .last30Days:
             adapterSource = archive.adapterDaily
             appSource = archive.appDaily
+            nodeSource = archive.nodeDaily
             relevantKeys = Self.dayKeys(endingAt: now, count: 30, calendar: calendar)
             timelineGranularity = .day
             timelineStart = calendar.date(byAdding: .day, value: -29, to: now) ?? now
         case .lastYear:
             adapterSource = archive.adapterDaily
             appSource = archive.appDaily
+            nodeSource = archive.nodeDaily
             relevantKeys = Self.dayKeys(endingAt: now, count: 365, calendar: calendar)
             timelineGranularity = .month
             timelineStart = calendar.date(byAdding: .day, value: -364, to: now) ?? now
@@ -198,6 +242,7 @@ actor StatisticsStore {
             timelineEnd: now,
             adapterSource: adapterSource,
             appSource: appSource,
+            nodeSource: nodeSource,
             relevantKeys: relevantKeys,
             customAdapterNames: customAdapterNames,
             hiddenApps: hiddenApps,
@@ -220,6 +265,7 @@ actor StatisticsStore {
 
         let adapterSource: [String: [String: StatisticsTrafficAmounts]]
         let appSource: [String: [String: StatisticsTrafficAmounts]]
+        let nodeSource: [String: [String: StatisticsTrafficAmounts]]
         let relevantKeys: [String]
         let timelineGranularity: StatisticsTimelineGranularity
 
@@ -229,16 +275,19 @@ actor StatisticsStore {
         if span <= 3 * 60 * 60, boundedStart >= minuteCutoff {
             adapterSource = archive.adapterMinute
             appSource = archive.appMinute
+            nodeSource = archive.nodeMinute
             relevantKeys = Self.minuteKeys(from: boundedStart, to: boundedEnd, calendar: calendar)
             timelineGranularity = .minute
         } else if span <= 72 * 60 * 60, boundedStart >= hourlyCutoff {
             adapterSource = archive.adapterHourly
             appSource = archive.appHourly
+            nodeSource = archive.nodeHourly
             relevantKeys = Self.hourKeys(from: boundedStart, to: boundedEnd, calendar: calendar)
             timelineGranularity = .hour
         } else {
             adapterSource = archive.adapterDaily
             appSource = archive.appDaily
+            nodeSource = archive.nodeDaily
             relevantKeys = Self.dayKeys(from: boundedStart, to: boundedEnd, calendar: calendar)
             timelineGranularity = span > 90 * 24 * 60 * 60 ? .month : .day
         }
@@ -252,6 +301,7 @@ actor StatisticsStore {
             timelineEnd: boundedEnd,
             adapterSource: adapterSource,
             appSource: appSource,
+            nodeSource: nodeSource,
             relevantKeys: relevantKeys,
             customAdapterNames: customAdapterNames,
             hiddenApps: hiddenApps,
@@ -290,6 +340,7 @@ actor StatisticsStore {
         timelineEnd: Date,
         adapterSource: [String: [String: StatisticsTrafficAmounts]],
         appSource: [String: [String: StatisticsTrafficAmounts]],
+        nodeSource: [String: [String: StatisticsTrafficAmounts]],
         relevantKeys: [String],
         customAdapterNames: [String: String],
         hiddenApps: Set<String>,
@@ -308,6 +359,7 @@ actor StatisticsStore {
         }
         let totalsAmounts = aggregate(items: totalsSource, keys: relevantKeys)
         let appTotals = aggregate(items: appSource, keys: relevantKeys)
+        let nodeTotals = aggregate(items: nodeSource, keys: relevantKeys)
         let timeline = timelinePoints(granularity: timelineGranularity, source: totalsSource, keys: relevantKeys)
 
         let adapters = topAdapters(from: adapterTotals, customAdapterNames: customAdapterNames)
@@ -321,6 +373,8 @@ actor StatisticsStore {
             hiddenApps: hiddenApps,
             keyPath: \.uploadBytes
         )
+
+        let nodes = nodeRows(from: nodeTotals)
 
         return StatisticsReport(
             range: range,
@@ -338,7 +392,8 @@ actor StatisticsStore {
             timeline: timeline,
             adapters: adapters,
             topDownloadApps: topDownloadApps,
-            topUploadApps: topUploadApps
+            topUploadApps: topUploadApps,
+            nodes: nodes
         )
     }
 
@@ -481,6 +536,27 @@ actor StatisticsStore {
             .map { $0 }
     }
 
+    /// Every node that moved anything, biggest first. Unlike apps this is not
+    /// capped at ten: the point is to account for a quota, and a truncated list
+    /// would not add up to the total the user is trying to reconcile.
+    private func nodeRows(from totals: [String: StatisticsTrafficAmounts]) -> [StatisticsNodeRow] {
+        totals
+            .compactMap { key, amounts -> StatisticsNodeRow? in
+                guard amounts.totalBytes > 0 else { return nil }
+                return StatisticsNodeRow(
+                    id: key,
+                    name: key,
+                    downloadBytes: amounts.downloadBytes,
+                    uploadBytes: amounts.uploadBytes
+                )
+            }
+            .sorted { lhs, rhs in
+                lhs.totalBytes == rhs.totalBytes
+                    ? lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                    : lhs.totalBytes > rhs.totalBytes
+            }
+    }
+
     private func resolvedAdapterName(id: String, customAdapterNames: [String: String]) -> String {
         if let custom = customAdapterNames[id], !custom.isEmpty {
             return custom
@@ -529,6 +605,10 @@ actor StatisticsStore {
             guard let date = Self.date(fromMinuteKey: key, calendar: calendar) else { return false }
             return date >= minuteCutoff
         }
+        archive.nodeMinute = archive.nodeMinute.filter { key, _ in
+            guard let date = Self.date(fromMinuteKey: key, calendar: calendar) else { return false }
+            return date >= minuteCutoff
+        }
         archive.adapterHourly = archive.adapterHourly.filter { key, _ in
             guard let date = Self.date(fromHourKey: key, calendar: calendar) else { return false }
             return date >= hourlyCutoff
@@ -537,11 +617,19 @@ actor StatisticsStore {
             guard let date = Self.date(fromHourKey: key, calendar: calendar) else { return false }
             return date >= hourlyCutoff
         }
+        archive.nodeHourly = archive.nodeHourly.filter { key, _ in
+            guard let date = Self.date(fromHourKey: key, calendar: calendar) else { return false }
+            return date >= hourlyCutoff
+        }
         archive.adapterDaily = archive.adapterDaily.filter { key, _ in
             guard let date = Self.date(fromDayKey: key, calendar: calendar) else { return false }
             return date >= dailyCutoff
         }
         archive.appDaily = archive.appDaily.filter { key, _ in
+            guard let date = Self.date(fromDayKey: key, calendar: calendar) else { return false }
+            return date >= dailyCutoff
+        }
+        archive.nodeDaily = archive.nodeDaily.filter { key, _ in
             guard let date = Self.date(fromDayKey: key, calendar: calendar) else { return false }
             return date >= dailyCutoff
         }

@@ -283,6 +283,8 @@ struct PreferencesView: View {
     @AppStorage("topAppsGracePeriodSeconds") private var topAppsGracePeriodSeconds: Double = 3.0
     @AppStorage("collectStatistics") private var collectStatistics: Bool = false
     @AppStorage("collectAppStatistics") private var collectAppStatistics: Bool = true
+    @AppStorage("collectProxyNodeStatistics") private var collectProxyNodeStatistics: Bool = false
+    @AppStorage("clashAPIHost") private var clashAPIHost: String = ""
     @AppStorage("showUsageSummary") private var showUsageSummary: Bool = false
     @AppStorage("externalIPv6") private var externalIPv6: Bool = false
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
@@ -320,6 +322,10 @@ struct PreferencesView: View {
     // re-evaluates every monitor tick while Preferences is open.
     @State private var unifiConfigured = false
     @State private var openWRTConfigured = false
+    @State private var clashSecretConfigured = false
+    @State private var clashTestInFlight = false
+    @State private var clashTestStatus: String?
+    @State private var clashTestSucceeded = false
     @State private var opnsenseConfigured = false
 
     @EnvironmentObject private var monitor: NetworkMonitor
@@ -532,6 +538,17 @@ struct PreferencesView: View {
                     LText("App statistics are on by default and may increase energy consumption because NetFluss periodically samples per-app network usage in the background.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    Toggle(isOn: $collectProxyNodeStatistics) {
+                        LText("Collect proxy node statistics")
+                    }
+                    LText("Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if collectProxyNodeStatistics {
+                        proxyNodeSettings
+                    }
                 }
             } header: {
                 LText("Statistics")
@@ -1288,12 +1305,120 @@ struct PreferencesView: View {
     /// Re-read the router "credentials configured?" flags from the keychain.
     /// Called on appear, when hosts/mode change, and after an editor saves — so
     /// `body` never touches the keychain on its 1 Hz re-evaluation.
+    /// Pulled out of the Form: inline, the address/secret/test rows blew past
+    /// the type-checker's budget for a single expression.
+    @ViewBuilder
+    private var proxyNodeSettings: some View {
+        LabeledContent {
+            HStack(spacing: 6) {
+                Text(effectiveClashHost)
+                    .font(.system(size: 12))
+                    .foregroundStyle(clashAPIHost.isEmpty ? Color.secondary : Color.primary)
+                if clashAPIHost.isEmpty {
+                    LText("(default)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+                Button("Edit…") {
+                    EditRouterHostController.shared.show(
+                        title: "Proxy Controller Address",
+                        placeholder: "Host:port of the Clash API (default 127.0.0.1:9090)",
+                        currentHost: clashAPIHost
+                    ) { newHost in
+                        clashAPIHost = newHost
+                    }
+                }
+            }
+        } label: {
+            LText("Controller address")
+        }
+
+        LabeledContent {
+            HStack(spacing: 6) {
+                if clashSecretConfigured {
+                    LText("Configured")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                } else {
+                    LText("None")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Button("Edit…") {
+                    EditClashSecretController.shared.show(host: effectiveClashHost) {
+                        refreshClashSecretStatus()
+                    }
+                }
+            }
+        } label: {
+            LText("Controller secret")
+        }
+
+        HStack(spacing: 8) {
+            Button {
+                testClashController()
+            } label: {
+                LText("Test connection")
+            }
+            .disabled(clashTestInFlight)
+            if let status = clashTestStatus {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(clashTestSucceeded ? Color.secondary : Color.orange)
+            }
+            Spacer()
+        }
+
+        LText("The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+    }
+
+    /// What the sampler will actually talk to, so the pane and the collector
+    /// never disagree about which address is in use.
+    private var effectiveClashHost: String {
+        clashAPIHost.isEmpty ? "127.0.0.1:\(ClashAPIMonitor.defaultPort)" : clashAPIHost
+    }
+
+    private func refreshClashSecretStatus() {
+        let secret = VPNCredentialStore().load(account: StatisticsManager.proxyNodeSecretAccount)?.password
+        clashSecretConfigured = !(secret ?? "").isEmpty
+    }
+
+    private func testClashController() {
+        clashTestInFlight = true
+        clashTestStatus = nil
+        let host = effectiveClashHost
+        let secret = VPNCredentialStore().load(account: StatisticsManager.proxyNodeSecretAccount)?.password ?? ""
+
+        Task {
+            do {
+                let snapshot = try await ClashAPIMonitor.fetchConnections(host: host, secret: secret)
+                await MainActor.run {
+                    clashTestSucceeded = true
+                    clashTestStatus = L10n.format(
+                        "Connected — %d open connections.",
+                        snapshot.connections.count
+                    )
+                    clashTestInFlight = false
+                }
+            } catch {
+                await MainActor.run {
+                    clashTestSucceeded = false
+                    clashTestStatus = StatisticsManager.describe(error)
+                    clashTestInFlight = false
+                }
+            }
+        }
+    }
+
     private func refreshRouterCredentialStatus() {
         let unifi = unifiHost.isEmpty ? monitor.gatewayIP : unifiHost
         unifiConfigured = unifiUseAPIKey
             ? (UniFiMonitor.loadAPIKey(host: unifi) != nil)
             : (UniFiMonitor.loadCredentials(host: unifi) != nil)
         openWRTConfigured = OpenWRTMonitor.loadCredentials(host: openWRTHost.isEmpty ? monitor.gatewayIP : openWRTHost) != nil
+        refreshClashSecretStatus()
         opnsenseConfigured = OPNsenseMonitor.loadCredentials(host: opnsenseHost.isEmpty ? monitor.gatewayIP : opnsenseHost) != nil
     }
 

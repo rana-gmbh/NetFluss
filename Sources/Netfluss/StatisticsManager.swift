@@ -29,12 +29,21 @@ final class StatisticsManager: ObservableObject {
         /// Skip an app sample unless at least this many bytes moved since the last
         /// one, so idle periods spawn no netstat at all.
         static let appSampleByteThreshold: UInt64 = 256 * 1024
+        /// Clash API poll cadence (issue #61). Short, because a connection that
+        /// opens and closes between two polls can only be counted in the
+        /// unattributed bucket, never against the node that carried it. This is
+        /// an HTTP GET to a loopback port, not a process spawn, so it is far
+        /// cheaper than the app sampler above.
+        static let nodeSamplingInterval: TimeInterval = 3
+        static let lowPowerNodeSamplingInterval: TimeInterval = 10
     }
 
     @Published private(set) var report: StatisticsReport?
     @Published private(set) var isLoading = false
     @Published private(set) var isShowingSampleData = false
     @Published private(set) var usageSummary: StatisticsUsageSummary = .empty
+    /// Localized reason the last Clash API poll failed, or nil while it works.
+    @Published private(set) var proxyNodeError: String?
 
     private let monitor: NetworkMonitor
     private let store: StatisticsStore
@@ -48,6 +57,16 @@ final class StatisticsManager: ObservableObject {
     private let appSamplingQueue = DispatchQueue(label: "com.local.netfluss.statistics.apps", qos: .utility)
     private var appSamplingTimer: DispatchSourceTimer?
     private var appSamplingInFlight = false
+    private var nodeSamplingTimer: DispatchSourceTimer?
+    private var nodeSamplingInFlight = false
+    private var nodeAccumulator = ClashNodeAccumulator()
+    private var nodeSamplingHost: String?
+    /// The controller secret is read from the Keychain, which is a synchronous
+    /// call; at a 3-second cadence it has no business running on every tick.
+    /// Cleared whenever the credential may have changed, so the next poll
+    /// re-reads it.
+    private var cachedProxyNodeSecret: String?
+    private let nodeSamplingQueue = DispatchQueue(label: "com.local.netfluss.statistics.nodes", qos: .utility)
     private var currentRange: StatisticsRange = .last24Hours
     private var currentCustomStart: Date?
     private var currentCustomEnd: Date?
@@ -60,6 +79,13 @@ final class StatisticsManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] adapters in
                 self?.ingestAdapterSnapshot(adapters)
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .routerCredentialsChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.cachedProxyNodeSecret = nil
             }
             .store(in: &cancellables)
 
@@ -78,6 +104,20 @@ final class StatisticsManager: ObservableObject {
             startAppSampling()
         } else {
             stopAppSampling()
+        }
+
+        // A changed controller address invalidates the carried connection state:
+        // ids from the old instance would read as brand-new connections and
+        // their whole cumulative counters would be billed to a node at once.
+        if nodeSamplingHost != proxyNodeHost {
+            nodeSamplingHost = proxyNodeHost
+            nodeAccumulator.reset()
+            cachedProxyNodeSecret = nil
+        }
+        if statisticsEnabled && proxyNodeStatisticsEnabled {
+            startNodeSampling()
+        } else {
+            stopNodeSampling()
         }
 
         if !statisticsEnabled {
@@ -204,6 +244,15 @@ final class StatisticsManager: ObservableObject {
         statisticsEnabled && UserDefaults.standard.bool(forKey: "collectAppStatistics")
     }
 
+    private var proxyNodeStatisticsEnabled: Bool {
+        statisticsEnabled && UserDefaults.standard.bool(forKey: "collectProxyNodeStatistics")
+    }
+
+    private var proxyNodeHost: String {
+        let host = UserDefaults.standard.string(forKey: "clashAPIHost") ?? ""
+        return host.isEmpty ? "127.0.0.1:\(ClashAPIMonitor.defaultPort)" : host
+    }
+
     /// Whether the popover section is currently on screen (popover shown or
     /// pinned window visible). Set from `StatusBarController.updateDetailMonitoring`.
     private var liveSummaryActive = false
@@ -286,6 +335,118 @@ final class StatisticsManager: ObservableObject {
         }
         timer.resume()
         appSamplingTimer = timer
+    }
+
+    // MARK: - Proxy node sampling (Clash API, issue #61)
+
+    private func startNodeSampling() {
+        guard nodeSamplingTimer == nil else { return }
+
+        let timer = DispatchSource.makeTimerSource(queue: nodeSamplingQueue)
+        let interval = ProcessInfo.processInfo.isLowPowerModeEnabled
+            ? Constants.lowPowerNodeSamplingInterval
+            : Constants.nodeSamplingInterval
+        timer.schedule(deadline: .now() + 1.0, repeating: interval, leeway: .milliseconds(250))
+        timer.setEventHandler { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.runNodeSampleIfNeeded()
+            }
+        }
+        timer.resume()
+        nodeSamplingTimer = timer
+    }
+
+    private func stopNodeSampling() {
+        nodeSamplingTimer?.cancel()
+        nodeSamplingTimer = nil
+        nodeSamplingInFlight = false
+        nodeAccumulator.reset()
+        cachedProxyNodeSecret = nil
+        if proxyNodeError != nil { proxyNodeError = nil }
+    }
+
+    private func runNodeSampleIfNeeded() {
+        guard proxyNodeStatisticsEnabled, !nodeSamplingInFlight else { return }
+        nodeSamplingInFlight = true
+
+        let host = proxyNodeHost
+        let secret: String
+        if let cached = cachedProxyNodeSecret {
+            secret = cached
+        } else {
+            secret = Self.loadProxyNodeSecret()
+            cachedProxyNodeSecret = secret
+        }
+
+        Task { [weak self] in
+            let sampleTime = Date()
+            let result: Result<ClashConnectionsSnapshot, Error>
+            do {
+                result = .success(try await ClashAPIMonitor.fetchConnections(host: host, secret: secret))
+            } catch {
+                result = .failure(error)
+            }
+
+            guard let self else { return }
+            self.nodeSamplingInFlight = false
+            guard self.proxyNodeStatisticsEnabled else { return }
+
+            switch result {
+            case .failure(let error):
+                // A failed poll leaves a hole of unknown length. Dropping the
+                // carried state means the next success re-baselines instead of
+                // billing the whole gap to whichever connections survived it.
+                self.nodeAccumulator.reset()
+                // A rejected secret is the one failure a user fixes while this
+                // is running, so drop the cached copy and pick up the new one.
+                if case ClashAPIError.authFailed = error {
+                    self.cachedProxyNodeSecret = nil
+                }
+                self.setProxyNodeError(Self.describe(error))
+
+            case .success(let snapshot):
+                if self.proxyNodeError != nil { self.proxyNodeError = nil }
+                let deltas = self.nodeAccumulator.consume(snapshot)
+                guard !deltas.isEmpty else { return }
+                Task.detached(priority: .utility) { [store] in
+                    await store.recordNodeDeltas(deltas, at: sampleTime)
+                }
+            }
+        }
+    }
+
+    private func setProxyNodeError(_ message: String) {
+        if proxyNodeError != message { proxyNodeError = message }
+    }
+
+    private static func loadProxyNodeSecret() -> String {
+        VPNCredentialStore().load(account: Self.proxyNodeSecretAccount)?.password ?? ""
+    }
+
+    static let proxyNodeSecretAccount = "clash-api-secret"
+
+    static func describe(_ error: Error) -> String {
+        guard let apiError = error as? ClashAPIError else {
+            return L10n.text("Could not read the proxy controller.")
+        }
+        switch apiError {
+        case .invalidURL:
+            return L10n.text("The controller address is not valid.")
+        case .authFailed:
+            return L10n.text("The controller rejected the secret.")
+        case .httpStatus(let code):
+            return L10n.format("The controller answered with HTTP %d.", code)
+        case .requestFailed(let urlError):
+            if let urlError, urlError.code == .cannotConnectToHost || urlError.code == .networkConnectionLost {
+                return L10n.text("No proxy controller is listening at that address.")
+            }
+            if let urlError, urlError.code == .timedOut {
+                return L10n.text("The controller did not answer in time.")
+            }
+            return L10n.text("Could not reach the proxy controller.")
+        case .parseError:
+            return L10n.text("The controller's answer was not in the expected format.")
+        }
     }
 
     private func stopAppSampling() {

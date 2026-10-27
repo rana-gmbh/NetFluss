@@ -588,3 +588,32 @@
 "The M-Lab upload server URL is missing." = "Die URL des M-Lab-Upload-Servers fehlt.";
 "The M-Lab upload socket closed unexpectedly." = "Die M-Lab-Upload-Verbindung wurde unerwartet geschlossen.";
 "Auto-selected nearby edge" = "Automatisch gewählter nahegelegener Edge-Server";
+
+/* Proxy node statistics (issue #61) */
+"Proxy nodes" = "Proxy-Nodes";
+"Traffic per outbound node for the selected range, read from the proxy controller." = "Datenverkehr pro ausgehendem Node im gewählten Zeitraum, ausgelesen über den Proxy-Controller.";
+"No node traffic recorded yet." = "Noch kein Node-Datenverkehr aufgezeichnet.";
+"Unattributed" = "Nicht zugeordnet";
+"Unknown node" = "Unbekannter Node";
+"Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS." = "„Nicht zugeordnet“ umfasst Datenverkehr, den der Controller gezählt, aber keinem Node zugeordnet hat — meist Verbindungen, die zwischen zwei Abfragen geöffnet und wieder geschlossen wurden, sowie DNS.";
+"Collect proxy node statistics" = "Proxy-Node-Statistiken erfassen";
+"Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription." = "Zeichnet auf, wie viel Datenverkehr jeder ausgehende Node übertragen hat — für Clients mit Clash-API wie sing-box, mihomo oder Clash Verge. Nützlich bei einem Abo mit Datenlimit.";
+"Controller address" = "Controller-Adresse";
+"Controller secret" = "Controller-Secret";
+"(default)" = "(Standard)";
+"Proxy Controller Address" = "Proxy-Controller-Adresse";
+"Host:port of the Clash API (default 127.0.0.1:9090)" = "Host:Port der Clash-API (Standard 127.0.0.1:9090)";
+"Proxy Controller Secret" = "Proxy-Controller-Secret";
+"The secret from your client's Clash API settings. Leave empty if none is configured." = "Das Secret aus den Clash-API-Einstellungen deines Clients. Leer lassen, wenn keines konfiguriert ist.";
+"Secret" = "Secret";
+"Test connection" = "Verbindung testen";
+"Connected — %d open connections." = "Verbunden — %d offene Verbindungen.";
+"The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already." = "Die Clash-API ist deaktiviert, solange dein Client keinen external-controller setzt. In sing-box ist das experimental.clash_api.external_controller in der Konfiguration; die meisten GUI-Clients aktivieren sie bereits auf 127.0.0.1:9090.";
+"Could not read the proxy controller." = "Der Proxy-Controller konnte nicht gelesen werden.";
+"The controller address is not valid." = "Die Controller-Adresse ist ungültig.";
+"The controller rejected the secret." = "Der Controller hat das Secret abgelehnt.";
+"The controller answered with HTTP %d." = "Der Controller antwortete mit HTTP %d.";
+"No proxy controller is listening at that address." = "An dieser Adresse lauscht kein Proxy-Controller.";
+"The controller did not answer in time." = "Der Controller hat nicht rechtzeitig geantwortet.";
+"Could not reach the proxy controller." = "Der Proxy-Controller ist nicht erreichbar.";
+"The controller's answer was not in the expected format." = "Die Antwort des Controllers hatte nicht das erwartete Format.";

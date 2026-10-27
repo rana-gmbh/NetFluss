@@ -1747,6 +1747,87 @@
   <data name="Auto-selected nearby edge" xml:space="preserve">
     <value>自動選擇的附近邊緣節點</value>
   </data>
+  <data name="Proxy nodes" xml:space="preserve">
+    <value>代理節點</value>
+  </data>
+  <data name="Traffic per outbound node for the selected range, read from the proxy controller." xml:space="preserve">
+    <value>所選時間範圍內每個出站節點的流量，讀取自代理控制器。</value>
+  </data>
+  <data name="No node traffic recorded yet." xml:space="preserve">
+    <value>尚未記錄節點流量。</value>
+  </data>
+  <data name="Unattributed" xml:space="preserve">
+    <value>未歸類</value>
+  </data>
+  <data name="Unknown node" xml:space="preserve">
+    <value>未知節點</value>
+  </data>
+  <data name="Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS." xml:space="preserve">
+    <value>「未歸類」包含控制器已統計但無法歸屬到某個節點的流量——多為在兩次讀取之間建立並關閉的連線，以及 DNS。</value>
+  </data>
+  <data name="Collect proxy node statistics" xml:space="preserve">
+    <value>收集代理節點統計</value>
+  </data>
+  <data name="Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription." xml:space="preserve">
+    <value>記錄每個出站節點承載的流量，適用於提供 Clash API 的用戶端，如 sing-box、mihomo、Clash Verge 等。在按流量計費的訂閱下尤其有用。</value>
+  </data>
+  <data name="Controller address" xml:space="preserve">
+    <value>控制器位址</value>
+  </data>
+  <data name="Controller secret" xml:space="preserve">
+    <value>控制器密鑰</value>
+  </data>
+  <data name="(default)" xml:space="preserve">
+    <value>（預設）</value>
+  </data>
+  <data name="Proxy Controller Address" xml:space="preserve">
+    <value>代理控制器位址</value>
+  </data>
+  <data name="Host:port of the Clash API (default 127.0.0.1:9090)" xml:space="preserve">
+    <value>Clash API 的 主機:連接埠（預設 127.0.0.1:9090）</value>
+  </data>
+  <data name="Proxy Controller Secret" xml:space="preserve">
+    <value>代理控制器密鑰</value>
+  </data>
+  <data name="The secret from your client&apos;s Clash API settings. Leave empty if none is configured." xml:space="preserve">
+    <value>來自用戶端 Clash API 設定的密鑰。若未設定則留空。</value>
+  </data>
+  <data name="Secret" xml:space="preserve">
+    <value>密鑰</value>
+  </data>
+  <data name="Test connection~2" xml:space="preserve">
+    <value>測試連線</value>
+  </data>
+  <data name="Connected — {0} open connections." xml:space="preserve">
+    <value>已連線——{0} 個開啟的連線。</value>
+  </data>
+  <data name="The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already." xml:space="preserve">
+    <value>除非用戶端設定了 external-controller，否則 Clash API 處於關閉狀態。在 sing-box 中對應設定項為 experimental.clash_api.external_controller；多數圖形用戶端已在 127.0.0.1:9090 上啟用。</value>
+  </data>
+  <data name="Could not read the proxy controller." xml:space="preserve">
+    <value>無法讀取代理控制器。</value>
+  </data>
+  <data name="The controller address is not valid." xml:space="preserve">
+    <value>控制器位址無效。</value>
+  </data>
+  <data name="The controller rejected the secret." xml:space="preserve">
+    <value>控制器拒絕了該密鑰。</value>
+  </data>
+  <data name="The controller answered with HTTP {0}." xml:space="preserve">
+    <value>控制器回應 HTTP {0}。</value>
+  </data>
+  <data name="No proxy controller is listening at that address." xml:space="preserve">
+    <value>該位址上沒有代理控制器在監聽。</value>
+  </data>
+  <data name="The controller did not answer in time." xml:space="preserve">
+    <value>控制器未及時回應。</value>
+  </data>
+  <data name="Could not reach the proxy controller." xml:space="preserve">
+    <value>無法連線到代理控制器。</value>
+  </data>
+  <data name="The controller&apos;s answer was not in the expected format." xml:space="preserve">
+    <value>控制器的回應格式不符合預期。</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>「{0}」已存在。</value>
   </data>

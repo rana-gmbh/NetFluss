@@ -386,6 +386,100 @@ struct EditRouterCredentialsPanelView: View {
     }
 }
 
+// MARK: - Clash API Secret Editor
+
+/// Editor for the proxy controller's `secret` (issue #61). Unlike the router
+/// credential editors an empty value is valid and meaningful: sing-box only
+/// requires a secret when `experimental.clash_api.secret` is set, and clearing
+/// the field is how a user removes one.
+@MainActor
+final class EditClashSecretController {
+    static let shared = EditClashSecretController()
+    private var panel: NSPanel?
+
+    func show(host: String, onSave: @escaping () -> Void = {}) {
+        if let panel {
+            panel.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let view = EditClashSecretPanelView(host: host) { [weak self] secret in
+            let store = VPNCredentialStore()
+            if secret.isEmpty {
+                store.delete(account: StatisticsManager.proxyNodeSecretAccount)
+            } else {
+                store.save(account: StatisticsManager.proxyNodeSecretAccount, username: nil, password: secret)
+            }
+            NotificationCenter.default.post(name: .routerCredentialsChanged, object: nil)
+            onSave()
+            self?.close()
+        } onCancel: { [weak self] in
+            self?.close()
+        }
+        let hosting = NSHostingController(rootView: LocalizedRoot { view })
+
+        let panel = NSPanel(contentViewController: hosting)
+        panel.title = L10n.text("Proxy Controller Secret")
+        panel.styleMask = [.titled, .closable, .nonactivatingPanel]
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.setContentSize(NSSize(width: 340, height: 240))
+        panel.isReleasedWhenClosed = false
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKey()
+
+        self.panel = panel
+    }
+
+    private func close() {
+        panel?.close()
+        panel = nil
+        reactivatePreferencesWindow()
+    }
+}
+
+struct EditClashSecretPanelView: View {
+    let host: String
+    let onSave: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var secret: String = ""
+
+    var body: some View {
+        VStack(spacing: 16) {
+            LText("Proxy Controller Secret")
+                .font(.headline)
+            Text("for \(host)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            LText("The secret from your client's Clash API settings. Leave empty if none is configured.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            SecureField("Secret", text: $secret)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { save() }
+            HStack(spacing: 12) {
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
+    }
+
+    private func save() {
+        onSave(secret.trimmingCharacters(in: .whitespaces))
+    }
+}
+
 // MARK: - UniFi API Key Editor
 
 @MainActor

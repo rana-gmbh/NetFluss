@@ -588,3 +588,32 @@
 "The M-Lab upload server URL is missing." = "缺少 M-Lab 上傳伺服器 URL。";
 "The M-Lab upload socket closed unexpectedly." = "M-Lab 上傳連線意外關閉。";
 "Auto-selected nearby edge" = "自動選擇的附近邊緣節點";
+
+/* Proxy node statistics (issue #61) */
+"Proxy nodes" = "代理節點";
+"Traffic per outbound node for the selected range, read from the proxy controller." = "所選時間範圍內每個出站節點的流量，讀取自代理控制器。";
+"No node traffic recorded yet." = "尚未記錄節點流量。";
+"Unattributed" = "未歸類";
+"Unknown node" = "未知節點";
+"Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS." = "「未歸類」包含控制器已統計但無法歸屬到某個節點的流量——多為在兩次讀取之間建立並關閉的連線，以及 DNS。";
+"Collect proxy node statistics" = "收集代理節點統計";
+"Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription." = "記錄每個出站節點承載的流量，適用於提供 Clash API 的用戶端，如 sing-box、mihomo、Clash Verge 等。在按流量計費的訂閱下尤其有用。";
+"Controller address" = "控制器位址";
+"Controller secret" = "控制器密鑰";
+"(default)" = "（預設）";
+"Proxy Controller Address" = "代理控制器位址";
+"Host:port of the Clash API (default 127.0.0.1:9090)" = "Clash API 的 主機:連接埠（預設 127.0.0.1:9090）";
+"Proxy Controller Secret" = "代理控制器密鑰";
+"The secret from your client's Clash API settings. Leave empty if none is configured." = "來自用戶端 Clash API 設定的密鑰。若未設定則留空。";
+"Secret" = "密鑰";
+"Test connection" = "測試連線";
+"Connected — %d open connections." = "已連線——%d 個開啟的連線。";
+"The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already." = "除非用戶端設定了 external-controller，否則 Clash API 處於關閉狀態。在 sing-box 中對應設定項為 experimental.clash_api.external_controller；多數圖形用戶端已在 127.0.0.1:9090 上啟用。";
+"Could not read the proxy controller." = "無法讀取代理控制器。";
+"The controller address is not valid." = "控制器位址無效。";
+"The controller rejected the secret." = "控制器拒絕了該密鑰。";
+"The controller answered with HTTP %d." = "控制器回應 HTTP %d。";
+"No proxy controller is listening at that address." = "該位址上沒有代理控制器在監聽。";
+"The controller did not answer in time." = "控制器未及時回應。";
+"Could not reach the proxy controller." = "無法連線到代理控制器。";
+"The controller's answer was not in the expected format." = "控制器的回應格式不符合預期。";

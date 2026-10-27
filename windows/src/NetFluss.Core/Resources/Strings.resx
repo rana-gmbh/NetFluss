@@ -1747,6 +1747,87 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="Auto-selected nearby edge" xml:space="preserve">
     <value>Auto-selected nearby edge</value>
   </data>
+  <data name="Proxy nodes" xml:space="preserve">
+    <value>Proxy nodes</value>
+  </data>
+  <data name="Traffic per outbound node for the selected range, read from the proxy controller." xml:space="preserve">
+    <value>Traffic per outbound node for the selected range, read from the proxy controller.</value>
+  </data>
+  <data name="No node traffic recorded yet." xml:space="preserve">
+    <value>No node traffic recorded yet.</value>
+  </data>
+  <data name="Unattributed" xml:space="preserve">
+    <value>Unattributed</value>
+  </data>
+  <data name="Unknown node" xml:space="preserve">
+    <value>Unknown node</value>
+  </data>
+  <data name="Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS." xml:space="preserve">
+    <value>Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS.</value>
+  </data>
+  <data name="Collect proxy node statistics" xml:space="preserve">
+    <value>Collect proxy node statistics</value>
+  </data>
+  <data name="Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription." xml:space="preserve">
+    <value>Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription.</value>
+  </data>
+  <data name="Controller address" xml:space="preserve">
+    <value>Controller address</value>
+  </data>
+  <data name="Controller secret" xml:space="preserve">
+    <value>Controller secret</value>
+  </data>
+  <data name="(default)" xml:space="preserve">
+    <value>(default)</value>
+  </data>
+  <data name="Proxy Controller Address" xml:space="preserve">
+    <value>Proxy Controller Address</value>
+  </data>
+  <data name="Host:port of the Clash API (default 127.0.0.1:9090)" xml:space="preserve">
+    <value>Host:port of the Clash API (default 127.0.0.1:9090)</value>
+  </data>
+  <data name="Proxy Controller Secret" xml:space="preserve">
+    <value>Proxy Controller Secret</value>
+  </data>
+  <data name="The secret from your client&apos;s Clash API settings. Leave empty if none is configured." xml:space="preserve">
+    <value>The secret from your client's Clash API settings. Leave empty if none is configured.</value>
+  </data>
+  <data name="Secret" xml:space="preserve">
+    <value>Secret</value>
+  </data>
+  <data name="Test connection~2" xml:space="preserve">
+    <value>Test connection</value>
+  </data>
+  <data name="Connected — {0} open connections." xml:space="preserve">
+    <value>Connected — {0} open connections.</value>
+  </data>
+  <data name="The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already." xml:space="preserve">
+    <value>The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already.</value>
+  </data>
+  <data name="Could not read the proxy controller." xml:space="preserve">
+    <value>Could not read the proxy controller.</value>
+  </data>
+  <data name="The controller address is not valid." xml:space="preserve">
+    <value>The controller address is not valid.</value>
+  </data>
+  <data name="The controller rejected the secret." xml:space="preserve">
+    <value>The controller rejected the secret.</value>
+  </data>
+  <data name="The controller answered with HTTP {0}." xml:space="preserve">
+    <value>The controller answered with HTTP {0}.</value>
+  </data>
+  <data name="No proxy controller is listening at that address." xml:space="preserve">
+    <value>No proxy controller is listening at that address.</value>
+  </data>
+  <data name="The controller did not answer in time." xml:space="preserve">
+    <value>The controller did not answer in time.</value>
+  </data>
+  <data name="Could not reach the proxy controller." xml:space="preserve">
+    <value>Could not reach the proxy controller.</value>
+  </data>
+  <data name="The controller&apos;s answer was not in the expected format." xml:space="preserve">
+    <value>The controller's answer was not in the expected format.</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>'{0}' already exists.</value>
   </data>

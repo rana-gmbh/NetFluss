@@ -59,6 +59,8 @@ final class AppState {
             "topAppsGracePeriodEnabled": false,
             "topAppsGracePeriodSeconds": 3.0,
             "collectStatistics": false,
+            "collectProxyNodeStatistics": false,
+            "clashAPIHost": "",
             "collectAppStatistics": true,
             "speedTestProvider": "mlab",
             "speedTestMLabConsentAccepted": false,

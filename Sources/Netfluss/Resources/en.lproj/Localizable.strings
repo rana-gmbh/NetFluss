@@ -588,3 +588,32 @@
 "The M-Lab upload server URL is missing." = "The M-Lab upload server URL is missing.";
 "The M-Lab upload socket closed unexpectedly." = "The M-Lab upload socket closed unexpectedly.";
 "Auto-selected nearby edge" = "Auto-selected nearby edge";
+
+/* Proxy node statistics (issue #61) */
+"Proxy nodes" = "Proxy nodes";
+"Traffic per outbound node for the selected range, read from the proxy controller." = "Traffic per outbound node for the selected range, read from the proxy controller.";
+"No node traffic recorded yet." = "No node traffic recorded yet.";
+"Unattributed" = "Unattributed";
+"Unknown node" = "Unknown node";
+"Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS." = "Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS.";
+"Collect proxy node statistics" = "Collect proxy node statistics";
+"Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription." = "Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription.";
+"Controller address" = "Controller address";
+"Controller secret" = "Controller secret";
+"(default)" = "(default)";
+"Proxy Controller Address" = "Proxy Controller Address";
+"Host:port of the Clash API (default 127.0.0.1:9090)" = "Host:port of the Clash API (default 127.0.0.1:9090)";
+"Proxy Controller Secret" = "Proxy Controller Secret";
+"The secret from your client's Clash API settings. Leave empty if none is configured." = "The secret from your client's Clash API settings. Leave empty if none is configured.";
+"Secret" = "Secret";
+"Test connection" = "Test connection";
+"Connected — %d open connections." = "Connected — %d open connections.";
+"The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already." = "The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already.";
+"Could not read the proxy controller." = "Could not read the proxy controller.";
+"The controller address is not valid." = "The controller address is not valid.";
+"The controller rejected the secret." = "The controller rejected the secret.";
+"The controller answered with HTTP %d." = "The controller answered with HTTP %d.";
+"No proxy controller is listening at that address." = "No proxy controller is listening at that address.";
+"The controller did not answer in time." = "The controller did not answer in time.";
+"Could not reach the proxy controller." = "Could not reach the proxy controller.";
+"The controller's answer was not in the expected format." = "The controller's answer was not in the expected format.";

@@ -30,6 +30,7 @@ struct StatisticsView: View {
     // every tick for nothing. Preferences is opened via a notification instead.
     @AppStorage("collectStatistics") private var collectStatistics: Bool = false
     @AppStorage("collectAppStatistics") private var collectAppStatistics: Bool = true
+    @AppStorage("collectProxyNodeStatistics") private var collectProxyNodeStatistics: Bool = false
     @AppStorage("excludeTunnelAdaptersFromTotals") private var excludeTunnelAdapters: Bool = false
 
     @State private var range: StatisticsRange = .last24Hours
@@ -306,6 +307,9 @@ struct StatisticsView: View {
                             )
                         }
                         .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                    if collectProxyNodeStatistics {
+                        nodesCard(report)
                     }
                 }
                 .padding(24)
@@ -657,6 +661,99 @@ struct StatisticsView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(Color(NSColor.controlBackgroundColor))
         )
+    }
+
+    /// Per-proxy-node usage from the Clash API (issue #61). Deliberately not a
+    /// top-ten: it exists so a metered subscription can be reconciled, and a
+    /// truncated list would not add up.
+    private func nodesCard(_ report: StatisticsReport) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            LText("Proxy nodes")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+            LText("Traffic per outbound node for the selected range, read from the proxy controller.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+
+            if let error = statisticsManager.proxyNodeError {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.secondary)
+                    Text(error)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.top, 2)
+            }
+
+            if report.nodes.isEmpty {
+                LText("No node traffic recorded yet.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+            } else {
+                let peak = max(report.nodes.map(\.totalBytes).max() ?? 1, 1)
+                VStack(spacing: 14) {
+                    ForEach(report.nodes) { row in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(nodeDisplayName(row.name))
+                                    .font(.system(size: 15, weight: .semibold))
+                                Spacer()
+                                Text(formattedBytes(row.totalBytes))
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            HStack(spacing: 10) {
+                                Label(formattedBytes(row.downloadBytes), systemImage: "arrow.down")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(statisticsDownloadColor)
+                                Label(formattedBytes(row.uploadBytes), systemImage: "arrow.up")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(statisticsUploadColor)
+                                Spacer()
+                            }
+
+                            GeometryReader { geo in
+                                let width = geo.size.width * CGFloat(Double(row.totalBytes) / Double(peak))
+                                ZStack(alignment: .leading) {
+                                    Capsule()
+                                        .fill(Color.secondary.opacity(0.12))
+                                    Capsule()
+                                        .fill(statisticsDownloadColor.opacity(0.7))
+                                        .frame(width: max(width, 8))
+                                }
+                            }
+                            .frame(height: 8)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+
+                if report.nodes.contains(where: { $0.name == ClashNodeAccumulator.unattributedKey }) {
+                    LText("Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(22)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+    }
+
+    /// The accumulator's bucket keys are storage keys, not display strings.
+    private func nodeDisplayName(_ name: String) -> String {
+        switch name {
+        case ClashNodeAccumulator.unattributedKey: return L10n.text("Unattributed")
+        case ClashAPIMonitor.unknownNodeKey: return L10n.text("Unknown node")
+        default: return name
+        }
     }
 
     private func appCard(title: String, subtitle: String, rows: [StatisticsAppRow], color: Color) -> some View {
