@@ -627,3 +627,26 @@
 "Check address" = "Prüfadresse";
 "Internet Check Address" = "Adresse für die Internetprüfung";
 "URL to check (empty uses Apple's)" = "Zu prüfende URL (leer = Apple)";
+
+/* Automatic DNS by network */
+"Switch DNS automatically by network" = "DNS automatisch nach Netzwerk wechseln";
+"Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." = "Wählt den Resolver anhand des WLANs, mit dem du dich verbindest — einen für zu Hause, einen für öffentliche Netze. Benötigt den privilegierten Helfer, sonst würde jeder Wechsel nach deinem Passwort fragen.";
+"Automatic DNS" = "Automatisches DNS";
+"Only this access point" = "Nur dieser Access Point";
+"Add current network" = "Aktuelles Netzwerk hinzufügen";
+"Any other network" = "Jedes andere Netzwerk";
+"Leave unchanged" = "Unverändert lassen";
+"Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home." = "Gilt für Netzwerke ohne eigene Regel, auch kabelgebundene. Das verhindert, dass dir ein öffentlicher Resolver nach Hause folgt.";
+"Show active resolver in menu bar" = "Aktiven Resolver in der Menüleiste anzeigen";
+"Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden." = "Erscheint nur, solange der Resolver nicht der Systemstandard ist, damit die Menüleiste in einem nicht überschriebenen Netzwerk ruhig bleibt.";
+"No rule applies to the current network." = "Für das aktuelle Netzwerk gilt keine Regel.";
+"Install the privileged helper to let NetFluss change DNS without asking each time." = "Installiere den privilegierten Helfer, damit NetFluss DNS ändern kann, ohne jedes Mal zu fragen.";
+"Paused: a VPN profile is controlling DNS right now." = "Pausiert: Ein VPN-Profil steuert gerade das DNS.";
+"Waiting for %@ to let you online before changing DNS." = "Warten darauf, dass %@ dich online lässt, bevor DNS geändert wird.";
+"Using %@ on this network." = "Verwendet %@ in diesem Netzwerk.";
+"Using %@ on %@." = "Verwendet %@ in %@.";
+"No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube unten den Ortungszugriff — ohne ihn gibt macOS den Netzwerknamen nicht preis.";
+"Resolver name colour" = "Farbe des Resolver-Namens";
+"Rename DNS Profile" = "DNS-Profil umbenennen";
+"Only the name changes — the servers stay as they are." = "Nur der Name ändert sich — die Server bleiben unverändert.";
+"Uses the servers from DHCP" = "Verwendet die Server von DHCP";

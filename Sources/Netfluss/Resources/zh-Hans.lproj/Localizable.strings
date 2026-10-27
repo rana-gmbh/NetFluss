@@ -627,3 +627,26 @@
 "Check address" = "检查地址";
 "Internet Check Address" = "互联网检查地址";
 "URL to check (empty uses Apple's)" = "要检查的 URL（留空则使用 Apple 的）";
+
+/* Automatic DNS by network */
+"Switch DNS automatically by network" = "按网络自动切换 DNS";
+"Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." = "根据你加入的 Wi-Fi 网络选择解析器——家中用一个，公共网络用另一个。需要特权助手，否则每次切换都会要求输入密码。";
+"Automatic DNS" = "自动 DNS";
+"Only this access point" = "仅此接入点";
+"Add current network" = "添加当前网络";
+"Any other network" = "任何其他网络";
+"Leave unchanged" = "保持不变";
+"Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home." = "适用于没有自身规则的网络，包括有线网络。这可以防止公共解析器跟着你回家。";
+"Show active resolver in menu bar" = "在菜单栏显示当前解析器";
+"Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden." = "仅在解析器不是系统默认值时显示，因此在未覆盖的网络中菜单栏保持安静。";
+"No rule applies to the current network." = "当前网络没有适用的规则。";
+"Install the privileged helper to let NetFluss change DNS without asking each time." = "安装特权助手，让 NetFluss 无需每次询问即可更改 DNS。";
+"Paused: a VPN profile is controlling DNS right now." = "已暂停：VPN 配置当前正在控制 DNS。";
+"Waiting for %@ to let you online before changing DNS." = "等待 %@ 允许你上网后再更改 DNS。";
+"Using %@ on this network." = "在此网络上使用 %@。";
+"Using %@ on %@." = "在 %2$@ 上使用 %1$@。";
+"No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "没有可用的 Wi-Fi 网络名称。请加入 Wi-Fi 网络，或在下方允许位置访问——没有它 macOS 不会提供网络名称。";
+"Resolver name colour" = "解析器名称颜色";
+"Rename DNS Profile" = "重命名 DNS 配置";
+"Only the name changes — the servers stay as they are." = "仅更改名称——服务器保持不变。";
+"Uses the servers from DHCP" = "使用来自 DHCP 的服务器";

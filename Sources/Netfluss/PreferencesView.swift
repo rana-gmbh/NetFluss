@@ -334,6 +334,11 @@ struct PreferencesView: View {
     @AppStorage("showUsageSummary") private var showUsageSummary: Bool = false
     @AppStorage("externalIPv6") private var externalIPv6: Bool = false
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
+    @AppStorage("menuBarResolverColor") private var menuBarResolverColor: String = "system"
+    @AppStorage("menuBarResolverColorHex") private var menuBarResolverColorHex: String = ""
+    @AppStorage("dnsAutoSwitchEnabled") private var dnsAutoSwitchEnabled: Bool = false
+    @AppStorage("dnsRuleFallbackPresetID") private var dnsRuleFallbackPresetID: String = ""
+    @AppStorage("menuBarShowResolver") private var menuBarShowResolver: Bool = false
     @AppStorage("showWifiSwitcher") private var showWifiSwitcher: Bool = false
     @AppStorage("wifiLimitEnabled") private var wifiLimitEnabled: Bool = false
     @AppStorage("wifiLimitCount") private var wifiLimitCount: Int = 10
@@ -358,6 +363,10 @@ struct PreferencesView: View {
     @State private var hiddenApps: [String] = []
     @State private var showHiddenAppsSheet = false
     @State private var customDNSPresets: [DNSPreset] = []
+    @State private var dnsRules: [DNSRule] = []
+    /// Bumped after a built-in is renamed; the names live in UserDefaults, not
+    /// in @State, so the list needs a nudge to redraw.
+    @State private var dnsPresetRenameTick: UInt = 0
     @State private var hiddenDNSPresets: Set<String> = []
     @State private var dnsPresetOrder: [String] = []
     @State private var dnsDraggingID: String? = nil
@@ -752,6 +761,15 @@ struct PreferencesView: View {
                             LText("Indicator size")
                         }
                     }
+                    if menuBarShowResolver {
+                        LabeledContent {
+                            TrailingPreferenceControl(width: appearanceControlWidth) {
+                                ColorSwatchPicker(selection: $menuBarResolverColor, customHex: $menuBarResolverColorHex)
+                            }
+                        } label: {
+                            LText("Resolver name colour")
+                        }
+                    }
                     Toggle(isOn: $menuBarShowCountryFlag) {
                         LText("Country flag")
                     }
@@ -866,6 +884,19 @@ struct PreferencesView: View {
                                 }
                             }
                             Spacer()
+                            if preset.isBuiltIn {
+                                Button {
+                                    AddDNSWindowController.shared.showRename(preset: preset) { [self] updated in
+                                        NetworkMonitor.setDNSPresetName(updated.name, for: preset.id)
+                                        dnsPresetRenameTick &+= 1
+                                    }
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 11))
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Rename")
+                            }
                             if !preset.isBuiltIn {
                                 Button {
                                     AddDNSWindowController.shared.showEdit(preset: preset) { [self] updated in
@@ -935,6 +966,18 @@ struct PreferencesView: View {
                 }
             } header: {
                 LText("DNS Switcher")
+            }
+
+                    Section {
+                Toggle(isOn: $dnsAutoSwitchEnabled) {
+                    LText("Switch DNS automatically by network")
+                }
+                PreferenceNote("Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password.")
+                if dnsAutoSwitchEnabled {
+                    dnsRuleSettings
+                }
+            } header: {
+                LText("Automatic DNS")
             }
                 }
 
@@ -1275,6 +1318,7 @@ struct PreferencesView: View {
             customDNSPresets = loadCustomDNSPresets()
             hiddenDNSPresets = Set(UserDefaults.standard.stringArray(forKey: "hiddenDNSPresets") ?? [])
             dnsPresetOrder = UserDefaults.standard.stringArray(forKey: "dnsPresetOrder") ?? []
+            dnsRules = DNSRule.load()
             launchAtLogin = SMAppService.mainApp.status == .enabled
         }
         .sheet(item: $renamingAdapter) { adapter in
@@ -1322,6 +1366,133 @@ struct PreferencesView: View {
     /// Re-read the router "credentials configured?" flags from the keychain.
     /// Called on appear, when hosts/mode change, and after an editor saves — so
     /// `body` never touches the keychain on its 1 Hz re-evaluation.
+    @ViewBuilder
+    private var dnsRuleSettings: some View {
+        ForEach($dnsRules) { $rule in
+            dnsRuleRow($rule)
+        }
+
+        HStack(spacing: 8) {
+            Button {
+                addRuleForCurrentNetwork()
+            } label: {
+                LText("Add current network")
+            }
+            .disabled(currentSSID == nil)
+            if let ssid = currentSSID {
+                Text(ssid)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        if currentSSID == nil {
+            PreferenceNote("No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.")
+        }
+
+        LabeledContent {
+            TrailingPreferenceControl(width: appearanceControlWidth) {
+                Picker("", selection: $dnsRuleFallbackPresetID) {
+                    LText("Leave unchanged").tag("")
+                    ForEach(sortedDNSPresets) { preset in
+                        Text(preset.name).tag(preset.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 190)
+            }
+        } label: {
+            LText("Any other network")
+        }
+        PreferenceNote("Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home.")
+
+        Toggle(isOn: $menuBarShowResolver) {
+            LText("Show active resolver in menu bar")
+        }
+        PreferenceNote("Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden.")
+
+        Text(dnsAutoSwitchExplanation)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .preferenceNote(fullText: dnsAutoSwitchExplanation)
+    }
+
+    @ViewBuilder
+    private func dnsRuleRow(_ rule: Binding<DNSRule>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Toggle("", isOn: rule.enabled).labelsHidden()
+                Text(rule.wrappedValue.ssid)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                Spacer()
+                Picker("", selection: rule.presetID) {
+                    ForEach(sortedDNSPresets) { preset in
+                        Text(preset.name).tag(preset.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 150)
+                Button {
+                    let id = rule.wrappedValue.id
+                    dnsRules.removeAll { $0.id == id }
+                    DNSRule.save(dnsRules)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+            }
+            Toggle(isOn: Binding(
+                get: { !(rule.wrappedValue.bssid ?? "").isEmpty },
+                set: { pinned in
+                    rule.wrappedValue.bssid = pinned ? currentBSSID : nil
+                    DNSRule.save(dnsRules)
+                }
+            )) {
+                LText("Only this access point")
+            }
+            .font(.caption)
+            .disabled(currentBSSID == nil && (rule.wrappedValue.bssid ?? "").isEmpty)
+        }
+        .onChange(of: rule.wrappedValue) { _ in DNSRule.save(dnsRules) }
+    }
+
+    private var currentSSID: String? {
+        monitor.adapters.first { $0.type == .wifi && $0.isUp && !($0.wifiSSID ?? "").isEmpty }?.wifiSSID
+    }
+
+    private var currentBSSID: String? {
+        monitor.adapters.first { $0.type == .wifi && $0.isUp }?.wifiDetail?.bssid
+    }
+
+    private func addRuleForCurrentNetwork() {
+        guard let ssid = currentSSID else { return }
+        guard !dnsRules.contains(where: { $0.ssid == ssid }) else { return }
+        dnsRules.append(DNSRule(ssid: ssid, presetID: "system"))
+        DNSRule.save(dnsRules)
+    }
+
+    /// Live state from the engine, so a resolver the app changed by itself is
+    /// never left unexplained.
+    private var dnsAutoSwitchExplanation: String {
+        switch monitor.dnsAutoSwitchState {
+        case .off, .noRule:
+            return L10n.text("No rule applies to the current network.")
+        case .needsHelper:
+            return L10n.text("Install the privileged helper to let NetFluss change DNS without asking each time.")
+        case .suspendedByVPN:
+            return L10n.text("Paused: a VPN profile is controlling DNS right now.")
+        case .waitingForPortal(let ssid):
+            return L10n.format("Waiting for %@ to let you online before changing DNS.", ssid)
+        case .applied(let ssid, let presetID):
+            let name = NetworkMonitor.allDNSPresets().first { $0.id == presetID }?.name ?? presetID
+            return ssid.isEmpty
+                ? L10n.format("Using %@ on this network.", name)
+                : L10n.format("Using %@ on %@.", name, ssid)
+        }
+    }
+
     @ViewBuilder
     private var linkIndicatorSettings: some View {
         LabeledContent {
@@ -1581,7 +1752,15 @@ struct PreferencesView: View {
     }
 
     private var allDNSPresets: [DNSPreset] {
-        DNSPreset.builtIn + customDNSPresets
+        // Reading the tick is what makes SwiftUI redraw after a rename: the
+        // names live in UserDefaults, which the view does not observe.
+        _ = dnsPresetRenameTick
+        let names = NetworkMonitor.dnsPresetCustomNames()
+        let builtIn = DNSPreset.builtIn.map { preset -> DNSPreset in
+            guard let name = names[preset.id], !name.isEmpty else { return preset }
+            return DNSPreset(id: preset.id, name: name, servers: preset.servers, isBuiltIn: true)
+        }
+        return builtIn + customDNSPresets
     }
 
     private var hiddenAppsButtonTitle: String {

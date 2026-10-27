@@ -41,6 +41,7 @@ final class WifiManager: NSObject, ObservableObject {
 
     private let interface: CWInterface?
     private let locationManager = CLLocationManager()
+    private var locationPromptFallback: DispatchWorkItem?
     private var cwNetworksByID: [String: CWNetwork] = [:]
     private var refreshTimer: DispatchSourceTimer?
     private var isActive = false
@@ -77,9 +78,35 @@ final class WifiManager: NSObject, ObservableObject {
     /// user can grant access when they previously denied or when system-wide
     /// Location is disabled.
     func openLocationSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
-            NSWorkspace.shared.open(url)
+        // System Settings (macOS 13+) moved the anchor; the old System
+        // Preferences one is still accepted on some releases and ignored on
+        // others, which is how this button ended up doing nothing at all.
+        // Try the current identifier first, then the legacy one, then the
+        // pane root — anywhere the user can finish the job by hand.
+        let candidates = [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_LocationServices",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices",
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension"
+        ]
+        for candidate in candidates {
+            if let url = URL(string: candidate), NSWorkspace.shared.open(url) {
+                return
+            }
         }
+    }
+
+    /// If the TCC prompt never appears, send the user to System Settings rather
+    /// than leaving a button that looks like it did nothing.
+    private var locationPromptFallbackDelay: TimeInterval { 3 }
+
+    private func scheduleLocationPromptFallback() {
+        locationPromptFallback?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.locationStatus == .notDetermined else { return }
+            self.openLocationSettings()
+        }
+        locationPromptFallback = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + locationPromptFallbackDelay, execute: work)
     }
 
     /// Triggered from the Preferences "Grant Location Access" button.
@@ -88,9 +115,14 @@ final class WifiManager: NSObject, ObservableObject {
     func requestLocationAccess() {
         switch locationStatus {
         case .notDetermined:
+            // tccd shows the prompt for the *active* application. A menu-bar app
+            // driving this from its Preferences window is not reliably frontmost,
+            // and without this the request is swallowed in silence.
+            NSApp.activate(ignoringOtherApps: true)
             locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
             locationManager.requestWhenInUseAuthorization()
             locationManager.startUpdatingLocation()
+            scheduleLocationPromptFallback()
         case .denied:
             openLocationSettings()
         case .authorized:
@@ -592,6 +624,8 @@ extension WifiManager: CLLocationManagerDelegate {
         let status = manager.authorizationStatus
         Task { @MainActor [weak self] in
             guard let self else { return }
+            self.locationPromptFallback?.cancel()
+            self.locationPromptFallback = nil
             self.updateLocationStatus(from: status)
             // We only kicked off updates to trigger the prompt; once we have a
             // decision (either way) the location stream is no longer needed.

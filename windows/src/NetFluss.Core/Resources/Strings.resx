@@ -1852,6 +1852,69 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="URL to check (empty uses Apple&apos;s)" xml:space="preserve">
     <value>URL to check (empty uses Apple's)</value>
   </data>
+  <data name="Switch DNS automatically by network" xml:space="preserve">
+    <value>Switch DNS automatically by network</value>
+  </data>
+  <data name="Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." xml:space="preserve">
+    <value>Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password.</value>
+  </data>
+  <data name="Automatic DNS" xml:space="preserve">
+    <value>Automatic DNS</value>
+  </data>
+  <data name="Only this access point" xml:space="preserve">
+    <value>Only this access point</value>
+  </data>
+  <data name="Add current network" xml:space="preserve">
+    <value>Add current network</value>
+  </data>
+  <data name="Any other network" xml:space="preserve">
+    <value>Any other network</value>
+  </data>
+  <data name="Leave unchanged" xml:space="preserve">
+    <value>Leave unchanged</value>
+  </data>
+  <data name="Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home." xml:space="preserve">
+    <value>Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home.</value>
+  </data>
+  <data name="Show active resolver in menu bar" xml:space="preserve">
+    <value>Show active resolver in menu bar</value>
+  </data>
+  <data name="Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden." xml:space="preserve">
+    <value>Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden.</value>
+  </data>
+  <data name="No rule applies to the current network." xml:space="preserve">
+    <value>No rule applies to the current network.</value>
+  </data>
+  <data name="Install the privileged helper to let NetFluss change DNS without asking each time." xml:space="preserve">
+    <value>Install the privileged helper to let NetFluss change DNS without asking each time.</value>
+  </data>
+  <data name="Paused: a VPN profile is controlling DNS right now." xml:space="preserve">
+    <value>Paused: a VPN profile is controlling DNS right now.</value>
+  </data>
+  <data name="Waiting for {0} to let you online before changing DNS." xml:space="preserve">
+    <value>Waiting for {0} to let you online before changing DNS.</value>
+  </data>
+  <data name="Using {0} on this network." xml:space="preserve">
+    <value>Using {0} on this network.</value>
+  </data>
+  <data name="Using {0} on {1}." xml:space="preserve">
+    <value>Using {0} on {1}.</value>
+  </data>
+  <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
+    <value>No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — Windows withholds the network name without it.</value>
+  </data>
+  <data name="Resolver name colour" xml:space="preserve">
+    <value>Resolver name colour</value>
+  </data>
+  <data name="Rename DNS Profile" xml:space="preserve">
+    <value>Rename DNS Profile</value>
+  </data>
+  <data name="Only the name changes — the servers stay as they are." xml:space="preserve">
+    <value>Only the name changes — the servers stay as they are.</value>
+  </data>
+  <data name="Uses the servers from DHCP" xml:space="preserve">
+    <value>Uses the servers from DHCP</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>'{0}' already exists.</value>
   </data>

@@ -627,3 +627,26 @@
 "Check address" = "Check address";
 "Internet Check Address" = "Internet Check Address";
 "URL to check (empty uses Apple's)" = "URL to check (empty uses Apple's)";
+
+/* Automatic DNS by network */
+"Switch DNS automatically by network" = "Switch DNS automatically by network";
+"Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." = "Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password.";
+"Automatic DNS" = "Automatic DNS";
+"Only this access point" = "Only this access point";
+"Add current network" = "Add current network";
+"Any other network" = "Any other network";
+"Leave unchanged" = "Leave unchanged";
+"Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home." = "Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home.";
+"Show active resolver in menu bar" = "Show active resolver in menu bar";
+"Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden." = "Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden.";
+"No rule applies to the current network." = "No rule applies to the current network.";
+"Install the privileged helper to let NetFluss change DNS without asking each time." = "Install the privileged helper to let NetFluss change DNS without asking each time.";
+"Paused: a VPN profile is controlling DNS right now." = "Paused: a VPN profile is controlling DNS right now.";
+"Waiting for %@ to let you online before changing DNS." = "Waiting for %@ to let you online before changing DNS.";
+"Using %@ on this network." = "Using %@ on this network.";
+"Using %@ on %@." = "Using %@ on %@.";
+"No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.";
+"Resolver name colour" = "Resolver name colour";
+"Rename DNS Profile" = "Rename DNS Profile";
+"Only the name changes — the servers stay as they are." = "Only the name changes — the servers stay as they are.";
+"Uses the servers from DHCP" = "Uses the servers from DHCP";

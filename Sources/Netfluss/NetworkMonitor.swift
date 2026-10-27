@@ -44,6 +44,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
     @Published var activeDNSPresetID: String? = nil
     @Published var dnsChanging = false
     @Published var dnsError: String?
+    /// What the automatic, SSID-based DNS switcher is doing, so the UI can
+    /// explain a resolver it changed without being asked.
+    @Published var dnsAutoSwitchState: DNSAutoSwitchState = .off
     @Published var fritzBox: FritzBoxBandwidth?
     @Published var fritzBoxMaxDown: UInt64 = 0
     @Published var fritzBoxMaxUp: UInt64 = 0
@@ -340,7 +343,11 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let now = Date()
         let forcedDetailRefresh = forceDetailRefresh
         let refreshInterfaceInfo = cachedInterfaceInfo.isEmpty || shouldRefresh(lastInterfaceInfoRefresh, at: now, interval: Self.interfaceInfoRefreshInterval)
-        let refreshWifiInfo = detailMonitoringEnabled && (
+        // The SSID is not just popover decoration any more: the link indicator
+        // names the network and the DNS rules match on it, and both have to work
+        // with the popover closed — which is most of the time.
+        let wifiInfoNeededInBackground = Self.menuBarLinkIndicatorEnabled || Self.dnsAutoSwitchEnabled
+        let refreshWifiInfo = (detailMonitoringEnabled || wifiInfoNeededInBackground) && (
             forcedDetailRefresh ||
             _cachedWifiInfo.isEmpty ||
             shouldRefresh(lastWiFiDetailsRefresh, at: now, interval: Self.wifiDetailsRefreshInterval)
@@ -532,6 +539,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         applyVPNSnapshot(result.vpnSnapshot)
         updateLinkHealth()
+        refreshDNSForBackgroundConsumers(at: now)
+        evaluateDNSRules()
 
         // Detail sections do not need background refresh while the popover is closed.
         if shouldRefreshAddressDetails {
@@ -1068,8 +1077,32 @@ final class NetworkMonitor: NSObject, ObservableObject {
         return nil
     }
 
+    /// User-chosen labels for the built-in presets, keyed by preset id.
+    ///
+    /// The servers stay fixed: a built-in is defined by the resolver it points
+    /// at, and letting "Cloudflare" mean 8.8.8.8 would make the popover, the
+    /// menu bar label and every rule picker lie in the same breath.
+    static func dnsPresetCustomNames() -> [String: String] {
+        UserDefaults.standard.dictionary(forKey: "dnsPresetCustomNames") as? [String: String] ?? [:]
+    }
+
+    static func setDNSPresetName(_ name: String?, for presetID: String) {
+        var names = dnsPresetCustomNames()
+        let trimmed = (name ?? "").trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            names.removeValue(forKey: presetID)
+        } else {
+            names[presetID] = trimmed
+        }
+        UserDefaults.standard.set(names, forKey: "dnsPresetCustomNames")
+    }
+
     static func allDNSPresets() -> [DNSPreset] {
-        var presets = DNSPreset.builtIn
+        let customNames = dnsPresetCustomNames()
+        var presets = DNSPreset.builtIn.map { preset -> DNSPreset in
+            guard let name = customNames[preset.id], !name.isEmpty else { return preset }
+            return DNSPreset(id: preset.id, name: name, servers: preset.servers, isBuiltIn: true)
+        }
         if let data = UserDefaults.standard.data(forKey: "customDNSPresets"),
            let custom = try? JSONDecoder().decode([DNSPreset].self, from: data) {
             presets += custom
@@ -1092,6 +1125,91 @@ final class NetworkMonitor: NSObject, ObservableObject {
     /// resolver config can be restored on disconnect.
     private var vpnDNSApplied = false
     private var vpnDNSBackup: [String: [String]] = [:]
+
+    private lazy var dnsRuleEngine: DNSRuleEngine = {
+        let engine = DNSRuleEngine()
+        engine.onChange = { [weak self] state in
+            self?.setIfChanged(\.dnsAutoSwitchState, to: state)
+        }
+        return engine
+    }()
+
+    /// `PrivilegedHelperManager.isEnabled` is an actor read; the engine runs on
+    /// every tick, so the answer is cached and refreshed on its own slow
+    /// cadence rather than awaited each time.
+    private var helperEnabledCache = false
+    private var lastHelperCheck: Date?
+    private static let helperCheckInterval: TimeInterval = 30
+
+    private static var dnsAutoSwitchEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "dnsAutoSwitchEnabled")
+    }
+
+    private static var menuBarResolverEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "menuBarShowResolver")
+    }
+
+    /// Keeps `currentDNSServers` / `activeDNSPresetID` current with the popover
+    /// closed.
+    ///
+    /// The popover's own refresh only runs while it is open, but the rule engine
+    /// needs the live resolver to stay idempotent, and the menu bar label needs
+    /// it to be true. `networksetup` is expensive, so this rides the same 30s
+    /// cadence the switcher already uses.
+    private func refreshDNSForBackgroundConsumers(at now: Date) {
+        guard Self.dnsAutoSwitchEnabled || Self.menuBarResolverEnabled else { return }
+        guard shouldRefresh(lastDNSRefresh, at: now, interval: Self.dnsRefreshInterval) else { return }
+        lastDNSRefresh = now
+        updateCurrentDNS()
+    }
+
+    /// Evaluate the SSID rules and, when they call for a different resolver,
+    /// apply it. Called on every tick, on an SSID change, and whenever a VPN
+    /// DNS override is released.
+    func evaluateDNSRules() {
+        guard Self.dnsAutoSwitchEnabled else {
+            if dnsAutoSwitchState != .off { dnsAutoSwitchState = .off }
+            dnsRuleEngine.reset()
+            return
+        }
+        guard !dnsChanging else { return }
+
+        refreshHelperStateIfNeeded()
+
+        let wifi = adapters.first { $0.type == .wifi && $0.isUp && !($0.wifiSSID ?? "").isEmpty }
+        let defaults = UserDefaults.standard
+        let fallback = defaults.string(forKey: "dnsRuleFallbackPresetID")
+        let input = DNSRuleEngine.Input(
+            enabled: true,
+            helperEnabled: helperEnabledCache,
+            ssid: wifi?.wifiSSID,
+            bssid: wifi?.wifiDetail?.bssid,
+            linkHealth: linkStatus.health,
+            // Without the internet check there is no portal verdict to wait for.
+            portalSignalAvailable: defaults.bool(forKey: "menuBarLinkIndicator")
+                && defaults.bool(forKey: "menuBarLinkCheckInternet"),
+            vpnDNSActive: vpnDNSApplied,
+            activePresetID: activeDNSPresetID,
+            rules: DNSRule.load(),
+            fallbackPresetID: (fallback?.isEmpty ?? true) ? nil : fallback
+        )
+
+        guard let presetID = dnsRuleEngine.evaluate(input) else { return }
+        guard let preset = Self.allDNSPresets().first(where: { $0.id == presetID }) else { return }
+        applyDNS(preset: preset)
+    }
+
+    private func refreshHelperStateIfNeeded() {
+        let now = Date()
+        if let lastHelperCheck, now.timeIntervalSince(lastHelperCheck) < Self.helperCheckInterval {
+            return
+        }
+        lastHelperCheck = now
+        Task { [weak self] in
+            let enabled = await PrivilegedHelperManager.shared.isEnabled
+            await MainActor.run { [weak self] in self?.helperEnabledCache = enabled }
+        }
+    }
 
     /// Apply a VPN profile's DNS servers to the active network services,
     /// remembering each service's prior DNS so `restoreVPNDNS()` can undo it.
@@ -1136,7 +1254,11 @@ final class NetworkMonitor: NSObject, ObservableObject {
             for (service, servers) in backup {
                 _ = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers)
             }
-            await MainActor.run { [weak self] in self?.updateCurrentDNS() }
+            await MainActor.run { [weak self] in
+                self?.updateCurrentDNS()
+                // The override is gone, so an SSID rule may apply again.
+                self?.evaluateDNSRules()
+            }
         }
     }
 
@@ -1987,6 +2109,7 @@ extension NetworkMonitor: @preconcurrency CWEventDelegate {
         if detailMonitoringEnabled && !refreshInFlight {
             refresh()
         }
+        evaluateDNSRules()
     }
 }
 

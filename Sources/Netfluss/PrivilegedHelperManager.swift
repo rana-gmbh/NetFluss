@@ -31,6 +31,15 @@ actor PrivilegedHelperManager {
 
     private let service = SMAppService.daemon(plistName: NetflussHelperConstants.plistName)
 
+    /// Whether the helper is registered and running.
+    ///
+    /// Read-only, unlike `install()`: the automatic DNS switcher needs to know
+    /// whether a write would be silent or would raise an authentication prompt,
+    /// and asking must not itself trigger a registration attempt.
+    var isEnabled: Bool {
+        service.status == .enabled
+    }
+
     func setDNS(serviceName: String, servers: [String]) async -> CommandResult? {
         await performIfAvailable { helper, reply in
             helper.setDNS(service: serviceName, servers: servers, withReply: reply)

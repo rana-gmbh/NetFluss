@@ -155,13 +155,12 @@ final class LinkHealthTracker {
             reset()
             return
         }
+        // An unknown SSID is not proof of anything. macOS withholds it without
+        // Location permission, and it is also empty before the first CoreWLAN
+        // sample lands — reporting "not connected" for either would be a
+        // confident lie about a working connection. Liveness comes from the
+        // address and the route below; the SSID only names the network.
         let ssid = carrier.wifiSSID
-        if carrier.type == .wifi, (ssid ?? "").isEmpty {
-            // The radio is up but not associated with anything.
-            publish(LinkStatus(health: .offline, medium: .wifi, interfaceName: carrier.id, ssid: nil))
-            reset()
-            return
-        }
         if Self.isUnusable(internalIP: internalIP, gatewayIP: gatewayIP) {
             // Self-assigned address or no default route: definitively not online,
             // and no request could tell us anything we do not already know.

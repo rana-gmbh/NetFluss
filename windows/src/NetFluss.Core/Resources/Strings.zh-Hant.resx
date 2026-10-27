@@ -1852,6 +1852,69 @@
   <data name="URL to check (empty uses Apple&apos;s)" xml:space="preserve">
     <value>要檢查的 URL（留空則使用 Apple 的）</value>
   </data>
+  <data name="Switch DNS automatically by network" xml:space="preserve">
+    <value>依網路自動切換 DNS</value>
+  </data>
+  <data name="Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." xml:space="preserve">
+    <value>根據你加入的 Wi-Fi 網路選擇解析器——家中用一個，公共網路用另一個。需要特權協助程式，否則每次切換都會要求輸入密碼。</value>
+  </data>
+  <data name="Automatic DNS" xml:space="preserve">
+    <value>自動 DNS</value>
+  </data>
+  <data name="Only this access point" xml:space="preserve">
+    <value>僅此存取點</value>
+  </data>
+  <data name="Add current network" xml:space="preserve">
+    <value>新增目前網路</value>
+  </data>
+  <data name="Any other network" xml:space="preserve">
+    <value>任何其他網路</value>
+  </data>
+  <data name="Leave unchanged" xml:space="preserve">
+    <value>保持不變</value>
+  </data>
+  <data name="Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home." xml:space="preserve">
+    <value>適用於沒有自身規則的網路，包括有線網路。這可以防止公共解析器跟著你回家。</value>
+  </data>
+  <data name="Show active resolver in menu bar" xml:space="preserve">
+    <value>在選單列顯示目前解析器</value>
+  </data>
+  <data name="Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden." xml:space="preserve">
+    <value>僅在解析器不是系統預設值時顯示，因此在未覆寫的網路中選單列保持安靜。</value>
+  </data>
+  <data name="No rule applies to the current network." xml:space="preserve">
+    <value>目前網路沒有適用的規則。</value>
+  </data>
+  <data name="Install the privileged helper to let NetFluss change DNS without asking each time." xml:space="preserve">
+    <value>安裝特權協助程式，讓 NetFluss 無需每次詢問即可變更 DNS。</value>
+  </data>
+  <data name="Paused: a VPN profile is controlling DNS right now." xml:space="preserve">
+    <value>已暫停：VPN 設定檔目前正在控制 DNS。</value>
+  </data>
+  <data name="Waiting for {0} to let you online before changing DNS." xml:space="preserve">
+    <value>等待 {0} 允許你上網後再變更 DNS。</value>
+  </data>
+  <data name="Using {0} on this network." xml:space="preserve">
+    <value>在此網路上使用 {0}。</value>
+  </data>
+  <data name="Using {0} on {1}." xml:space="preserve">
+    <value>在 {0} 上使用 {1}。</value>
+  </data>
+  <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
+    <value>沒有可用的 Wi-Fi 網路名稱。請加入 Wi-Fi 網路，或在下方允許位置存取——沒有它 Windows 不會提供網路名稱。</value>
+  </data>
+  <data name="Resolver name colour" xml:space="preserve">
+    <value>解析器名稱顏色</value>
+  </data>
+  <data name="Rename DNS Profile" xml:space="preserve">
+    <value>重新命名 DNS 設定檔</value>
+  </data>
+  <data name="Only the name changes — the servers stay as they are." xml:space="preserve">
+    <value>僅變更名稱——伺服器保持不變。</value>
+  </data>
+  <data name="Uses the servers from DHCP" xml:space="preserve">
+    <value>使用來自 DHCP 的伺服器</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>「{0}」已存在。</value>
   </data>

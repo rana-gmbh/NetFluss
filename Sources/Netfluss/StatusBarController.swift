@@ -89,10 +89,22 @@ private struct MenuBarAccessories {
     let vpn: VPNMark?
     let flag: String?
     let flagFont: NSFont
+    /// Active DNS resolver's name, drawn last so the symbols stay grouped.
+    let resolver: String?
+    let resolverFont: NSFont
+    let resolverColor: NSColor
 
-    static let none = MenuBarAccessories(link: nil, vpn: nil, flag: nil, flagFont: .systemFont(ofSize: 10))
+    static let none = MenuBarAccessories(
+        link: nil,
+        vpn: nil,
+        flag: nil,
+        flagFont: .systemFont(ofSize: 10),
+        resolver: nil,
+        resolverFont: .systemFont(ofSize: 10),
+        resolverColor: .secondaryLabelColor
+    )
 
-    var isEmpty: Bool { link == nil && vpn == nil && flag == nil }
+    var isEmpty: Bool { link == nil && vpn == nil && flag == nil && resolver == nil }
 }
 
 private final class MenuBarRatesView: NSView {
@@ -212,6 +224,9 @@ private final class MenuBarRatesView: NSView {
         if let link = accessories.link { widths.append(link.size.width) }
         if let vpn = accessories.vpn { widths.append(size(of: vpn).width) }
         if let flag = accessories.flag { widths.append(flagSize(flag, font: accessories.flagFont).width) }
+        if let resolver = accessories.resolver {
+            widths.append(textSize(resolver, font: accessories.resolverFont).width)
+        }
         guard !widths.isEmpty else { return 0 }
         return widths.reduce(0, +) + accessorySpacing * CGFloat(widths.count - 1)
     }
@@ -247,6 +262,10 @@ private final class MenuBarRatesView: NSView {
 
     private static func flagSize(_ flag: String, font: NSFont) -> NSSize {
         (flag as NSString).size(withAttributes: [.font: font])
+    }
+
+    private static func textSize(_ text: String, font: NSFont) -> NSSize {
+        (text as NSString).size(withAttributes: [.font: font])
     }
 
     private func drawAccessories(_ model: MenuBarDisplayModel) {
@@ -292,6 +311,19 @@ private final class MenuBarRatesView: NSView {
             (flag as NSString).draw(
                 at: NSPoint(x: x, y: floor(midY - size.height / 2)),
                 withAttributes: [.font: accessories.flagFont]
+            )
+            x += size.width + Self.accessorySpacing
+        }
+
+        if let resolver = accessories.resolver {
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: accessories.resolverFont,
+                .foregroundColor: accessories.resolverColor
+            ]
+            let size = Self.textSize(resolver, font: accessories.resolverFont)
+            (resolver as NSString).draw(
+                at: NSPoint(x: x, y: floor(midY - size.height / 2)),
+                withAttributes: attributes
             )
         }
     }
@@ -642,6 +674,14 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         // Link health changes on its own schedule: a probe verdict can land
         // between rate ticks, and the glyph must not wait for the next byte.
         monitor.$linkStatus
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateLabel()
+            }
+            .store(in: &cancellables)
+
+        monitor.$activeDNSPresetID
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -1241,6 +1281,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         let (accessories, accessoryKey) = menuBarAccessories(
             style: style,
             defaultTextColor: defaultTextColor,
+            secondaryTextColor: secondaryTextColor,
             isDarkAppearance: isDarkAppearance
         )
 
@@ -1316,6 +1357,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     private func menuBarAccessories(
         style: MenuBarDisplayStyle,
         defaultTextColor: NSColor,
+        secondaryTextColor: NSColor,
         isDarkAppearance: Bool
     ) -> (MenuBarAccessories, String) {
         let defaults = UserDefaults.standard
@@ -1384,15 +1426,44 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         // times a tunnel is actually up.
         let wantsFlag = showFlag && (vpnActive || !flagOnlyWithVPN)
         let flag = wantsFlag ? CountryFlag.emoji(for: monitor.externalIPCountryCode) : nil
+        // The resolver name only appears when it is not the system default:
+        // quiet on the network you trust, informative on the one you don't.
+        var resolver: String?
+        var resolverColor = secondaryTextColor
+        if defaults.bool(forKey: "menuBarShowResolver"),
+           let presetID = monitor.activeDNSPresetID,
+           presetID != "system",
+           let preset = NetworkMonitor.allDNSPresets().first(where: { $0.id == presetID }) {
+            resolver = preset.name
+            let colorName = defaults.string(forKey: "menuBarResolverColor") ?? "system"
+            let colorHex = defaults.string(forKey: "menuBarResolverColorHex") ?? ""
+            if colorName != "system" {
+                resolverColor = resolvedAccentNSColor(
+                    selection: colorName,
+                    customHex: colorHex,
+                    fallback: secondaryTextColor
+                )
+            }
+        }
+
         let accessories = MenuBarAccessories(
             link: linkImage,
             vpn: vpnMark,
             flag: flag,
             // Emoji render a good bit smaller than their point size, so the flag
             // needs a nudge to match the shield next to it.
-            flagFont: .systemFont(ofSize: markSize + 2)
+            flagFont: .systemFont(ofSize: markSize + 2),
+            resolver: resolver,
+            resolverFont: .systemFont(ofSize: max(9, markSize - 4), weight: .medium),
+            resolverColor: resolverColor
         )
-        return (accessories, "\(linkKey)|\(vpnKey)|\(flag ?? "")|\(String(format: "%.1f", markSize))")
+        return (
+            accessories,
+            "\(linkKey)|\(vpnKey)|\(flag ?? "")|\(resolver ?? "")"
+                + "|\(defaults.string(forKey: "menuBarResolverColor") ?? "")"
+                + "|\(defaults.string(forKey: "menuBarResolverColorHex") ?? "")"
+                + "|\(String(format: "%.1f", markSize))"
+        )
     }
 
     /// Colour preference for one link state, with the traffic-light defaults.

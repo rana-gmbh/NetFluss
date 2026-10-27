@@ -1852,6 +1852,69 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="URL to check (empty uses Apple&apos;s)" xml:space="preserve">
     <value>Zu prüfende URL (leer = Apple)</value>
   </data>
+  <data name="Switch DNS automatically by network" xml:space="preserve">
+    <value>DNS automatisch nach Netzwerk wechseln</value>
+  </data>
+  <data name="Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." xml:space="preserve">
+    <value>Wählt den Resolver anhand des WLANs, mit dem du dich verbindest — einen für zu Hause, einen für öffentliche Netze. Benötigt den privilegierten Helfer, sonst würde jeder Wechsel nach deinem Passwort fragen.</value>
+  </data>
+  <data name="Automatic DNS" xml:space="preserve">
+    <value>Automatisches DNS</value>
+  </data>
+  <data name="Only this access point" xml:space="preserve">
+    <value>Nur dieser Access Point</value>
+  </data>
+  <data name="Add current network" xml:space="preserve">
+    <value>Aktuelles Netzwerk hinzufügen</value>
+  </data>
+  <data name="Any other network" xml:space="preserve">
+    <value>Jedes andere Netzwerk</value>
+  </data>
+  <data name="Leave unchanged" xml:space="preserve">
+    <value>Unverändert lassen</value>
+  </data>
+  <data name="Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home." xml:space="preserve">
+    <value>Gilt für Netzwerke ohne eigene Regel, auch kabelgebundene. Das verhindert, dass dir ein öffentlicher Resolver nach Hause folgt.</value>
+  </data>
+  <data name="Show active resolver in menu bar" xml:space="preserve">
+    <value>Aktiven Resolver in der Menüleiste anzeigen</value>
+  </data>
+  <data name="Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden." xml:space="preserve">
+    <value>Erscheint nur, solange der Resolver nicht der Systemstandard ist, damit die Menüleiste in einem nicht überschriebenen Netzwerk ruhig bleibt.</value>
+  </data>
+  <data name="No rule applies to the current network." xml:space="preserve">
+    <value>Für das aktuelle Netzwerk gilt keine Regel.</value>
+  </data>
+  <data name="Install the privileged helper to let NetFluss change DNS without asking each time." xml:space="preserve">
+    <value>Installiere den privilegierten Helfer, damit NetFluss DNS ändern kann, ohne jedes Mal zu fragen.</value>
+  </data>
+  <data name="Paused: a VPN profile is controlling DNS right now." xml:space="preserve">
+    <value>Pausiert: Ein VPN-Profil steuert gerade das DNS.</value>
+  </data>
+  <data name="Waiting for {0} to let you online before changing DNS." xml:space="preserve">
+    <value>Warten darauf, dass {0} dich online lässt, bevor DNS geändert wird.</value>
+  </data>
+  <data name="Using {0} on this network." xml:space="preserve">
+    <value>Verwendet {0} in diesem Netzwerk.</value>
+  </data>
+  <data name="Using {0} on {1}." xml:space="preserve">
+    <value>Verwendet {0} in {1}.</value>
+  </data>
+  <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
+    <value>Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube unten den Ortungszugriff — ohne ihn gibt Windows den Netzwerknamen nicht preis.</value>
+  </data>
+  <data name="Resolver name colour" xml:space="preserve">
+    <value>Farbe des Resolver-Namens</value>
+  </data>
+  <data name="Rename DNS Profile" xml:space="preserve">
+    <value>DNS-Profil umbenennen</value>
+  </data>
+  <data name="Only the name changes — the servers stay as they are." xml:space="preserve">
+    <value>Nur der Name ändert sich — die Server bleiben unverändert.</value>
+  </data>
+  <data name="Uses the servers from DHCP" xml:space="preserve">
+    <value>Verwendet die Server von DHCP</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>„{0}“ ist bereits vorhanden.</value>
   </data>
