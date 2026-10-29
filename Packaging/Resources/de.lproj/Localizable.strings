@@ -655,3 +655,10 @@
 "macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions." = "macOS wartet darauf, dass du NetFluss unter Systemeinstellungen → Allgemein → Anmeldeobjekte & Erweiterungen erlaubst.";
 "Open Login Items…" = "Anmeldeobjekte öffnen…";
 "macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." = "macOS öffnet NetFluss beim Anmelden nur, wenn es aus dem Ordner „Programme“ gestartet wird. Verschiebe es dorthin und öffne es erneut.";
+
+/* Rate alignment (issue #65) */
+"Rate alignment" = "Ausrichtung der Raten";
+"Centered" = "Zentriert";
+"Left" = "Links";
+"Right" = "Rechts";
+"Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column." = "Bei „Links“ und „Rechts“ bleiben die Pfeile an ihrem Platz, während sich die Zahlen ändern. „Rechts“ richtet die Zahlen außerdem wie eine Spalte aus.";

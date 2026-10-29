@@ -655,3 +655,10 @@
 "macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions." = "macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.";
 "Open Login Items…" = "Open Login Items…";
 "macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." = "macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.";
+
+/* Rate alignment (issue #65) */
+"Rate alignment" = "Rate alignment";
+"Centered" = "Centered";
+"Left" = "Left";
+"Right" = "Right";
+"Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column." = "Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column.";

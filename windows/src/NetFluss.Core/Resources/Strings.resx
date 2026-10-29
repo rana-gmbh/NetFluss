@@ -1924,6 +1924,21 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." xml:space="preserve">
     <value>Windows only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.</value>
   </data>
+  <data name="Rate alignment" xml:space="preserve">
+    <value>Rate alignment</value>
+  </data>
+  <data name="Centered" xml:space="preserve">
+    <value>Centered</value>
+  </data>
+  <data name="Left" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="Right" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column." xml:space="preserve">
+    <value>Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column.</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>'{0}' already exists.</value>
   </data>

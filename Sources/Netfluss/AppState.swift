@@ -102,6 +102,7 @@ final class AppState {
             "menuBarVPNIndicatorColorHex": "",
             "menuBarVPNShowWhenOff": true,
             "menuBarVPNIndicatorSize": 14.0,
+            "menuBarRateAlignment": "center",
             "menuBarShowCountryFlag": false,
             "menuBarLinkIndicator": false,
             "menuBarLinkCheckInternet": true,

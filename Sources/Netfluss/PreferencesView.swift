@@ -309,6 +309,7 @@ struct PreferencesView: View {
     @AppStorage("menuBarVPNIndicatorColorHex") private var menuBarVPNIndicatorColorHex: String = ""
     @AppStorage("menuBarVPNShowWhenOff") private var menuBarVPNShowWhenOff: Bool = true
     @AppStorage("menuBarVPNIndicatorSize") private var menuBarVPNIndicatorSize: Double = 14
+    @AppStorage("menuBarRateAlignment") private var menuBarRateAlignment: String = "center"
     @AppStorage("menuBarShowCountryFlag") private var menuBarShowCountryFlag: Bool = false
     @AppStorage("menuBarLinkIndicator") private var menuBarLinkIndicator: Bool = false
     @AppStorage("menuBarLinkCheckInternet") private var menuBarLinkCheckInternet: Bool = true
@@ -669,6 +670,20 @@ struct PreferencesView: View {
                     } label: {
                         LText("Menu bar font")
                     }
+                    LabeledContent {
+                        TrailingPreferenceControl(width: appearanceControlWidth) {
+                            Picker("", selection: $menuBarRateAlignment) {
+                                LText("Centered").tag("center")
+                                LText("Left").tag("left")
+                                LText("Right").tag("right")
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 230)
+                        }
+                    } label: {
+                        LText("Rate alignment")
+                    }
+                    PreferenceNote("Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column.")
                     LabeledContent {
                         TrailingPreferenceControl(width: appearanceControlWidth) {
                             Picker("", selection: $menuBarPinnedUnit) {

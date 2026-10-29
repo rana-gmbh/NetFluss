@@ -1924,6 +1924,21 @@
   <data name="macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." xml:space="preserve">
     <value>只有从“应用程序”文件夹运行时，Windows 才会在登录时打开 NetFluss。请将其移到那里后重新打开。</value>
   </data>
+  <data name="Rate alignment" xml:space="preserve">
+    <value>速率对齐</value>
+  </data>
+  <data name="Centered" xml:space="preserve">
+    <value>居中</value>
+  </data>
+  <data name="Left" xml:space="preserve">
+    <value>左对齐</value>
+  </data>
+  <data name="Right" xml:space="preserve">
+    <value>右对齐</value>
+  </data>
+  <data name="Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column." xml:space="preserve">
+    <value>选择“左对齐”或“右对齐”时，数字变化时箭头保持不动。“右对齐”还会让数字像列一样对齐。</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>“{0}”已存在。</value>
   </data>

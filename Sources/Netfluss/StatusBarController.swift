@@ -31,6 +31,23 @@ private enum MenuBarDisplayStyle: String {
     case dashboardBasic = "dashboardBasic"
 }
 
+/// Where the rates sit inside their space (issue #65).
+///
+/// `center` is the original behaviour: each line is centred on its *live*
+/// width, so the arrows drift as the digits and units change. `left` and
+/// `right` lay everything out against a block sized from the reference text
+/// instead, so the arrows never move; they differ only in where each number
+/// sits within its own fixed-width slot.
+private enum MenuBarRateAlignment: String {
+    case center
+    case left
+    case right
+
+    static var current: MenuBarRateAlignment {
+        MenuBarRateAlignment(rawValue: UserDefaults.standard.string(forKey: "menuBarRateAlignment") ?? "") ?? .center
+    }
+}
+
 private struct MenuBarMetrics {
     let rxRateBps: Double
     let txRateBps: Double
@@ -71,6 +88,7 @@ private struct MenuBarDisplayModel {
     let referenceTotalText: String
     let ringProgress: CGFloat
     let accessories: MenuBarAccessories
+    let alignment: MenuBarRateAlignment
 }
 
 /// Optional status marks drawn to the right of the rates: a VPN indicator
@@ -334,6 +352,73 @@ private final class MenuBarRatesView: NSView {
         return bounds.width - Self.trailingReserve(for: model)
     }
 
+    // MARK: Fixed-block layout (issue #65)
+
+    /// A piece of a rate line: either drawn at its natural width, or placed in a
+    /// slot as wide as the reference text, so nothing after it moves when the
+    /// value changes length. Summed, the segments always come to the same width.
+    private enum Segment {
+        case fixed(TextRun)
+        case slot(TextRun, width: CGFloat)
+
+        var advance: CGFloat {
+            switch self {
+            case .fixed(let run): return ceil(run.size.width)
+            case .slot(_, let width): return width
+            }
+        }
+
+        var fits: Bool {
+            guard case .slot(let run, let width) = self else { return true }
+            return ceil(run.size.width) <= width
+        }
+    }
+
+    private static func blockWidth(_ segments: [Segment]) -> CGFloat {
+        segments.reduce(0) { $0 + $1.advance }
+    }
+
+    /// The reference text is the widest form the formatter produces, but a
+    /// proportional font can still surprise. When a live value would overflow
+    /// its slot the caller falls back to centring, rather than letting a number
+    /// run into its arrow.
+    private static func fits(_ segments: [Segment]) -> Bool {
+        segments.allSatisfy(\.fits)
+    }
+
+    private static func referenceWidth(_ text: String, font: NSFont) -> CGFloat {
+        ceil(TextRun(text: text, font: font, color: .clear).size.width)
+    }
+
+    private func draw(segments: [Segment], at origin: NSPoint, alignment: MenuBarRateAlignment) {
+        var x = origin.x
+        for segment in segments {
+            switch segment {
+            case .fixed(let run):
+                (run.text as NSString).draw(at: NSPoint(x: x, y: origin.y), withAttributes: run.attributes)
+            case .slot(let run, let width):
+                let offset = alignment == .right ? max(0, width - ceil(run.size.width)) : 0
+                (run.text as NSString).draw(at: NSPoint(x: x + offset, y: origin.y), withAttributes: run.attributes)
+            }
+            x += segment.advance
+        }
+    }
+
+    private static func stackSegments(
+        text: String,
+        reference: String,
+        font: NSFont,
+        textColor: NSColor,
+        arrow: String,
+        arrowColor: NSColor
+    ) -> [Segment] {
+        [
+            .fixed(TextRun(text: arrow, font: font, color: arrowColor)),
+            .fixed(TextRun(text: " ", font: font, color: textColor)),
+            .slot(TextRun(text: text, font: font, color: textColor), width: referenceWidth(reference, font: font))
+        ]
+    }
+
     private func drawStack(_ model: MenuBarDisplayModel) {
         let lineHeight = Self.stackLineHeight(for: model.font)
         let upRuns = Self.stackRuns(
@@ -356,6 +441,34 @@ private final class MenuBarRatesView: NSView {
             : 0
         let totalHeight = (lineHeight * 2) + spacing
         let originY = floor((bounds.height - totalHeight) / 2)
+
+        if model.alignment != .center {
+            let up = Self.stackSegments(
+                text: model.fullUpText,
+                reference: model.referenceFullText,
+                font: model.font,
+                textColor: model.upTextColor,
+                arrow: "↑",
+                arrowColor: model.upColor
+            )
+            let down = Self.stackSegments(
+                text: model.fullDownText,
+                reference: model.referenceFullText,
+                font: model.font,
+                textColor: model.downTextColor,
+                arrow: "↓",
+                arrowColor: model.downColor
+            )
+            if Self.fits(up), Self.fits(down) {
+                // One origin for both lines, so ↑ and ↓ stack in a column, and a
+                // block width taken from the reference text, so it never moves.
+                let block = max(Self.blockWidth(up), Self.blockWidth(down))
+                let x = floor((ratesWidthInBounds - block) / 2)
+                draw(segments: up, at: NSPoint(x: x, y: originY), alignment: model.alignment)
+                draw(segments: down, at: NSPoint(x: x, y: originY + lineHeight + spacing), alignment: model.alignment)
+                return
+            }
+        }
 
         let upWidth = Self.width(of: upRuns)
         let downWidth = Self.width(of: downRuns)
@@ -396,6 +509,26 @@ private final class MenuBarRatesView: NSView {
         let textY = floor((bounds.height - lineHeight) / 2)
         let contentWidth = Self.width(of: runs)
         let contentMidX = (capsuleRect.minX + ratesWidthInBounds - Self.horizontalPadding) / 2
+
+        if model.alignment != .center {
+            let slot = Self.referenceWidth(model.referenceFullText, font: model.font)
+            let segments: [Segment] = [
+                .slot(TextRun(text: model.fullDownText, font: model.font, color: model.downTextColor), width: slot),
+                .fixed(TextRun(text: " ", font: model.font, color: model.downTextColor)),
+                .fixed(TextRun(text: "↓", font: model.font, color: model.downColor)),
+                .fixed(TextRun(text: " • ", font: model.font, color: model.secondaryTextColor)),
+                .slot(TextRun(text: model.fullUpText, font: model.font, color: model.upTextColor), width: slot),
+                .fixed(TextRun(text: " ", font: model.font, color: model.upTextColor)),
+                .fixed(TextRun(text: "↑", font: model.font, color: model.upColor))
+            ]
+            if Self.fits(segments) {
+                let block = Self.blockWidth(segments)
+                let x = max(capsuleRect.minX + Self.capsulePadding, floor(contentMidX - (block / 2)))
+                draw(segments: segments, at: NSPoint(x: x, y: textY), alignment: model.alignment)
+                return
+            }
+        }
+
         let textX = max(capsuleRect.minX + Self.capsulePadding, floor(contentMidX - (contentWidth / 2)))
         draw(runs: runs, at: NSPoint(x: textX, y: textY))
     }
@@ -433,6 +566,48 @@ private final class MenuBarRatesView: NSView {
         let textY = floor((bounds.height - lineHeight) / 2)
         let runsWidth = Self.width(of: runs)
         let contentMidX = (capsuleRect.minX + ratesWidthInBounds - Self.horizontalPadding) / 2
+
+        if model.alignment != .center {
+            let compactSlot = Self.referenceWidth(model.referenceCompactText, font: model.smallFont)
+            var segments: [Segment] = []
+            if model.style == .dashboard {
+                // "Σ " stays put; only the total itself sits in a slot.
+                segments += [
+                    .fixed(TextRun(text: "Σ ", font: model.emphasisFont, color: model.textColor)),
+                    .slot(
+                        TextRun(text: model.totalText, font: model.emphasisFont, color: model.textColor),
+                        width: Self.referenceWidth(model.referenceTotalText, font: model.emphasisFont)
+                    ),
+                    .fixed(TextRun(text: "  |  ", font: model.smallFont, color: model.secondaryTextColor))
+                ]
+            }
+            segments += [
+                .fixed(TextRun(text: "↓", font: model.smallFont, color: model.downColor)),
+                .fixed(TextRun(text: " ", font: model.smallFont, color: model.downTextColor)),
+                .slot(TextRun(text: model.compactDownText, font: model.smallFont, color: model.downTextColor), width: compactSlot),
+                .fixed(TextRun(text: "  |  ", font: model.smallFont, color: model.secondaryTextColor)),
+                .fixed(TextRun(text: "↑", font: model.smallFont, color: model.upColor)),
+                .fixed(TextRun(text: " ", font: model.smallFont, color: model.upTextColor)),
+                .slot(TextRun(text: model.compactUpText, font: model.smallFont, color: model.upTextColor), width: compactSlot)
+            ]
+            if Self.fits(segments) {
+                let block = Self.blockWidth(segments)
+                if model.style == .dashboard {
+                    let ringSize = Self.dashboardRingSize(for: model)
+                    let ringRect = NSRect(
+                        x: floor(contentMidX - ((ringSize + 6 + block) / 2)),
+                        y: floor((bounds.height - ringSize) / 2),
+                        width: ringSize,
+                        height: ringSize
+                    )
+                    drawRing(in: ringRect, progress: model.ringProgress, color: model.ringColor, secondaryColor: model.secondaryTextColor)
+                    draw(segments: segments, at: NSPoint(x: ringRect.maxX + 6, y: textY), alignment: model.alignment)
+                } else {
+                    draw(segments: segments, at: NSPoint(x: floor(contentMidX - (block / 2)), y: textY), alignment: model.alignment)
+                }
+                return
+            }
+        }
 
         if model.style == .dashboard {
             let ringSize = Self.dashboardRingSize(for: model)
@@ -617,6 +792,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         let downTextColorKey: String
         let ringProgressBucket: Int
         var accessoryKey: String = ""
+        var alignment: String = MenuBarRateAlignment.center.rawValue
     }
 
     private struct FontState: Hashable {
@@ -1291,6 +1467,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             uploadColorHex,
             downloadColorHex
         ].joined(separator: ":")
+        let rateAlignment = MenuBarRateAlignment.current
         let renderState = MenuBarRenderState(
             mode: mode,
             upText: fullUpText,
@@ -1307,7 +1484,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             upTextColorKey: [menuBarUploadTextColorName, menuBarUploadTextColorHex].joined(separator: ":"),
             downTextColorKey: [menuBarDownloadTextColorName, menuBarDownloadTextColorHex].joined(separator: ":"),
             ringProgressBucket: Int((ringProgress * 100).rounded()),
-            accessoryKey: accessoryKey
+            accessoryKey: accessoryKey,
+            alignment: rateAlignment.rawValue
         )
         if lastRenderState == renderState { return }
         lastRenderState = renderState
@@ -1338,7 +1516,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             totalText: compactTexts.total,
             referenceTotalText: compactTexts.totalReference,
             ringProgress: ringProgress,
-            accessories: accessories
+            accessories: accessories,
+            alignment: rateAlignment
         )
 
         let targetLength = MenuBarRatesView.preferredWidth(for: model)
