@@ -1915,6 +1915,15 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="Uses the servers from DHCP" xml:space="preserve">
     <value>Uses the servers from DHCP</value>
   </data>
+  <data name="macOS is waiting for you to allow NetFluss under System Settings → General → Login Items &amp; Extensions." xml:space="preserve">
+    <value>Windows is waiting for you to allow NetFluss under Settings → General → Login Items &amp; Extensions.</value>
+  </data>
+  <data name="Open Login Items…" xml:space="preserve">
+    <value>Open Login Items…</value>
+  </data>
+  <data name="macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." xml:space="preserve">
+    <value>Windows only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>'{0}' already exists.</value>
   </data>

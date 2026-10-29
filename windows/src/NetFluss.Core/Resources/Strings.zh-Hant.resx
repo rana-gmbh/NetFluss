@@ -1915,6 +1915,15 @@
   <data name="Uses the servers from DHCP" xml:space="preserve">
     <value>使用來自 DHCP 的伺服器</value>
   </data>
+  <data name="macOS is waiting for you to allow NetFluss under System Settings → General → Login Items &amp; Extensions." xml:space="preserve">
+    <value>Windows 正在等待你在「系統設定 → 一般 → 登入項目與延伸功能」中允許 NetFluss。</value>
+  </data>
+  <data name="Open Login Items…" xml:space="preserve">
+    <value>打開登入項目…</value>
+  </data>
+  <data name="macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." xml:space="preserve">
+    <value>只有從「應用程式」檔案夾執行時，Windows 才會在登入時打開 NetFluss。請將其移到那裡後重新打開。</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>「{0}」已存在。</value>
   </data>

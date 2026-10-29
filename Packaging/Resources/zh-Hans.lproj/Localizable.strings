@@ -650,3 +650,8 @@
 "Rename DNS Profile" = "重命名 DNS 配置";
 "Only the name changes — the servers stay as they are." = "仅更改名称——服务器保持不变。";
 "Uses the servers from DHCP" = "使用来自 DHCP 的服务器";
+
+/* Launch at login (issue #67) */
+"macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions." = "macOS 正在等待你在“系统设置 → 通用 → 登录项与扩展”中允许 NetFluss。";
+"Open Login Items…" = "打开登录项…";
+"macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." = "只有从“应用程序”文件夹运行时，macOS 才会在登录时打开 NetFluss。请将其移到那里后重新打开。";

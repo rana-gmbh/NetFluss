@@ -359,7 +359,8 @@ struct PreferencesView: View {
     @State private var draggingID: String? = nil
     @State private var dragBaseOrder: [String] = []
     @State private var renamingAdapter: AdapterStatus? = nil
-    @State private var launchAtLogin: Bool = false
+    @State private var launchAtLoginState: LaunchAtLoginState = .off
+    @State private var launchAtLoginError: String?
     @State private var hiddenApps: [String] = []
     @State private var showHiddenAppsSheet = false
     @State private var customDNSPresets: [DNSPreset] = []
@@ -392,6 +393,11 @@ struct PreferencesView: View {
             Form {
                 if selectedPane == .general {
                     Section {
+                        launchAtLoginControls
+                    } header: {
+                        LText("Launch")
+                    }
+                    Section {
                         SystemAccessControls()
                     } header: {
                         LText("System access")
@@ -416,28 +422,6 @@ struct PreferencesView: View {
                 }
             } header: {
                 LText("Units")
-            }
-
-                    Section {
-                Toggle(isOn: Binding(
-                    get: { launchAtLogin },
-                    set: { enable in
-                        do {
-                            if enable {
-                                try SMAppService.mainApp.register()
-                            } else {
-                                try SMAppService.mainApp.unregister()
-                            }
-                        } catch {
-                            // Silently ignore — expected in dev builds outside /Applications
-                        }
-                        launchAtLogin = SMAppService.mainApp.status == .enabled
-                    }
-                )) {
-                    LText("Launch at login")
-                }
-            } header: {
-                LText("Launch")
             }
 
                     Section {
@@ -1319,7 +1303,13 @@ struct PreferencesView: View {
             hiddenDNSPresets = Set(UserDefaults.standard.stringArray(forKey: "hiddenDNSPresets") ?? [])
             dnsPresetOrder = UserDefaults.standard.stringArray(forKey: "dnsPresetOrder") ?? []
             dnsRules = DNSRule.load()
-            launchAtLogin = SMAppService.mainApp.status == .enabled
+            refreshLaunchAtLogin()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshLaunchAtLogin()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            refreshLaunchAtLogin()
         }
         .sheet(item: $renamingAdapter) { adapter in
             RenameAdapterSheet(
@@ -1366,6 +1356,55 @@ struct PreferencesView: View {
     /// Re-read the router "credentials configured?" flags from the keychain.
     /// Called on appear, when hosts/mode change, and after an editor saves — so
     /// `body` never touches the keychain on its 1 Hz re-evaluation.
+    /// Launch at login (issue #67). Every SMAppService state gets its own
+    /// explanation: the old toggle swallowed all of them and snapped back off,
+    /// which users reasonably read as "greyed out".
+    @ViewBuilder
+    private var launchAtLoginControls: some View {
+        Toggle(isOn: Binding(
+            get: { launchAtLoginState.isOn },
+            set: { enable in
+                let result = LaunchAtLogin.set(enabled: enable)
+                launchAtLoginState = result.state
+                launchAtLoginError = result.error
+            }
+        )) {
+            LText("Launch at login")
+        }
+        // Only a translocated copy is disabled outright: nothing the user does
+        // in NetFluss can register it, so a live switch would just lie.
+        .disabled(launchAtLoginState == .unavailable && LaunchAtLogin.isTranslocated)
+
+        switch launchAtLoginState {
+        case .needsApproval:
+            PreferenceNote("macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.")
+            Button {
+                LaunchAtLogin.openLoginItemsSettings()
+            } label: {
+                LText("Open Login Items…")
+            }
+        case .unavailable:
+            PreferenceNote("macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.")
+        case .on, .off:
+            if let error = launchAtLoginError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .preferenceNote(fullText: error)
+            }
+        }
+    }
+
+    private func refreshLaunchAtLogin() {
+        let state = LaunchAtLogin.currentState
+        if state != launchAtLoginState {
+            launchAtLoginState = state
+            // A state change from outside — approving it in System Settings,
+            // say — makes any earlier error stale.
+            launchAtLoginError = nil
+        }
+    }
+
     @ViewBuilder
     private var dnsRuleSettings: some View {
         ForEach($dnsRules) { $rule in

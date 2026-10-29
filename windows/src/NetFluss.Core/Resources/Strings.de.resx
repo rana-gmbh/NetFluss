@@ -1915,6 +1915,15 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Uses the servers from DHCP" xml:space="preserve">
     <value>Verwendet die Server von DHCP</value>
   </data>
+  <data name="macOS is waiting for you to allow NetFluss under System Settings → General → Login Items &amp; Extensions." xml:space="preserve">
+    <value>Windows wartet darauf, dass du NetFluss unter Systemeinstellungen → Allgemein → Anmeldeobjekte &amp; Erweiterungen erlaubst.</value>
+  </data>
+  <data name="Open Login Items…" xml:space="preserve">
+    <value>Anmeldeobjekte öffnen…</value>
+  </data>
+  <data name="macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." xml:space="preserve">
+    <value>Windows öffnet NetFluss beim Anmelden nur, wenn es aus dem Ordner „Programme“ gestartet wird. Verschiebe es dorthin und öffne es erneut.</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>„{0}“ ist bereits vorhanden.</value>
   </data>

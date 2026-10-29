@@ -650,3 +650,8 @@
 "Rename DNS Profile" = "Rename DNS Profile";
 "Only the name changes — the servers stay as they are." = "Only the name changes — the servers stay as they are.";
 "Uses the servers from DHCP" = "Uses the servers from DHCP";
+
+/* Launch at login (issue #67) */
+"macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions." = "macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.";
+"Open Login Items…" = "Open Login Items…";
+"macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." = "macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.";
