@@ -290,3 +290,11 @@ final class PreferenceSearchTests: XCTestCase {
         XCTAssertEqual(PreferenceSearch.matches(for: "resolver", in: entries, localized: { $0 }).first?.pane, .appearance)
     }
 }
+
+final class VPNSupportTests: XCTestCase {
+    func testBundledToolsNeedMacOS14() {
+        XCTAssertFalse(VPNManager.supportsBundledTools(on: OperatingSystemVersion(majorVersion: 13, minorVersion: 7, patchVersion: 8)))
+        XCTAssertTrue(VPNManager.supportsBundledTools(on: OperatingSystemVersion(majorVersion: 14, minorVersion: 0, patchVersion: 0)))
+        XCTAssertTrue(VPNManager.supportsBundledTools(on: OperatingSystemVersion(majorVersion: 26, minorVersion: 0, patchVersion: 0)))
+    }
+}

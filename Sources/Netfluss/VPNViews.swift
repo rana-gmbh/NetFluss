@@ -195,6 +195,12 @@ struct VPNPreferencesContent: View {
     var body: some View {
         Section {
             Toggle(isOn: $showVPN) { LText("Show VPN in popover") }
+            if !VPNManager.bundledToolsSupported {
+                LText("OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Button { importProfile(kind: .openVPN) } label: { LText("Import OpenVPN profile…") }
             Button { importProfile(kind: .wireGuard) } label: { LText("Import WireGuard profile…") }
             LText("Import a single config file, or a folder or .zip of them (e.g. a provider's router profiles). Each config becomes a selectable server.")

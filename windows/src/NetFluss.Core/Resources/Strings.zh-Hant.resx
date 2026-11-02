@@ -2044,6 +2044,9 @@
   <data name="DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it." xml:space="preserve">
     <value>DNS 切換和 VPN 需要一個小型輔助工具。NetFluss 會在你首次需要時要求安裝。</value>
   </data>
+  <data name="OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work." xml:space="preserve">
+    <value>OpenVPN 和 WireGuard 需要 Windows 14 或更新版本。IKEv2 和系統 VPN 仍可使用。</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>「{0}」已存在。</value>
   </data>

@@ -353,7 +353,7 @@ Every release is built from this repository by [GitHub Actions](.github/workflow
 
 ## Requirements
 
-- macOS 13 Ventura or later
+- macOS 13 Ventura or later (OpenVPN and WireGuard need macOS 14 Sonoma or later)
 - Xcode 15+ or Swift 5.10+ toolchain (to build from source)
 
 ## Install

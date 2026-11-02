@@ -291,6 +291,17 @@ final class VPNManager: ObservableObject {
         if stopped != "0" { VPNDiagnosticsLog.shared.log("Stopped \(stopped) tunnel(s) left by an earlier run") }
     }
 
+    /// The bundled OpenVPN and WireGuard tools are built for macOS 14: the last
+    /// builds for macOS 13 are stuck on OpenSSL 3.5.2. IKEv2 and system VPNs use
+    /// macOS's own client, so they still work on 13.
+    nonisolated static func supportsBundledTools(on version: OperatingSystemVersion) -> Bool {
+        version.majorVersion >= 14
+    }
+
+    nonisolated static var bundledToolsSupported: Bool {
+        supportsBundledTools(on: ProcessInfo.processInfo.operatingSystemVersion)
+    }
+
     /// Whether quitting has anything to take down.
     var hasActiveConnection: Bool {
         status.state.isActive || activeTunnelHandle != nil || activeIKEv2 || ovpnClient != nil
@@ -429,6 +440,10 @@ final class VPNManager: ObservableObject {
     // MARK: - Backends
 
     private func startBundledTunnel(_ profile: VPNProfile, endpoint: VPNServerEndpoint?) async {
+        guard Self.bundledToolsSupported else {
+            status.state = .failed(L10n.text("OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work."))
+            return
+        }
         let configPath = store.configPath(for: profile, endpoint: endpoint)
         let socketPath = Self.managementSocketPath(for: profile)
         let attempt = connectAttempt

@@ -2044,6 +2044,9 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it." xml:space="preserve">
     <value>DNS-Umschaltung und VPN nutzen einen kleinen Helfer. NetFluss fragt danach, sobald du ihn zum ersten Mal brauchst.</value>
   </data>
+  <data name="OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work." xml:space="preserve">
+    <value>OpenVPN und WireGuard benötigen Windows 14 oder neuer. IKEv2 und System-VPNs funktionieren weiterhin.</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>„{0}“ ist bereits vorhanden.</value>
   </data>

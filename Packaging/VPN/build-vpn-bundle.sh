@@ -5,10 +5,14 @@
 #
 # Why bottles-from-ghcr: GitHub retired the free macos-13 Intel runner, so the
 # x86_64 VPN slice can no longer be compiled on free CI. But Homebrew still ships
-# prebuilt x86_64 *ventura* bottles for every tool we bundle, and those download
-# fine on an Apple-Silicon host. A ventura-targeted (macOS 13) x86_64 binary runs
-# on every still-supported Intel Mac (13/14/15). We pin the SAME versions for the
-# arm64 slice so both halves of each universal binary are one matched toolchain.
+# prebuilt x86_64 *sonoma* bottles for every tool we bundle, and those download
+# fine on an Apple-Silicon host. We pin the SAME versions for the arm64 slice so
+# both halves of each universal binary are one matched toolchain.
+#
+# Both slices target macOS 14, so OpenVPN and WireGuard need macOS 14 even though
+# the app runs on 13 (VPNManager.bundledToolsSupported tells the user). The last
+# bottles for macOS 13 were openvpn 2.6.14 and openssl 3.5.2, and staying there
+# meant no more OpenSSL fixes.
 #
 # Usage:
 #   build-vpn-bundle.sh <dest-vpn-dir> [signing-identity]
@@ -26,23 +30,25 @@ DEST="${1:?usage: build-vpn-bundle.sh <dest-vpn-dir> [signing-identity]}"
 SIGN_ID="${2:-}"
 INTEL="${INTEL:-1}"
 
-# Matched, ventura-compatible pins. Every version below has BOTH an arm64_ventura
-# and an x86_64 ventura bottle on ghcr (verified). openvpn 2.7.x and current
-# openssl/pkcs11-helper/wireguard-tools/bash dropped their x86_64 ventura bottles,
-# which is why these are held slightly behind latest. Refresh together, and keep
-# to versions that still publish a `ventura` (x86_64) bottle.
+# Matched, sonoma-compatible pins. Every version below has BOTH an arm64_sonoma
+# and an x86_64 sonoma bottle on ghcr (verified). Newer openssl, bash and readline
+# have dropped their x86_64 sonoma bottles, which is why these are held slightly
+# behind latest. Refresh together, and keep to versions that still publish a
+# `sonoma` (x86_64) bottle. openssl comes from the openssl@3.5 LTS formula because
+# openssl@3's sonoma bottles stop at 3.6.3. After an openvpn or wireguard-tools
+# bump, recheck VPNConfigPolicy against the new options.c and wg-quick.
 PINS=(
-  "openvpn=2.6.14"
-  "openssl@3=3.5.2"
+  "openvpn=2.6.19"
+  "openssl@3.5=3.5.8"
   "lzo=2.10"
   "lz4=1.10.0"
-  "pkcs11-helper=1.30.0"
+  "pkcs11-helper=1.31.0"
   "wireguard-go=0.0.20250522"
-  "wireguard-tools=1.0.20250521"
-  "bash=5.3.3"
-  "readline=8.3.1"
-  "ncurses=6.5"
-  "gettext=0.26"
+  "wireguard-tools=1.0.20260223"
+  "bash=5.3.15"
+  "readline=8.3.3"
+  "ncurses=6.6"
+  "gettext=1.0"
 )
 
 # The executables/scripts we actually ship (resolved from the cellar); their dylib
@@ -73,7 +79,7 @@ download_bottle() {
   local formula="$1" version="$2" tag="$3" cellar="$4"
   local repo; repo="$(repo_of "$formula")"
   local token; token="$(ghcr_token "$repo")"
-  # The bottle tag ('ventura', 'arm64_ventura') selects one manifest from the
+  # The bottle tag ('sonoma', 'arm64_sonoma') selects one manifest from the
   # version's OCI index; that child manifest's single layer is the bottle tarball.
   local index child layer
   index="$(curl -fsSL -H "Authorization: Bearer $token" \
@@ -149,14 +155,14 @@ stage_arch() {
 
 echo "Staging arm64 slice…"
 ARM_OUT="$WORK/arm64"
-for pin in "${PINS[@]}"; do download_bottle "${pin%=*}" "${pin#*=}" "arm64_ventura" "$WORK/cellar-arm64"; done
+for pin in "${PINS[@]}"; do download_bottle "${pin%=*}" "${pin#*=}" "arm64_sonoma" "$WORK/cellar-arm64"; done
 stage_arch "$ARM_OUT" "$WORK/cellar-arm64"
 
 mkdir -p "$DEST"
 if [[ "$INTEL" == "1" ]]; then
   echo "Staging x86_64 slice…"
   X86_OUT="$WORK/x86_64"
-  for pin in "${PINS[@]}"; do download_bottle "${pin%=*}" "${pin#*=}" "ventura" "$WORK/cellar-x86_64"; done
+  for pin in "${PINS[@]}"; do download_bottle "${pin%=*}" "${pin#*=}" "sonoma" "$WORK/cellar-x86_64"; done
   stage_arch "$X86_OUT" "$WORK/cellar-x86_64"
 
   echo "Creating universal binaries…"

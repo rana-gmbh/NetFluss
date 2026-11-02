@@ -42,6 +42,7 @@ were left alone and want a human decision.
 | `en` | `Privacy` | windows override | Privacy |
 | `en` | `Look up public IP addresses and countries` | windows override | Look up public IP addresses and countries |
 | `en` | `Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more.` | needs review | Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more. |
+| `en` | `OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work.` | auto-rewritten | OpenVPN and WireGuard need Windows 14 or later. IKEv2 and system VPNs still work. |
 | `de` | `System Default follows the language selected in macOS.` | auto-rewritten | Systemsprache folgt der in Windows ausgewählten Sprache. |
 | `de` | `DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.` | auto-rewritten | DNS-Änderungen und Ethernet-Neuverbindungen installieren beim ersten Mal ein privilegiertes Hilfsprogramm. Windows kann nach Administratorfreigabe und auf manchen Systemen nach zusätzlicher Freigabe in den Systemeinstellungen fragen. |
 | `de` | `Recent results saved on this Mac. Add notes to remember the exact place.` | needs review | Aktuelle Ergebnisse, die auf diesem Mac gespeichert sind. Füge Notizen hinzu, um den genauen Ort festzuhalten. |
@@ -66,6 +67,7 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
 | `de` | `Copy` | windows override | Kopieren |
 | `de` | `Privacy` | windows override | Datenschutz |
 | `de` | `Look up public IP addresses and countries` | windows override | Öffentliche IP-Adressen und Länder abfragen |
+| `de` | `OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work.` | auto-rewritten | OpenVPN und WireGuard benötigen Windows 14 oder neuer. IKEv2 und System-VPNs funktionieren weiterhin. |
 | `zh-Hans` | `System Default follows the language selected in macOS.` | auto-rewritten | 系统默认会跟随 Windows 中选择的语言。 |
 | `zh-Hans` | `DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.` | auto-rewritten | 首次更改 DNS 或重新连接以太网时会安装特权辅助工具。Windows 可能会要求管理员批准，在某些系统上还需要在系统设置中额外批准。 |
 | `zh-Hans` | `Recent results saved on this Mac. Add notes to remember the exact place.` | needs review | 保存在这台 Mac 上的最近结果。添加备注以记住具体地点。 |
@@ -84,6 +86,7 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
 | `zh-Hans` | `Copy` | windows override | 复制 |
 | `zh-Hans` | `Privacy` | windows override | 隐私 |
 | `zh-Hans` | `Look up public IP addresses and countries` | windows override | 查询公网 IP 地址和国家/地区 |
+| `zh-Hans` | `OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work.` | auto-rewritten | OpenVPN 和 WireGuard 需要 Windows 14 或更高版本。IKEv2 和系统 VPN 仍可使用。 |
 | `zh-Hant` | `System Default follows the language selected in macOS.` | auto-rewritten | 系統預設會跟隨 Windows 中選擇的語言。 |
 | `zh-Hant` | `DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.` | auto-rewritten | 首次變更 DNS 或重新連接乙太網路時會安裝特權輔助工具。Windows 可能會要求管理員批准，在某些系統上還需要在系統設定中額外批准。 |
 | `zh-Hant` | `Recent results saved on this Mac. Add notes to remember the exact place.` | needs review | 保存在這台 Mac 上的最近結果。加入備註以記住具體地點。 |
@@ -103,3 +106,4 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
 | `zh-Hant` | `Copy` | windows override | 複製 |
 | `zh-Hant` | `Privacy` | windows override | 隱私 |
 | `zh-Hant` | `Look up public IP addresses and countries` | windows override | 查詢公用 IP 位址和國家/地區 |
+| `zh-Hant` | `OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work.` | auto-rewritten | OpenVPN 和 WireGuard 需要 Windows 14 或更新版本。IKEv2 和系統 VPN 仍可使用。 |

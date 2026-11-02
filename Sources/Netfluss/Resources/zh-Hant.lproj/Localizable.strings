@@ -697,3 +697,4 @@
 "Welcome to NetFluss" = "歡迎使用 NetFluss";
 "Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more." = "你的即時網路速度現在顯示在選單列中。按一下即可查看詳細資訊。那裡的齒輪按鈕可開啟設定、統計、測速等。";
 "DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it." = "DNS 切換和 VPN 需要一個小型輔助工具。NetFluss 會在你首次需要時要求安裝。";
+"OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work." = "OpenVPN 和 WireGuard 需要 macOS 14 或更新版本。IKEv2 和系統 VPN 仍可使用。";
