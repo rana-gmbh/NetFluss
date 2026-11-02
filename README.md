@@ -33,7 +33,7 @@ Free code signing provided by [SignPath.io](https://about.signpath.io), certific
 
 Every release is built from this repository by [GitHub Actions](.github/workflows/windows-release.yml) and signed only after a manual approval.
 
-**Privacy:** see the [privacy policy](PRIVACY.md). NetFluss sends no telemetry. The few online lookups it makes on its own — the daily update check and the public IP and country lookups — are listed there, and each can be switched off in the installer and in Preferences.
+**Privacy:** see the privacy policy for [Windows](PRIVACY.md) or [Mac](PRIVACY-macOS.md). NetFluss sends no telemetry. The few online lookups it makes on its own — the daily update check and the public IP and country lookups — are listed there, and each can be switched off in the installer and in Preferences.
 
 ## New in 2.7
 
