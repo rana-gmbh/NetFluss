@@ -187,7 +187,7 @@ struct ThemeChip: View {
     }
 }
 
-private enum PreferencePane: String, CaseIterable, Identifiable {
+enum PreferencePane: String, CaseIterable, Identifiable {
     case general
     case adapters
     case statistics
@@ -375,6 +375,7 @@ struct PreferencesView: View {
     @State private var dnsDraggingID: String? = nil
     @State private var dnsDragBaseOrder: [String] = []
     @State private var selectedPane: PreferencePane = .general
+    @State private var searchText = ""
     // "Credentials configured?" flags — cached in state so the keychain
     // (SecItemCopyMatching, a disk+securityd hit) isn't queried in `body`, which
     // re-evaluates every monitor tick while Preferences is open.
@@ -1317,6 +1318,14 @@ struct PreferencesView: View {
 
             }
             .formStyle(.grouped)
+            .overlay {
+                if !searchText.isEmpty {
+                    PreferenceSearchResults(query: searchText) { pane in
+                        selectedPane = pane
+                        searchText = ""
+                    }
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -1731,11 +1740,17 @@ struct PreferencesView: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, 10)
 
+            TextField(L10n.text("Search settings"), text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 260)
+                .onExitCommand { searchText = "" }
+
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 6) {
                     ForEach(PreferencePane.allCases) { pane in
                         Button {
                             selectedPane = pane
+                            searchText = ""
                         } label: {
                             VStack(spacing: 5) {
                                 Image(systemName: pane.systemImage)

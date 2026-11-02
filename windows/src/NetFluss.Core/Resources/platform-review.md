@@ -41,6 +41,7 @@ were left alone and want a human decision.
 | `en` | `Copy` | windows override | Copy |
 | `en` | `Privacy` | windows override | Privacy |
 | `en` | `Look up public IP addresses and countries` | windows override | Look up public IP addresses and countries |
+| `en` | `Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more.` | needs review | Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more. |
 | `de` | `System Default follows the language selected in macOS.` | auto-rewritten | Systemsprache folgt der in Windows ausgewählten Sprache. |
 | `de` | `DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.` | auto-rewritten | DNS-Änderungen und Ethernet-Neuverbindungen installieren beim ersten Mal ein privilegiertes Hilfsprogramm. Windows kann nach Administratorfreigabe und auf manchen Systemen nach zusätzlicher Freigabe in den Systemeinstellungen fragen. |
 | `de` | `Recent results saved on this Mac. Add notes to remember the exact place.` | needs review | Aktuelle Ergebnisse, die auf diesem Mac gespeichert sind. Füge Notizen hinzu, um den genauen Ort festzuhalten. |

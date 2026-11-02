@@ -2029,6 +2029,21 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag." xml:space="preserve">
     <value>Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag.</value>
   </data>
+  <data name="Search settings" xml:space="preserve">
+    <value>Search settings</value>
+  </data>
+  <data name="No matching settings" xml:space="preserve">
+    <value>No matching settings</value>
+  </data>
+  <data name="Welcome to NetFluss" xml:space="preserve">
+    <value>Welcome to NetFluss</value>
+  </data>
+  <data name="Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
+    <value>Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more.</value>
+  </data>
+  <data name="DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it." xml:space="preserve">
+    <value>DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it.</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>'{0}' already exists.</value>
   </data>

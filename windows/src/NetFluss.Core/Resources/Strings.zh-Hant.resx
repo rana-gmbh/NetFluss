@@ -2029,6 +2029,21 @@
   <data name="Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag." xml:space="preserve">
     <value>向 ipify 和 ipwho.is 查詢你的公用 IP 位址及其國家/地區，並向 api.country.is 查詢 Network Slice 中的國家/地區。關閉後，NetFluss 不顯示外部 IP、國家/地區或旗幟。</value>
   </data>
+  <data name="Search settings" xml:space="preserve">
+    <value>搜尋設定</value>
+  </data>
+  <data name="No matching settings" xml:space="preserve">
+    <value>沒有符合的設定</value>
+  </data>
+  <data name="Welcome to NetFluss" xml:space="preserve">
+    <value>歡迎使用 NetFluss</value>
+  </data>
+  <data name="Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
+    <value>你的即時網路速度現在顯示在選單列中。按一下即可查看詳細資訊。那裡的齒輪按鈕可開啟設定、統計、測速等。</value>
+  </data>
+  <data name="DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it." xml:space="preserve">
+    <value>DNS 切換和 VPN 需要一個小型輔助工具。NetFluss 會在你首次需要時要求安裝。</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>「{0}」已存在。</value>
   </data>

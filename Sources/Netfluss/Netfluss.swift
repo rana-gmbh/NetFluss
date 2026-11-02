@@ -50,9 +50,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var terminationAnswered = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let firstLaunch = WelcomeWindowController.isFirstLaunch
         AppIconController.shared.start()
         appState = AppState()
         dismissStraySettingsWindow()
+        if firstLaunch {
+            WelcomeWindowController.shared.show { [weak self] in self?.appState?.showPreferences() }
+        }
         preferencesObserver = NotificationCenter.default.addObserver(
             forName: .showPreferences,
             object: nil,

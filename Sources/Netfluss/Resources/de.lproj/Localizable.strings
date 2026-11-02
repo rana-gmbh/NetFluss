@@ -692,3 +692,8 @@
 "Privacy" = "Datenschutz";
 "Look up public IP addresses and countries" = "Öffentliche IP-Adressen und Länder abfragen";
 "Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag." = "Fragt ipify und ipwho.is nach deiner öffentlichen IP-Adresse und ihrem Land sowie api.country.is nach den Ländern in Network Slice. Ist dies aus, zeigt NetFluss keine externe IP, kein Land und keine Flagge.";
+"Search settings" = "Einstellungen durchsuchen";
+"No matching settings" = "Keine passenden Einstellungen";
+"Welcome to NetFluss" = "Willkommen bei NetFluss";
+"Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more." = "Deine aktuelle Netzwerkgeschwindigkeit steht jetzt in der Menüleiste. Klicke darauf für die Details. Über das Zahnrad dort erreichst du Einstellungen, Statistiken, Speedtest und mehr.";
+"DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it." = "DNS-Umschaltung und VPN nutzen einen kleinen Helfer. NetFluss fragt danach, sobald du ihn zum ersten Mal brauchst.";

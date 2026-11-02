@@ -692,3 +692,8 @@
 "Privacy" = "隐私";
 "Look up public IP addresses and countries" = "查询公网 IP 地址和国家/地区";
 "Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag." = "向 ipify 和 ipwho.is 查询你的公网 IP 地址及其国家/地区，并向 api.country.is 查询 Network Slice 中的国家/地区。关闭后，NetFluss 不显示外部 IP、国家/地区或旗帜。";
+"Search settings" = "搜索设置";
+"No matching settings" = "没有匹配的设置";
+"Welcome to NetFluss" = "欢迎使用 NetFluss";
+"Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more." = "你的实时网速现在显示在菜单栏中。点按它可查看详细信息。那里的齿轮按钮可打开设置、统计、测速等。";
+"DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it." = "DNS 切换和 VPN 需要一个小型辅助工具。NetFluss 会在你首次需要时请求安装。";

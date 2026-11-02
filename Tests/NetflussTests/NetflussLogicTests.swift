@@ -243,3 +243,50 @@ final class AdapterTests: XCTestCase {
         XCTAssertEqual(busy.withoutTraffic, idle.withoutTraffic)
     }
 }
+
+final class PreferenceSearchTests: XCTestCase {
+    private var repository: URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    }
+
+    private func labels(in source: String) -> [String] {
+        let pattern = #/(?:LText|PreferenceNote)\(\s*"((?:[^"\\]|\\.)*)"/#
+        return source.matches(of: pattern).map { String($0.1).replacingOccurrences(of: "\\\"", with: "\"") }
+    }
+
+    func testEveryEntryIsATranslatedString() throws {
+        let catalogue = try String(contentsOf: repository.appendingPathComponent("Packaging/Resources/en.lproj/Localizable.strings"), encoding: .utf8)
+        for entry in PreferenceSearch.entries {
+            let key = entry.key.replacingOccurrences(of: "\"", with: "\\\"")
+            XCTAssertTrue(catalogue.contains("\"\(key)\" ="), entry.key)
+        }
+    }
+
+    /// Fails when a setting is added to Preferences without being made findable.
+    func testEverySettingOnThePanesCanBeFound() throws {
+        let source = try String(contentsOf: repository.appendingPathComponent("Sources/Netfluss/PreferencesView.swift"), encoding: .utf8)
+        let start = try XCTUnwrap(source.range(of: "if selectedPane == .general"))
+        let end = try XCTUnwrap(source.range(of: "private var launchAtLoginControls"))
+        let indexed = Set(PreferenceSearch.entries.map(\.key))
+        for label in labels(in: String(source[start.lowerBound..<end.lowerBound])) where label.count > 2 {
+            XCTAssertTrue(indexed.contains(label), label)
+        }
+    }
+
+    func testMatchesEveryWordInEitherLanguage() {
+        let entries = [PreferenceSearch.Entry("Launch at login", .general),
+                       PreferenceSearch.Entry("Rate alignment", .appearance)]
+        let german: (String) -> String = { $0 == "Launch at login" ? "Beim Anmelden starten" : $0 }
+
+        XCTAssertEqual(PreferenceSearch.matches(for: "login", in: entries, localized: german).map(\.pane), [.general])
+        XCTAssertEqual(PreferenceSearch.matches(for: "ANMELDEN starten", in: entries, localized: german).map(\.pane), [.general])
+        XCTAssertEqual(PreferenceSearch.matches(for: "login align", in: entries, localized: german), [])
+        XCTAssertEqual(PreferenceSearch.matches(for: "   ", in: entries, localized: german), [])
+    }
+
+    func testShorterLabelsComeBeforeExplanations() {
+        let entries = [PreferenceSearch.Entry("Shows the resolver in use on this network", .dns),
+                       PreferenceSearch.Entry("Resolver", .appearance)]
+        XCTAssertEqual(PreferenceSearch.matches(for: "resolver", in: entries, localized: { $0 }).first?.pane, .appearance)
+    }
+}
