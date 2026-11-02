@@ -74,7 +74,8 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
 
     private let tunnelsQueue = DispatchQueue(label: "com.local.netfluss.helper.vpn")
     private var tunnels: [String: Process] = [:]   // OpenVPN: handle(pid) -> process
-    private var wgTunnels: [String: String] = [:]  // WireGuard: handle(iface) -> temp .conf path
+    private var ovpnStages: [String: String] = [:] // OpenVPN: handle(pid) -> staged profile dir
+    private var wgTunnels: [String: String] = [:]  // WireGuard: handle(iface) -> staged .conf path
 
     func startVPNTunnel(
         kind: String,
@@ -104,25 +105,29 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             reply(false, "Missing bundled openvpn binary.")
             return
         }
-        // The config is user-imported and we're about to run openvpn as ROOT.
-        // `--script-security 1` blocks config up/down scripts, but it does NOT
-        // block `--plugin` (which dlopens a module) — so a malicious .ovpn could
-        // load arbitrary code as root. Reject configs carrying dangerous
-        // directives before launch. Standard provider configs never need these.
-        if let bad = Self.unsafeOpenVPNDirective(inConfigAt: configPath) {
-            Self.writeVPNLog("Refused config: unsafe directive '\(bad)'", to:
+        // The config is user-imported and we're about to run openvpn as ROOT, so
+        // it is checked and then run from a private copy: the original sits in the
+        // user's Library, where anything running as the user could change it
+        // after the check.
+        let stage: String
+        do {
+            Self.cleanupStaleStages(keeping: tunnelsQueue.sync { Set(ovpnStages.values) })
+            stage = try Self.stageOpenVPNProfile(from: configPath)
+        } catch {
+            let message = Self.refusalMessage(error, kind: "OpenVPN")
+            Self.writeVPNLog("Refused config: \(message)", to:
                 (managementSocketPath as NSString).deletingPathExtension + ".log")
-            reply(false, "This OpenVPN config was refused because it contains a '\(bad)' "
-                + "directive, which could run code as root. Remove it and re-import.")
+            reply(false, message)
             return
         }
+        let stagedConfig = (stage as NSString).appendingPathComponent(Self.stagedOpenVPNConfigName)
         // Write a log next to the socket so the app can surface the real failure
         // reason (openvpn validates options and exits before the socket exists on
         // many config errors). script-security 1 lets openvpn call its built-in
         // ifconfig/route but not user-defined up/down scripts from the config.
         let logPath = (managementSocketPath as NSString).deletingPathExtension + ".log"
         let args = [
-            "--config", configPath,
+            "--config", stagedConfig,
             "--management", managementSocketPath, "unix",
             "--management-client-user", socketOwner,
             "--management-hold",
@@ -134,7 +139,7 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = args
-        process.currentDirectoryURL = URL(fileURLWithPath: configPath).deletingLastPathComponent()
+        process.currentDirectoryURL = URL(fileURLWithPath: stage)
 
         // Capture openvpn's stdout/stderr. Fatal early-init and option-parse
         // errors (bad directive, unreadable cert, dyld/exec failure) are printed
@@ -152,20 +157,34 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             if data.isEmpty { fh.readabilityHandler = nil } else { captured.append(data) }
         }
 
-        do {
-            try process.run()
-        } catch {
-            reply(false, error.localizedDescription)
-            return
-        }
-        let handle = String(process.processIdentifier)
-        tunnelsQueue.sync { tunnels[handle] = process }
+        // Set before launch: a config error can end openvpn before `run()` returns,
+        // and that output is the whole point of the handler.
         process.terminationHandler = { [weak self] proc in
             let tail = outputPipe.fileHandleForReading.availableData
             if !tail.isEmpty { captured.append(tail) }
             outputPipe.fileHandleForReading.readabilityHandler = nil
             Self.appendCapturedOutput(captured.data, terminationStatus: proc.terminationStatus, to: logPath)
-            self?.tunnelsQueue.sync { self?.tunnels[handle] = nil }
+            let handle = String(proc.processIdentifier)
+            self?.tunnelsQueue.sync {
+                self?.tunnels[handle] = nil
+                self?.ovpnStages[handle] = nil
+            }
+            try? FileManager.default.removeItem(atPath: stage)
+        }
+
+        do {
+            try process.run()
+        } catch {
+            try? FileManager.default.removeItem(atPath: stage)
+            reply(false, error.localizedDescription)
+            return
+        }
+        let handle = String(process.processIdentifier)
+        tunnelsQueue.sync {
+            // The process may already be gone, in which case the stage is too.
+            guard process.isRunning else { return }
+            tunnels[handle] = process
+            ovpnStages[handle] = stage
         }
         reply(true, handle)
     }
@@ -188,32 +207,42 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             reply(false, "Missing bundled WireGuard tools.")
             return
         }
-        // Remove any stale temp configs from earlier runs that aren't backing a
-        // live tunnel (they'd otherwise accumulate in /tmp holding VPN secrets).
+        // Remove any stale staged configs from earlier runs that aren't backing a
+        // live tunnel (they'd otherwise accumulate, holding VPN secrets).
         Self.cleanupStaleWireGuardConfigs(keeping: tunnelsQueue.sync { Set(wgTunnels.values) })
 
         // wg-quick derives the interface name from the config filename, which
         // must be a valid (≤15 char) interface name — copy to a short temp name.
         let name = "nf" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8).lowercased()
-        let tmpConf = "/tmp/\(name).conf"
+        let stagedConf: String
         var routeNote: String?
         do {
-            let raw = try String(contentsOf: URL(fileURLWithPath: configPath), encoding: .utf8)
+            let bytes = try Self.readProfileFile(atPath: configPath)
+            // wg-quick evals PostUp and friends as root; see WireGuardConfigPolicy.
+            try WireGuardConfigPolicy.validate(bytes)
+            guard let text = String(bytes: bytes, encoding: .utf8) else {
+                throw VPNConfigRefusal.malformed("it is not valid UTF-8")
+            }
             // Strip `DNS`/`DNS =` lines so wg-quick does NOT manage DNS (issue #48),
             // and route any PRIVATE DNS server through the tunnel so the DNS we apply
             // ourselves is actually reachable (issue #50 point 2). See stageWireGuardConfig.
+            // Line endings first: Swift's "\r\n" is one Character, so the line-based
+            // helpers below would see a Windows-format file as a single line.
+            let raw = text.replacingOccurrences(of: "\r\n", with: "\n")
             let staged: String
             (staged, routeNote) = Self.stageWireGuardConfig(from: raw)
             // Create with 0600 up front: the config holds the WireGuard private and
-            // pre-shared keys, and /tmp is world-readable (wg-quick even warns about
-            // it). Creating with restricted perms avoids a world-readable window.
-            guard FileManager.default.createFile(atPath: tmpConf, contents: Data(staged.utf8),
+            // pre-shared keys. The folder is root-only too, so wg-quick's world-
+            // accessible warning has nothing to warn about.
+            stagedConf = try Self.stageRoot() + "/\(name).conf"
+            guard FileManager.default.createFile(atPath: stagedConf, contents: Data(staged.utf8),
                                                  attributes: [.posixPermissions: 0o600]) else {
                 throw CocoaError(.fileWriteUnknown)
             }
         } catch {
-            Self.writeVPNLog("Could not stage config: \(error.localizedDescription)", to: logPath)
-            reply(false, error.localizedDescription)
+            let message = Self.refusalMessage(error, kind: "WireGuard")
+            Self.writeVPNLog("Could not stage config: \(message)", to: logPath)
+            reply(false, message)
             return
         }
         // wg-quick needs this dir for its control socket; create it up front so a
@@ -229,9 +258,9 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         header += "wireguard-go: \(Self.fileArch(toolsDir + "/wireguard-go"))\n"
         header += "wg:           \(Self.fileArch(toolsDir + "/wg"))\n"
         if let routeNote { header += "dns-routing: \(routeNote)\n" }
-        header += "command: bash wg-quick up \(tmpConf)\n"
+        header += "command: bash wg-quick up \(stagedConf)\n"
 
-        let result = Self.runProcess(bashPath, [wgQuick, "up", tmpConf], env: env)
+        let result = Self.runProcess(bashPath, [wgQuick, "up", stagedConf], env: env)
         // On macOS the WireGuard device is a utunN, NOT the config name — wg-quick
         // records the mapping in /var/run/wireguard/<name>.name. Return the REAL
         // interface so the app monitors/displays the right one; monitoring the
@@ -242,30 +271,157 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             + (result.message ?? "(no output)")
             + "\n\nresult: \(result.success ? "success" : "FAILED")", to: logPath)
         if result.success {
-            tunnelsQueue.sync { wgTunnels[iface] = tmpConf }
+            tunnelsQueue.sync { wgTunnels[iface] = stagedConf }
             reply(true, iface)
         } else {
-            try? FileManager.default.removeItem(atPath: tmpConf)
+            try? FileManager.default.removeItem(atPath: stagedConf)
             reply(false, result.message ?? "wg-quick up failed.")
         }
     }
 
-    /// Delete our leftover `/tmp/nf*.conf` staging files that aren't backing a
-    /// live tunnel. Scoped to the `nf`-prefixed `.conf` names we create, so it can
-    /// never touch unrelated files; `keep` holds the paths of active tunnels.
+    /// Delete our leftover `nf*.conf` staging files that aren't backing a live
+    /// tunnel. Scoped to the `nf`-prefixed `.conf` names we create, so it can never
+    /// touch unrelated files; `keep` holds the paths of active tunnels. `/tmp` is
+    /// where helpers before version 15 staged them.
     private static func cleanupStaleWireGuardConfigs(keeping keep: Set<String>) {
         let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(atPath: "/tmp") else { return }
-        for entry in entries where entry.hasPrefix("nf") && entry.hasSuffix(".conf") {
-            let path = "/tmp/\(entry)"
-            if keep.contains(path) { continue }
-            // Never remove a config whose tunnel is still live: the helper may have
-            // restarted and lost its in-memory map. wg-quick's .name mapping file
-            // only exists while the tunnel is up.
-            let name = String(entry.dropLast(".conf".count))
-            if let iface = wireGuardRealInterface(configName: name), interfaceExists(iface) { continue }
-            try? fm.removeItem(atPath: path)
+        for directory in [stageRootPath, "/tmp"] {
+            guard let entries = try? fm.contentsOfDirectory(atPath: directory) else { continue }
+            for entry in entries where entry.hasPrefix("nf") && entry.hasSuffix(".conf") {
+                let path = "\(directory)/\(entry)"
+                if keep.contains(path) { continue }
+                // Never remove a config whose tunnel is still live: the helper may have
+                // restarted and lost its in-memory map. wg-quick's .name mapping file
+                // only exists while the tunnel is up.
+                let name = String(entry.dropLast(".conf".count))
+                if let iface = wireGuardRealInterface(configName: name), interfaceExists(iface) { continue }
+                try? fm.removeItem(atPath: path)
+            }
         }
+    }
+
+    // MARK: - Staging
+
+    /// Root-only home for the configs root actually runs. Under /var/run, so a key
+    /// that survives a crash is still gone after a reboot.
+    private static let stageRootPath = "/var/run/netfluss"
+    private static let ovpnStagePrefix = "ovpn-"
+    private static let stagedOpenVPNConfigName = "config.ovpn"
+    /// Matches the import limit in VPNConfigImporter.
+    private static let maxProfileFileBytes = 5 * 1024 * 1024
+
+    /// Creates the stage root if needed and proves it is ours: a real directory,
+    /// owned by root, closed to everyone else.
+    private static func stageRoot() throws -> String {
+        if mkdir(stageRootPath, 0o700) != 0, errno != EEXIST {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        var info = stat()
+        guard lstat(stageRootPath, &info) == 0,
+              (info.st_mode & S_IFMT) == S_IFDIR,
+              info.st_uid == 0,
+              chmod(stageRootPath, 0o700) == 0 else {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        return stageRootPath
+    }
+
+    /// Check an OpenVPN config and copy it, with the side files it names, into a
+    /// fresh private folder. Returns that folder. openvpn reads everything from
+    /// there, so nothing the user can reach is looked at again after the check.
+    private static func stageOpenVPNProfile(from configPath: String) throws -> String {
+        let bytes = try readProfileFile(atPath: configPath)
+        let sideFiles = try OpenVPNConfigPolicy.referencedFiles(in: bytes)
+
+        let source = (configPath as NSString).deletingLastPathComponent
+        let stage = try stageRoot() + "/\(ovpnStagePrefix)\(UUID().uuidString)"
+        let fm = FileManager.default
+        try fm.createDirectory(atPath: stage, withIntermediateDirectories: false,
+                               attributes: [.posixPermissions: 0o700])
+        do {
+            try writeStaged(bytes, to: (stage as NSString).appendingPathComponent(stagedOpenVPNConfigName))
+            for file in sideFiles {
+                guard let contents = try readSideFile(file, inProfileAt: source) else { continue }
+                let destination = (stage as NSString).appendingPathComponent(file)
+                try fm.createDirectory(atPath: (destination as NSString).deletingLastPathComponent,
+                                       withIntermediateDirectories: true,
+                                       attributes: [.posixPermissions: 0o700])
+                try writeStaged(contents, to: destination)
+            }
+        } catch {
+            try? fm.removeItem(atPath: stage)
+            throw error
+        }
+        return stage
+    }
+
+    /// A side file's contents, or nil if it doesn't exist, which is left for
+    /// openvpn to report in its own words. The path was already checked for `..`
+    /// and absolute forms; this catches a directory link inside the profile.
+    private static func readSideFile(_ file: String, inProfileAt profile: String) throws -> [UInt8]? {
+        let path = (profile as NSString).appendingPathComponent(file)
+        guard let root = realpath(profile, nil).map({ pointer -> String in
+            defer { free(pointer) }
+            return String(cString: pointer)
+        }) else {
+            throw CocoaError(.fileReadNoSuchFile)
+        }
+        guard let parent = realpath((path as NSString).deletingLastPathComponent, nil).map({ pointer -> String in
+            defer { free(pointer) }
+            return String(cString: pointer)
+        }) else {
+            return nil
+        }
+        guard parent == root || parent.hasPrefix(root + "/") else {
+            throw VPNConfigRefusal.notPlainFile(file)
+        }
+        do {
+            return try readProfileFile(atPath: path)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return nil
+        }
+    }
+
+    /// Read a user-owned file as root, once, refusing anything that isn't a plain
+    /// file of a sensible size. O_NOFOLLOW stops a link in the profile from
+    /// turning this into a read of some other file; O_NONBLOCK stops a FIFO from
+    /// hanging the helper.
+    private static func readProfileFile(atPath path: String) throws -> [UInt8] {
+        let descriptor = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard descriptor >= 0 else {
+            if errno == ENOENT { throw CocoaError(.fileReadNoSuchFile) }
+            throw VPNConfigRefusal.notPlainFile((path as NSString).lastPathComponent)
+        }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        var info = stat()
+        guard fstat(descriptor, &info) == 0,
+              (info.st_mode & S_IFMT) == S_IFREG,
+              info.st_size <= maxProfileFileBytes else {
+            throw VPNConfigRefusal.notPlainFile((path as NSString).lastPathComponent)
+        }
+        return [UInt8](try handle.readToEnd() ?? Data())
+    }
+
+    private static func writeStaged(_ bytes: [UInt8], to path: String) throws {
+        guard FileManager.default.createFile(atPath: path, contents: Data(bytes),
+                                             attributes: [.posixPermissions: 0o600]) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    /// Remove stage folders no running openvpn is using: leftovers from a helper
+    /// that died before its termination handler could clean up.
+    private static func cleanupStaleStages(keeping keep: Set<String>) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: stageRootPath) else { return }
+        for entry in entries where entry.hasPrefix(ovpnStagePrefix) {
+            let path = "\(stageRootPath)/\(entry)"
+            if !keep.contains(path) { try? fm.removeItem(atPath: path) }
+        }
+    }
+
+    private static func refusalMessage(_ error: Error, kind: String) -> String {
+        (error as? VPNConfigRefusal)?.message(kind: kind) ?? error.localizedDescription
     }
 
     /// Whether a BSD network interface with the given name currently exists.
@@ -291,30 +447,6 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
                 return !(t.hasPrefix("dns ") || t.hasPrefix("dns=") || t == "dns")
             }
             .joined(separator: "\n")
-    }
-
-    /// Directives that let an OpenVPN config execute code as root even though we
-    /// force `--script-security 1`. That level (and it wins — our flag is placed
-    /// after `--config` in argv, overriding any in-config value) already disables
-    /// all user scripts: up/down/route-up/tls-verify/client-connect/etc. simply
-    /// don't run, so there's no need to reject configs that merely contain them
-    /// (many legit provider configs use up/down for DNS — rejecting those would be
-    /// a regression). The genuine exceptions are:
-    ///   • `plugin` — dlopens a shared module; NOT governed by --script-security.
-    ///   • `config` — nests another config file our top-level scan can't see,
-    ///     which could smuggle a `plugin`.
-    /// Returns the offending directive name, or nil if the config is clean.
-    private static func unsafeOpenVPNDirective(inConfigAt path: String) -> String? {
-        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
-        let banned: Set<String> = ["plugin", "config"]
-        for line in raw.split(separator: "\n", omittingEmptySubsequences: false) {
-            var t = line.trimmingCharacters(in: .whitespaces)
-            if t.isEmpty || t.hasPrefix("#") || t.hasPrefix(";") || t.hasPrefix("<") { continue }
-            t = t.replacingOccurrences(of: "--", with: "", options: .anchored)
-            let name = t.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init)?.lowercased()
-            if let name, banned.contains(name) { return name }
-        }
-        return nil
     }
 
     /// Prepare a WireGuard config for `wg-quick up`:
