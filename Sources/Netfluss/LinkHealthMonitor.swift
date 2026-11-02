@@ -262,7 +262,7 @@ final class LinkHealthTracker {
     /// With a VPN up, `PrimaryInterface` is the tunnel — but the indicator is
     /// about the connection carrying it, and the VPN already has its own mark,
     /// so tunnels are skipped in favour of the real link underneath.
-    static func physicalCarrier(primaryInterface: String?, adapters: [AdapterStatus]) -> AdapterStatus? {
+    nonisolated static func physicalCarrier(primaryInterface: String?, adapters: [AdapterStatus]) -> AdapterStatus? {
         if let primaryInterface,
            let match = adapters.first(where: { $0.id == primaryInterface }),
            !match.isTunnelInterface {
@@ -307,8 +307,9 @@ final class LinkHealthTracker {
 // MARK: - Glyphs
 
 enum LinkHealthGlyph {
-    /// Wi-Fi carries the state in its shape as well as its colour; the cable
-    /// symbols have no slash or exclamation variant, so Ethernet is colour-only.
+    /// Wi-Fi carries the state in its shape as well as its colour. The cable
+    /// symbols have no slash or exclamation variant, so those get a small badge
+    /// (see `badgeName`): colour alone can't be read by everyone.
     /// Every lookup falls back, because the newer symbols are not on macOS 13.
     static func symbolName(medium: LinkMedium, health: LinkHealth) -> [String] {
         switch (medium, health) {
@@ -321,15 +322,63 @@ enum LinkHealthGlyph {
         }
     }
 
+    /// The mark for a state the symbol itself can't show. Wi-Fi never needs one,
+    /// and `network.slash` already says offline.
+    static func badgeName(medium: LinkMedium, health: LinkHealth) -> String? {
+        switch (medium, health) {
+        case (.wifi, _), (_, .online), (.other, .offline): return nil
+        case (_, .limited): return "exclamationmark"
+        case (.ethernet, .offline): return "xmark"
+        }
+    }
+
     static func image(medium: LinkMedium, health: LinkHealth, pointSize: CGFloat, color: NSColor) -> NSImage? {
         let configuration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
             .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
         for name in symbolName(medium: medium, health: health) {
             if let image = NSImage(systemSymbolName: name, accessibilityDescription: "Network link")?
                 .withSymbolConfiguration(configuration) {
-                return image
+                return badged(image, medium: medium, health: health, pointSize: pointSize, color: color)
             }
         }
         return nil
+    }
+
+    private static func badged(
+        _ base: NSImage,
+        medium: LinkMedium,
+        health: LinkHealth,
+        pointSize: CGFloat,
+        color: NSColor
+    ) -> NSImage {
+        let badgeSize = (pointSize * 0.6).rounded()
+        let configuration = NSImage.SymbolConfiguration(pointSize: badgeSize, weight: .heavy)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+        guard let name = badgeName(medium: medium, health: health),
+              let badge = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+                .withSymbolConfiguration(configuration) else {
+            return base
+        }
+
+        // The mark sits beside the glyph, with a gap cut out of it so the two stay
+        // apart at menu bar size. No filled circle around it: every layer of a
+        // symbol takes the one palette colour, which would leave a solid disc.
+        let overhang = (badge.size.width * 0.75).rounded(.up)
+        let size = NSSize(width: base.size.width + overhang, height: base.size.height)
+        return NSImage(size: size, flipped: false) { _ in
+            base.draw(in: NSRect(origin: .zero, size: base.size))
+            let badgeRect = NSRect(
+                x: size.width - badge.size.width,
+                y: 0,
+                width: badge.size.width,
+                height: badge.size.height
+            )
+            NSGraphicsContext.current?.compositingOperation = .destinationOut
+            NSColor.black.setFill()
+            NSBezierPath(rect: badgeRect.insetBy(dx: -1, dy: 0)).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            badge.draw(in: badgeRect)
+            return true
+        }
     }
 }

@@ -352,6 +352,7 @@ struct PreferencesView: View {
     @AppStorage("openWRTHost") private var openWRTHost: String = ""
     @AppStorage("opnsenseEnabled") private var opnsenseEnabled: Bool = false
     @AppStorage("opnsenseHost") private var opnsenseHost: String = ""
+    @AppStorage("lookUpPublicIP") private var lookUpPublicIP: Bool = true
     @AppStorage("automaticUpdateChecksEnabled") private var automaticUpdateChecksEnabled: Bool = true
     @AppStorage("appLanguage") private var appLanguage: String = AppLanguage.system.rawValue
     @State private var hiddenAdapters: Set<String> = []
@@ -385,7 +386,7 @@ struct PreferencesView: View {
     @State private var clashTestSucceeded = false
     @State private var opnsenseConfigured = false
 
-    @EnvironmentObject private var monitor: NetworkMonitor
+    @EnvironmentObject private var monitor: PreferencesNetworkState
 
     var body: some View {
         VStack(spacing: 0) {
@@ -448,6 +449,15 @@ struct PreferencesView: View {
                 PreferenceNote("Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About.")
             } header: {
                 LText("Update")
+            }
+
+                    Section {
+                Toggle(isOn: $lookUpPublicIP) {
+                    LText("Look up public IP addresses and countries")
+                }
+                PreferenceNote("Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag.")
+            } header: {
+                LText("Privacy")
             }
                 }
 
@@ -2122,17 +2132,17 @@ private struct SystemAccessControls: View {
 
     private var locationStatusLabel: String {
         switch wifi.locationStatus {
-        case .notDetermined: return NSLocalizedString("Not requested yet", comment: "")
-        case .denied: return NSLocalizedString("Denied — open System Settings to allow", comment: "")
-        case .authorized: return NSLocalizedString("Granted", comment: "")
+        case .notDetermined: return L10n.text("Not requested yet")
+        case .denied: return L10n.text("Denied — open System Settings to allow")
+        case .authorized: return L10n.text("Granted")
         }
     }
 
     private var locationButtonTitle: String {
         switch wifi.locationStatus {
-        case .notDetermined: return NSLocalizedString("Grant Location Access…", comment: "")
-        case .denied: return NSLocalizedString("Open Location Settings…", comment: "")
-        case .authorized: return NSLocalizedString("Refresh Wi-Fi Scan", comment: "")
+        case .notDetermined: return L10n.text("Grant Location Access…")
+        case .denied: return L10n.text("Open Location Settings…")
+        case .authorized: return L10n.text("Refresh Wi-Fi Scan")
         }
     }
 
@@ -2194,9 +2204,9 @@ private struct SystemAccessControls: View {
                 helperWorking = false
                 switch outcome {
                 case .alreadyEnabled:
-                    helperStatus = NSLocalizedString("Already installed", comment: "")
+                    helperStatus = L10n.text("Already installed")
                 case .registered:
-                    helperStatus = NSLocalizedString("Registered", comment: "")
+                    helperStatus = L10n.text("Registered")
                 case .requiresApproval(let msg):
                     helperStatus = msg
                 case .unavailable(let msg):

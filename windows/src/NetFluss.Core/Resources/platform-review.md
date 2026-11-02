@@ -34,6 +34,13 @@ were left alone and want a human decision.
 | `en` | `No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.` | auto-rewritten | No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — Windows withholds the network name without it. |
 | `en` | `macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.` | auto-rewritten | Windows is waiting for you to allow NetFluss under Settings → General → Login Items & Extensions. |
 | `en` | `macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.` | auto-rewritten | Windows only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again. |
+| `en` | `Approve the Netfluss helper in System Settings, then try again.` | auto-rewritten | Approve the Netfluss helper in Settings, then try again. |
+| `en` | `Approve the Netfluss helper in System Settings → General → Login Items.` | auto-rewritten | Approve the Netfluss helper in Settings → General → Login Items. |
+| `en` | `The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry.` | auto-rewritten | The privileged helper did not respond. Approve it in Settings → General → Login Items, or remove and re-add the Netfluss entry. |
+| `en` | `macOS could not reach Service Management.` | auto-rewritten | Windows could not reach Service Management. |
+| `en` | `Copy` | windows override | Copy |
+| `en` | `Privacy` | windows override | Privacy |
+| `en` | `Look up public IP addresses and countries` | windows override | Look up public IP addresses and countries |
 | `de` | `System Default follows the language selected in macOS.` | auto-rewritten | Systemsprache folgt der in Windows ausgewählten Sprache. |
 | `de` | `DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.` | auto-rewritten | DNS-Änderungen und Ethernet-Neuverbindungen installieren beim ersten Mal ein privilegiertes Hilfsprogramm. Windows kann nach Administratorfreigabe und auf manchen Systemen nach zusätzlicher Freigabe in den Systemeinstellungen fragen. |
 | `de` | `Recent results saved on this Mac. Add notes to remember the exact place.` | needs review | Aktuelle Ergebnisse, die auf diesem Mac gespeichert sind. Füge Notizen hinzu, um den genauen Ort festzuhalten. |
@@ -54,6 +61,10 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
 | `de` | `No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.` | auto-rewritten | Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube unten den Ortungszugriff — ohne ihn gibt Windows den Netzwerknamen nicht preis. |
 | `de` | `macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.` | auto-rewritten | Windows wartet darauf, dass du NetFluss unter Systemeinstellungen → Allgemein → Anmeldeobjekte & Erweiterungen erlaubst. |
 | `de` | `macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.` | auto-rewritten | Windows öffnet NetFluss beim Anmelden nur, wenn es aus dem Ordner „Programme“ gestartet wird. Verschiebe es dorthin und öffne es erneut. |
+| `de` | `macOS could not reach Service Management.` | auto-rewritten | Windows konnte Service Management nicht erreichen. |
+| `de` | `Copy` | windows override | Kopieren |
+| `de` | `Privacy` | windows override | Datenschutz |
+| `de` | `Look up public IP addresses and countries` | windows override | Öffentliche IP-Adressen und Länder abfragen |
 | `zh-Hans` | `System Default follows the language selected in macOS.` | auto-rewritten | 系统默认会跟随 Windows 中选择的语言。 |
 | `zh-Hans` | `DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.` | auto-rewritten | 首次更改 DNS 或重新连接以太网时会安装特权辅助工具。Windows 可能会要求管理员批准，在某些系统上还需要在系统设置中额外批准。 |
 | `zh-Hans` | `Recent results saved on this Mac. Add notes to remember the exact place.` | needs review | 保存在这台 Mac 上的最近结果。添加备注以记住具体地点。 |
@@ -68,6 +79,10 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
 | `zh-Hans` | `No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.` | auto-rewritten | 没有可用的 Wi-Fi 网络名称。请加入 Wi-Fi 网络，或在下方允许位置访问——没有它 Windows 不会提供网络名称。 |
 | `zh-Hans` | `macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.` | auto-rewritten | Windows 正在等待你在“系统设置 → 通用 → 登录项与扩展”中允许 NetFluss。 |
 | `zh-Hans` | `macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.` | auto-rewritten | 只有从“应用程序”文件夹运行时，Windows 才会在登录时打开 NetFluss。请将其移到那里后重新打开。 |
+| `zh-Hans` | `macOS could not reach Service Management.` | auto-rewritten | Windows 无法访问 Service Management。 |
+| `zh-Hans` | `Copy` | windows override | 复制 |
+| `zh-Hans` | `Privacy` | windows override | 隐私 |
+| `zh-Hans` | `Look up public IP addresses and countries` | windows override | 查询公网 IP 地址和国家/地区 |
 | `zh-Hant` | `System Default follows the language selected in macOS.` | auto-rewritten | 系統預設會跟隨 Windows 中選擇的語言。 |
 | `zh-Hant` | `DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.` | auto-rewritten | 首次變更 DNS 或重新連接乙太網路時會安裝特權輔助工具。Windows 可能會要求管理員批准，在某些系統上還需要在系統設定中額外批准。 |
 | `zh-Hant` | `Recent results saved on this Mac. Add notes to remember the exact place.` | needs review | 保存在這台 Mac 上的最近結果。加入備註以記住具體地點。 |
@@ -83,3 +98,7 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
 | `zh-Hant` | `No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.` | auto-rewritten | 沒有可用的 Wi-Fi 網路名稱。請加入 Wi-Fi 網路，或在下方允許位置存取——沒有它 Windows 不會提供網路名稱。 |
 | `zh-Hant` | `macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.` | auto-rewritten | Windows 正在等待你在「系統設定 → 一般 → 登入項目與延伸功能」中允許 NetFluss。 |
 | `zh-Hant` | `macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.` | auto-rewritten | 只有從「應用程式」檔案夾執行時，Windows 才會在登入時打開 NetFluss。請將其移到那裡後重新打開。 |
+| `zh-Hant` | `macOS could not reach Service Management.` | auto-rewritten | Windows 無法連線至 Service Management。 |
+| `zh-Hant` | `Copy` | windows override | 複製 |
+| `zh-Hant` | `Privacy` | windows override | 隱私 |
+| `zh-Hant` | `Look up public IP addresses and countries` | windows override | 查詢公用 IP 位址和國家/地區 |

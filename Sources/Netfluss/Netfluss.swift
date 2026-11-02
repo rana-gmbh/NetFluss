@@ -47,6 +47,7 @@ struct NetFlussApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appState: AppState?
     private var preferencesObserver: NSObjectProtocol?
+    private var terminationAnswered = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppIconController.shared.start()
@@ -86,6 +87,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         where window.identifier?.rawValue == "com_apple_SwiftUI_Settings_window" {
             window.close()
         }
+    }
+
+    /// Quitting, an update and logging out all pass through here, so a tunnel
+    /// running as root never outlives the only app that can stop it. The delay is
+    /// a bound, not an expectation: a stuck helper must not hold up a logout.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard VPNManager.shared.hasActiveConnection else { return .terminateNow }
+        Task { @MainActor [weak self] in
+            await VPNManager.shared.prepareForTermination()
+            self?.answerTermination()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            self?.answerTermination()
+        }
+        return .terminateLater
+    }
+
+    private func answerTermination() {
+        guard !terminationAnswered else { return }
+        terminationAnswered = true
+        NSApp.reply(toApplicationShouldTerminate: true)
     }
 
     func applicationWillTerminate(_ notification: Notification) {

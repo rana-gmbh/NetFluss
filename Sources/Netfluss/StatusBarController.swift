@@ -774,6 +774,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     private var dashboardPeakRateBps: Double = 0
     private var dashboardPeakSourceKey: String?
     private var dashboardPeakDate: Date?
+    /// Built symbol images, so a tick that changes nothing doesn't rebuild them
+    /// just to find that out. Cleared whenever a setting changes.
+    private var accessoryImages: [String: NSImage] = [:]
+    /// The resolver label, which otherwise decodes every preset on every tick.
+    private var resolverLabel: (presetID: String, name: String)?
 
     private struct MenuBarRenderState: Equatable {
         let mode: String
@@ -900,11 +905,13 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
 
     @objc private func handleScreenSleep() {
         screenAsleep = true
+        monitor.setDisplaysAsleep(true)
         updateDetailMonitoring()
     }
 
     @objc private func handleScreenWake() {
         screenAsleep = false
+        monitor.setDisplaysAsleep(false)
         updateDetailMonitoring()
     }
 
@@ -1190,6 +1197,9 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             isPinned: isPinned,
             onTogglePin: { [weak self] in
                 self?.togglePinnedWindow()
+            },
+            onShowMenu: { [weak self] in
+                self?.showContextMenu()
             }
         )
         .environmentObject(monitor)
@@ -1271,6 +1281,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         monitor.start(interval: effectiveInterval)
 
         popover.appearance = nil
+        accessoryImages.removeAll()
+        resolverLabel = nil
         // The context menu only depends on the app language (its items are static,
         // just localized). Rebuilding it on every defaults write — e.g. each frame
         // of a color-picker/slider drag — was needless churn. Rebuild only when the
@@ -1529,6 +1541,29 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         updateHighlightPlaceholder(width: targetLength, button: button)
         ratesView.update(model: model)
         layoutRatesView(in: button)
+        describeForAccessibility(button, up: fullUpText, down: fullDownText)
+    }
+
+    /// The rates are drawn, not text, so VoiceOver has nothing to read otherwise.
+    /// The tooltip gives the link state in words for anyone who can't tell the
+    /// indicator's colours apart.
+    private func describeForAccessibility(_ button: NSStatusBarButton, up: String, down: String) {
+        button.setAccessibilityLabel("NetFluss")
+        button.setAccessibilityValue("\(L10n.text("Download")) \(down), \(L10n.text("Upload")) \(up)")
+
+        guard UserDefaults.standard.bool(forKey: "menuBarLinkIndicator") else {
+            button.toolTip = nil
+            return
+        }
+        let status = monitor.linkStatus
+        let state: String
+        switch status.health {
+        case .online: state = L10n.text("Online")
+        case .limited: state = L10n.text("Limited connection")
+        case .offline: state = L10n.text("Offline")
+        }
+        let name = status.ssid ?? status.interfaceName
+        button.toolTip = name.isEmpty ? state : "\(name): \(state)"
     }
 
     /// Builds the optional VPN indicator + country flag shown right of the
@@ -1572,12 +1607,14 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
                 // inside `lock.shield.fill` turns to mush below ~16 pt, so the
                 // active state is the plain filled shield.
                 let symbolName = vpnActive ? "shield.fill" : "shield.slash"
-                let configuration = NSImage.SymbolConfiguration(pointSize: markSize, weight: .semibold)
-                    .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-                if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "VPN")?
-                    .withSymbolConfiguration(configuration) {
-                    vpnMark = .symbol(image)
+                let key = "\(symbolName)|\(colorName)|\(colorHex)|\(style.rawValue)|\(isDarkAppearance)|\(markSize)"
+                let image = accessoryImage(key) {
+                    let configuration = NSImage.SymbolConfiguration(pointSize: markSize, weight: .semibold)
+                        .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+                    return NSImage(systemSymbolName: symbolName, accessibilityDescription: "VPN")?
+                        .withSymbolConfiguration(configuration)
                 }
+                if let image { vpnMark = .symbol(image) }
             }
             vpnKey = [indicator, vpnActive ? "on" : "off", colorName, colorHex, isDarkAppearance ? "dark" : "light"]
                 .joined(separator: ":")
@@ -1592,12 +1629,10 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             if colorName == "system", style == .dashboard || style == .dashboardBasic {
                 color = defaultTextColor
             }
-            linkImage = LinkHealthGlyph.image(
-                medium: status.medium,
-                health: status.health,
-                pointSize: markSize,
-                color: color
-            )
+            let key = "\(status.medium)|\(status.health)|\(colorName)|\(colorHex)|\(style.rawValue)|\(isDarkAppearance)|\(markSize)"
+            linkImage = accessoryImage(key) {
+                LinkHealthGlyph.image(medium: status.medium, health: status.health, pointSize: markSize, color: color)
+            }
             linkKey = [status.medium.rawValue, status.health.rawValue, colorName, colorHex].joined(separator: ":")
         }
 
@@ -1612,8 +1647,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         if defaults.bool(forKey: "menuBarShowResolver"),
            let presetID = monitor.activeDNSPresetID,
            presetID != "system",
-           let preset = NetworkMonitor.allDNSPresets().first(where: { $0.id == presetID }) {
-            resolver = preset.name
+           let name = resolverName(for: presetID) {
+            resolver = name
             let colorName = defaults.string(forKey: "menuBarResolverColor") ?? "system"
             let colorHex = defaults.string(forKey: "menuBarResolverColorHex") ?? ""
             if colorName != "system" {
@@ -1643,6 +1678,20 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
                 + "|\(defaults.string(forKey: "menuBarResolverColorHex") ?? "")"
                 + "|\(String(format: "%.1f", markSize))"
         )
+    }
+
+    private func accessoryImage(_ key: String, build: () -> NSImage?) -> NSImage? {
+        if let cached = accessoryImages[key] { return cached }
+        let image = build()
+        accessoryImages[key] = image
+        return image
+    }
+
+    private func resolverName(for presetID: String) -> String? {
+        if let resolverLabel, resolverLabel.presetID == presetID { return resolverLabel.name }
+        guard let preset = NetworkMonitor.allDNSPresets().first(where: { $0.id == presetID }) else { return nil }
+        resolverLabel = (presetID, preset.name)
+        return preset.name
     }
 
     /// Colour preference for one link state, with the traffic-light defaults.

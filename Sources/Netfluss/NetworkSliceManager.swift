@@ -199,17 +199,17 @@ final class NetworkSliceManager: ObservableObject {
         sampleInFlight = true
         let previous = previousSnapshot
 
-        Task.detached(priority: .utility) { [weak self] in
-            let snapshot = NetworkSliceSampler.snapshot()
-            let aggregate = previous.map { NetworkSliceSampler.aggregate(current: snapshot, previous: $0) }
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                self.sampleInFlight = false
-                guard self.timer != nil else { return }
-                self.previousSnapshot = snapshot
-                if let aggregate {
-                    self.apply(aggregate)
-                }
+        Task { [weak self] in
+            let (snapshot, aggregate) = await ProcessRunner.offloaded {
+                let snapshot = NetworkSliceSampler.snapshot()
+                return (snapshot, previous.map { NetworkSliceSampler.aggregate(current: snapshot, previous: $0) })
+            }
+            guard let self else { return }
+            self.sampleInFlight = false
+            guard self.timer != nil else { return }
+            self.previousSnapshot = snapshot
+            if let aggregate {
+                self.apply(aggregate)
             }
         }
     }
@@ -349,6 +349,7 @@ final class NetworkSliceManager: ObservableObject {
     /// Resolves the country of the top public hosts via api.country.is (HTTPS,
     /// keyless), one request per IP per session, cached including failures.
     private func scheduleCountryLookups() {
+        guard UserDefaults.standard.bool(forKey: "lookUpPublicIP") else { return }
         for entry in (hosts + recentHosts) where !entry.isPrivateHost {
             let host = entry.id
             guard countryCodes.index(forKey: host) == nil, !countryLookupsInFlight.contains(host) else { continue }
@@ -720,16 +721,6 @@ enum NetworkSliceSampler {
     }
 
     private static func runNetstat() -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/netstat")
-        process.arguments = ["-n", "-b", "-v"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        guard (try? process.run()) != nil else { return "" }
-        // Read before waitUntilExit to avoid pipe-buffer deadlock (~185 KB output)
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return String(data: data, encoding: .utf8) ?? ""
+        ProcessRunner.run("/usr/sbin/netstat", ["-n", "-b", "-v"]).stdoutText
     }
 }

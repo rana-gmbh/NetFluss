@@ -23,6 +23,7 @@ struct MenuBarView: View {
     let screenVisibleFrame: CGRect
     let isPinned: Bool
     let onTogglePin: () -> Void
+    let onShowMenu: () -> Void
 
     @EnvironmentObject private var monitor: NetworkMonitor
     @EnvironmentObject private var statisticsManager: StatisticsManager
@@ -52,7 +53,10 @@ struct MenuBarView: View {
     @AppStorage("showTrafficTimer") private var showTrafficTimer: Bool = false
 
     private static let cardSpacing: CGFloat = 6   // VStack spacing between cards
-    @State private var contentHeight: CGFloat = 0
+    /// The popover's content is rebuilt on every open. Starting from the last
+    /// height spares it opening at full screen height and collapsing to fit.
+    private static var lastContentHeight: CGFloat = 0
+    @State private var contentHeight: CGFloat = Self.lastContentHeight
     // Live height during a resize drag — drives the layout without writing
     // UserDefaults on every pointer move (each write fanned out a context-menu
     // rebuild + statistics reconfigure). Persisted once on drag end. nil = idle.
@@ -67,12 +71,14 @@ struct MenuBarView: View {
         preferredWidth: CGFloat = 340,
         screenVisibleFrame: CGRect = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900),
         isPinned: Bool = false,
-        onTogglePin: @escaping () -> Void = {}
+        onTogglePin: @escaping () -> Void = {},
+        onShowMenu: @escaping () -> Void = {}
     ) {
         self.preferredWidth = preferredWidth
         self.screenVisibleFrame = screenVisibleFrame
         self.isPinned = isPinned
         self.onTogglePin = onTogglePin
+        self.onShowMenu = onShowMenu
     }
 
     var body: some View {
@@ -105,6 +111,17 @@ struct MenuBarView: View {
         VStack(spacing: 0) {
             HStack {
                 Spacer()
+                // The menu used to be reachable by right-click only, so Preferences,
+                // Statistics, Speed Test and Quit were easy never to find.
+                Button(action: onShowMenu) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .background(.quaternary.opacity(0.5), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .iconButton("NetFluss menu")
                 Button(action: onTogglePin) {
                     Image(systemName: isPinned ? "pin.fill" : "pin")
                         .font(.system(size: 11, weight: .semibold))
@@ -113,7 +130,7 @@ struct MenuBarView: View {
                         .background(.quaternary.opacity(0.5), in: Circle())
                 }
                 .buttonStyle(.plain)
-                .help(L10n.text(isPinned ? "Unpin window" : "Pin as window"))
+                .iconButton(isPinned ? "Unpin window" : "Pin as window")
             }
             .padding(.top, 8)
             .padding(.horizontal, 10)
@@ -211,6 +228,7 @@ struct MenuBarView: View {
                     internalIP: monitor.internalIP,
                     gatewayIP: monitor.gatewayIP,
                     adapters: monitor.adapters,
+                    vpnTunnels: monitor.vpnTunnels,
                     countryCode: monitor.externalIPCountryCode
                 )
             } else {
@@ -277,6 +295,7 @@ struct MenuBarView: View {
         }
         .onPreferenceChange(ContentHeightKey.self) { height in
             contentHeight = height
+            Self.lastContentHeight = height
         }
     }
 
@@ -291,7 +310,7 @@ struct MenuBarView: View {
         )
         let order = UserDefaults.standard.stringArray(forKey: "adapterOrder") ?? []
         if !order.isEmpty {
-            let orderIndex = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
+            let orderIndex = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
             filtered.sort {
                 let ai = orderIndex[$0.id] ?? Int.max
                 let bi = orderIndex[$1.id] ?? Int.max
@@ -300,6 +319,14 @@ struct MenuBarView: View {
             }
         }
         return filtered
+    }
+}
+
+extension View {
+    /// An icon-only control's name: the tooltip, and what VoiceOver reads instead
+    /// of the symbol's name.
+    func iconButton(_ key: String) -> some View {
+        help(L10n.text(key)).accessibilityLabel(L10n.text(key))
     }
 }
 
@@ -353,6 +380,9 @@ struct NetRateCell: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L10n.text(label))
+        .accessibilityValue(rate)
     }
 }
 
@@ -391,7 +421,7 @@ struct AdapterCard: View {
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.borderless)
-                        .help("Reconnect")
+                        .iconButton("Reconnect")
                     }
                 }
                 if adapter.type == .wifi, let detail = adapter.wifiDetail {
@@ -401,7 +431,7 @@ struct AdapterCard: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.borderless)
-                    .help("Wi-Fi Details")
+                    .iconButton("Wi-Fi Details")
                     .popover(isPresented: $showWifiDetail) {
                         WifiDetailPopover(
                             detail: detail,
@@ -562,6 +592,7 @@ struct WifiDetailPopover: View {
                             .frame(width: 14)
                     }
                     .buttonStyle(.borderless)
+                    .iconButton("Copy")
                 }
             }
             if let rate = txRate, rate > 0 {
@@ -640,6 +671,7 @@ struct IPRow: View {
                     .frame(width: 14)
             }
             .buttonStyle(.borderless)
+            .iconButton("Copy")
             .disabled(ip == "—")
         }
     }
@@ -652,14 +684,14 @@ struct ConnectionStatusSection: View {
     let internalIP: String
     let gatewayIP: String
     let adapters: [AdapterStatus]
+    let vpnTunnels: Set<String>
     let countryCode: String
 
     private var activeVPNs: [AdapterStatus] {
-        let vpnTunnels = VPNDetector.snapshot().tunnels
-        return adapters.filter { adapter in
+        adapters.filter { adapter in
             guard adapter.type == .other, adapter.isUp else { return false }
             guard adapter.isTunnelInterface else { return false }
-            return vpnTunnels[adapter.id] != nil
+            return vpnTunnels.contains(adapter.id)
         }
     }
 
@@ -1536,7 +1568,7 @@ struct WifiNetworkRow: View {
                     .rotationEffect(network.isPinned ? .degrees(-45) : .zero)
             }
             .buttonStyle(.borderless)
-            .help(L10n.text(network.isPinned ? "Unpin" : "Pin to top"))
+            .iconButton(network.isPinned ? "Unpin" : "Pin to top")
 
             Button(action: onToggleDetail) {
                 Image(systemName: "info.circle")
@@ -1544,6 +1576,7 @@ struct WifiNetworkRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
+            .iconButton("Wi-Fi Details")
             .popover(isPresented: Binding(
                 get: { isDetailShown },
                 set: { if !$0 { onToggleDetail() } }

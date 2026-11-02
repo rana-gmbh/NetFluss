@@ -67,6 +67,7 @@ final class AppState {
             "connectionStatusMode": "flow",
             "hiddenApps": [],
             "externalIPv6": false,
+            "lookUpPublicIP": true,
             "showDNSSwitcher": false,
             "dnsAutoSwitchEnabled": false,
             "dnsRuleFallbackPresetID": "",

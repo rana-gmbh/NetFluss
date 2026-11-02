@@ -208,7 +208,7 @@ struct StatisticsView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .help("Clear custom date range")
+            .iconButton("Clear custom date range")
             Button {
                 openCustomRangePopover()
             } label: {

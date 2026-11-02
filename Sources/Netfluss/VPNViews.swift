@@ -346,18 +346,19 @@ struct VPNProfileRow: View {
                     }
                     .buttonStyle(.borderless)
                     .disabled((profileIndex ?? 0) == 0)
-                    .help("Move up")
+                    .iconButton("Move up")
                     Button { vpn.moveProfile(profile, up: false) } label: {
                         Image(systemName: "chevron.down")
                     }
                     .buttonStyle(.borderless)
                     .disabled((profileIndex ?? 0) >= vpn.profiles.count - 1)
-                    .help("Move down")
+                    .iconButton("Move down")
                 }
                 Button(role: .destructive) { vpn.deleteProfile(profile) } label: {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
+                .iconButton("Delete")
             }
 
             if profile.servers.count > 1 {

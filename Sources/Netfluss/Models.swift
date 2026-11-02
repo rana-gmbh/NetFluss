@@ -71,6 +71,27 @@ struct AdapterStatus: Identifiable, Equatable, Sendable {
     let rxRateBps: Double
     let txRateBps: Double
 
+    /// This adapter with its live counters cleared, for views that show what an
+    /// adapter is rather than what it's doing.
+    var withoutTraffic: AdapterStatus {
+        AdapterStatus(
+            id: id,
+            displayName: displayName,
+            type: type,
+            isTunnelInterface: isTunnelInterface,
+            isUp: isUp,
+            linkSpeedBps: linkSpeedBps,
+            wifiMode: wifiMode,
+            wifiTxRateMbps: nil,
+            wifiSSID: wifiSSID,
+            wifiDetail: wifiDetail,
+            rxBytes: 0,
+            txBytes: 0,
+            rxRateBps: 0,
+            txRateBps: 0
+        )
+    }
+
     func with(rxRateBps newRxRate: Double? = nil, rxBytes newRxBytes: UInt64? = nil) -> AdapterStatus {
         AdapterStatus(
             id: id,

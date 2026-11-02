@@ -65,7 +65,7 @@ actor PrivilegedHelperManager {
     /// rather than waiting for the first DNS change or Wi-Fi save.
     func install() async -> InstallOutcome {
         guard Self.hasBundledHelper else {
-            return .unavailable(message: "The bundled helper executable is missing.")
+            return .unavailable(message: L10n.text("The bundled helper executable is missing."))
         }
 
         // Repair a stale registration first: an already-`.enabled` daemon left by
@@ -80,7 +80,7 @@ actor PrivilegedHelperManager {
             return .alreadyEnabled
         case .requiresApproval:
             return .requiresApproval(
-                message: "Approve the Netfluss helper in System Settings → General → Login Items."
+                message: L10n.text("Approve the Netfluss helper in System Settings → General → Login Items.")
             )
         case .notRegistered, .notFound:
             do {
@@ -94,7 +94,7 @@ actor PrivilegedHelperManager {
             }
             return statusOutcome()
         @unknown default:
-            return .failed(message: "The privileged helper returned an unknown status.")
+            return .failed(message: L10n.text("The privileged helper returned an unknown status."))
         }
     }
 
@@ -103,14 +103,14 @@ actor PrivilegedHelperManager {
         case .enabled: return .alreadyEnabled
         case .requiresApproval:
             return .requiresApproval(
-                message: "Approve the Netfluss helper in System Settings → General → Login Items."
+                message: L10n.text("Approve the Netfluss helper in System Settings → General → Login Items.")
             )
         case .notRegistered:
-            return .failed(message: "Registration completed but the helper is still not registered.")
+            return .failed(message: L10n.text("Registration completed but the helper is still not registered."))
         case .notFound:
-            return .failed(message: "The privileged helper bundle is incomplete.")
+            return .failed(message: L10n.text("The privileged helper bundle is incomplete."))
         @unknown default:
-            return .failed(message: "The privileged helper returned an unknown status.")
+            return .failed(message: L10n.text("The privileged helper returned an unknown status."))
         }
     }
 
@@ -167,16 +167,10 @@ actor PrivilegedHelperManager {
         }
     }
 
-    /// Returns the persistent reference (base64, in `stdout`) on success.
-    func storeSystemVPNPassword(service: String, account: String, password: String) async -> CommandResult? {
+    /// Stops tunnels `owner` started in an earlier run. Returns the count in `stdout`.
+    func stopOrphanedVPNTunnels(owner: String) async -> CommandResult? {
         await performIfAvailable { helper, reply in
-            helper.storeSystemVPNPassword(service: service, account: account, password: password, withReply: reply)
-        }
-    }
-
-    func deleteSystemVPNPassword(service: String, account: String) async -> CommandResult? {
-        await performIfAvailable { helper, reply in
-            helper.deleteSystemVPNPassword(service: service, account: account, withReply: reply)
+            helper.stopOrphanedVPNTunnels(owner: owner, withReply: reply)
         }
     }
 
@@ -258,7 +252,7 @@ actor PrivilegedHelperManager {
         case .requiresApproval:
             return Self.failure(
                 status: PrivilegedCommandStatus.helperApprovalRequired,
-                message: "Approve the Netfluss helper in System Settings, then try again."
+                message: L10n.text("Approve the Netfluss helper in System Settings, then try again.")
             )
         case .notRegistered, .notFound:
             do {
@@ -277,7 +271,7 @@ actor PrivilegedHelperManager {
         @unknown default:
             return Self.failure(
                 status: PrivilegedCommandStatus.helperRegistrationFailed,
-                message: "The privileged helper returned an unknown status."
+                message: L10n.text("The privileged helper returned an unknown status.")
             )
         }
     }
@@ -289,22 +283,22 @@ actor PrivilegedHelperManager {
         case .requiresApproval:
             return Self.failure(
                 status: PrivilegedCommandStatus.helperApprovalRequired,
-                message: "Approve the Netfluss helper in System Settings, then try again."
+                message: L10n.text("Approve the Netfluss helper in System Settings, then try again.")
             )
         case .notRegistered:
             return Self.failure(
                 status: PrivilegedCommandStatus.helperRegistrationFailed,
-                message: "The privileged helper could not be registered."
+                message: L10n.text("The privileged helper could not be registered.")
             )
         case .notFound:
             return Self.failure(
                 status: PrivilegedCommandStatus.helperRegistrationFailed,
-                message: "The privileged helper bundle is incomplete."
+                message: L10n.text("The privileged helper bundle is incomplete.")
             )
         @unknown default:
             return Self.failure(
                 status: PrivilegedCommandStatus.helperRegistrationFailed,
-                message: "The privileged helper returned an unknown status."
+                message: L10n.text("The privileged helper returned an unknown status.")
             )
         }
     }
@@ -379,7 +373,7 @@ actor PrivilegedHelperManager {
                 finish(
                     Self.failure(
                         status: PrivilegedCommandStatus.helperConnectionFailed,
-                        message: "The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry."
+                        message: L10n.text("The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry.")
                     )
                 )
             }
@@ -388,7 +382,7 @@ actor PrivilegedHelperManager {
                 finish(
                     Self.failure(
                         status: PrivilegedCommandStatus.helperConnectionFailed,
-                        message: "The privileged helper was interrupted."
+                        message: L10n.text("The privileged helper was interrupted.")
                     )
                 )
             }
@@ -396,7 +390,7 @@ actor PrivilegedHelperManager {
                 finish(
                     Self.failure(
                         status: PrivilegedCommandStatus.helperConnectionFailed,
-                        message: "The privileged helper connection was invalidated."
+                        message: L10n.text("The privileged helper connection was invalidated.")
                     )
                 )
             }
@@ -416,7 +410,7 @@ actor PrivilegedHelperManager {
                 finish(
                     Self.failure(
                         status: PrivilegedCommandStatus.helperConnectionFailed,
-                        message: "The privileged helper connection could not be created."
+                        message: L10n.text("The privileged helper connection could not be created.")
                     )
                 )
                 return
@@ -438,15 +432,15 @@ actor PrivilegedHelperManager {
         if error.domain == appServiceErrorDomain {
             switch error.code {
             case Int(kSMErrorLaunchDeniedByUser):
-                return "Approve the Netfluss helper in System Settings, then try again."
+                return L10n.text("Approve the Netfluss helper in System Settings, then try again.")
             case Int(kSMErrorInvalidSignature):
-                return "The privileged helper is not signed correctly."
+                return L10n.text("The privileged helper is not signed correctly.")
             case Int(kSMErrorJobPlistNotFound), Int(kSMErrorInvalidPlist), Int(kSMErrorToolNotValid):
-                return "The privileged helper bundle is incomplete."
+                return L10n.text("The privileged helper bundle is incomplete.")
             case Int(kSMErrorAuthorizationFailure):
-                return "Administrator approval was denied."
+                return L10n.text("Administrator approval was denied.")
             case Int(kSMErrorServiceUnavailable):
-                return "macOS could not reach Service Management."
+                return L10n.text("macOS could not reach Service Management.")
             default:
                 break
             }
@@ -459,7 +453,7 @@ actor PrivilegedHelperManager {
             return firstLine
         }
 
-        return "The privileged helper could not be registered."
+        return L10n.text("The privileged helper could not be registered.")
     }
 
     private static func connectionErrorMessage(for error: Error) -> String {
@@ -470,7 +464,7 @@ actor PrivilegedHelperManager {
             .first(where: { !$0.isEmpty }) {
             return firstLine
         }
-        return "The privileged helper could not be reached."
+        return L10n.text("The privileged helper could not be reached.")
     }
 
     private static func failure(status: Int32, message: String) -> CommandResult {

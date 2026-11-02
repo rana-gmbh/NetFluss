@@ -319,6 +319,66 @@ enum WireGuardConfigPolicy {
     }
 }
 
+/// Checks on what the app sends the helper. The app validates these too, but it
+/// is the helper that hands them to root commands, and it shouldn't have to rely
+/// on the other side of the connection.
+enum HelperInputPolicy {
+    private static let wifiSecurityTypes: Set<String> = ["OPEN", "WEP", "WPA", "WPA2", "WPA2E", "WPA3", "WPAE"]
+
+    /// BSD interface names: letters then digits, like `en0` or `utun4`.
+    static func isInterfaceName(_ name: String) -> Bool {
+        let bytes = Array(name.utf8)
+        guard (1...15).contains(bytes.count) else { return false }
+        let digits = bytes.drop { (0x61...0x7A).contains($0) }
+        return digits.count < bytes.count && !digits.isEmpty && digits.allSatisfy { (0x30...0x39).contains($0) }
+    }
+
+    /// Network service and VPN names are free text, but they reach `networksetup`
+    /// and `scutil` as arguments, where a leading `-` would read as a flag.
+    static func isServiceName(_ name: String) -> Bool {
+        !name.isEmpty && name.utf8.count <= 255 && !name.hasPrefix("-") && hasNoControlCharacters(name)
+    }
+
+    static func isIPAddress(_ address: String) -> Bool {
+        var v4 = in_addr()
+        var v6 = in6_addr()
+        return inet_pton(AF_INET, address, &v4) == 1 || inet_pton(AF_INET6, address, &v6) == 1
+    }
+
+    /// An SSID is at most 32 bytes.
+    static func isSSID(_ ssid: String) -> Bool {
+        !ssid.isEmpty && ssid.utf8.count <= 32 && hasNoControlCharacters(ssid)
+    }
+
+    static func isWifiSecurityType(_ type: String) -> Bool {
+        wifiSecurityTypes.contains(type)
+    }
+
+    /// Passed to openvpn as `--management-client-user`.
+    static func isUserName(_ name: String) -> Bool {
+        !name.isEmpty && name.utf8.count <= 255 && !name.hasPrefix("-")
+            && name.utf8.allSatisfy { byte in
+                (0x30...0x39).contains(byte) || (0x41...0x5A).contains(byte) || (0x61...0x7A).contains(byte)
+                    || byte == 0x2D || byte == 0x2E || byte == 0x5F
+            }
+    }
+
+    /// Only the socket name the app builds: `/tmp/netfluss-vpn-<id>.sock`. The
+    /// tunnel's log takes its name from this, so it can't be allowed to wander.
+    static func isManagementSocketPath(_ path: String) -> Bool {
+        let prefix = "/tmp/netfluss-vpn-", suffix = ".sock"
+        guard path.hasPrefix(prefix), path.hasSuffix(suffix), path.utf8.count < 104 else { return false }
+        let id = path.dropFirst(prefix.count).dropLast(suffix.count)
+        return !id.isEmpty && id.utf8.allSatisfy { byte in
+            (0x30...0x39).contains(byte) || (0x41...0x46).contains(byte) || (0x61...0x66).contains(byte)
+        }
+    }
+
+    private static func hasNoControlCharacters(_ text: String) -> Bool {
+        text.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) }
+    }
+}
+
 /// A short, safe rendering of config bytes for comparisons and error messages.
 private func printable<Bytes: Collection>(_ bytes: Bytes) -> String where Bytes.Element == UInt8 {
     String(String(decoding: bytes, as: UTF8.self).prefix(64))

@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Netfluss. If not, see <https://www.gnu.org/licenses/>.
 
+import AppKit
 import Combine
 import Foundation
 
@@ -36,6 +37,10 @@ final class StatisticsManager: ObservableObject {
         /// cheaper than the app sampler above.
         static let nodeSamplingInterval: TimeInterval = 3
         static let lowPowerNodeSamplingInterval: TimeInterval = 10
+        /// More than any interface NetFluss can sit on moves in a second (about
+        /// 400 Gbit/s). A larger jump is a counter glitch, and counting it would
+        /// sit in the history for good.
+        static let maxPlausibleBytesPerSecond: Double = 50_000_000_000
     }
 
     @Published private(set) var report: StatisticsReport?
@@ -50,6 +55,7 @@ final class StatisticsManager: ObservableObject {
     private var sampleStore: StatisticsStore?
     private var cancellables: Set<AnyCancellable> = []
     private var previousAdapterSnapshot: [String: (downloadBytes: UInt64, uploadBytes: UInt64)] = [:]
+    private var previousAdapterSnapshotAt: Date?
     private var previousAppSnapshot: [String: ProcessConnectionSnapshot] = [:]
     private var previousAppSampleTime: Date?
     /// Adapter bytes seen since the last app sample; gates the netstat spawn.
@@ -79,6 +85,14 @@ final class StatisticsManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] adapters in
                 self?.ingestAdapterSnapshot(adapters)
+            }
+            .store(in: &cancellables)
+
+        // A Mac that never wakes (flat battery, forced restart) would otherwise
+        // lose whatever accumulated since the last timed save.
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)
+            .sink { [store] _ in
+                Task.detached(priority: .utility) { await store.flush(force: true) }
             }
             .store(in: &cancellables)
 
@@ -283,6 +297,9 @@ final class StatisticsManager: ObservableObject {
 
     private func ingestAdapterSnapshot(_ adapters: [AdapterStatus]) {
         let currentSnapshot = snapshotMap(from: adapters)
+        let now = Date()
+        let elapsed = max(now.timeIntervalSince(previousAdapterSnapshotAt ?? now), 1)
+        defer { previousAdapterSnapshotAt = now }
         guard statisticsEnabled else {
             previousAdapterSnapshot = currentSnapshot
             return
@@ -294,8 +311,8 @@ final class StatisticsManager: ObservableObject {
 
         let deltas = adapters.compactMap { adapter -> StatisticsAdapterDelta? in
             let previous = previousAdapterSnapshot[adapter.id]
-            let downloadDelta = delta(current: adapter.rxBytes, previous: previous?.downloadBytes)
-            let uploadDelta = delta(current: adapter.txBytes, previous: previous?.uploadBytes)
+            let downloadDelta = delta(current: adapter.rxBytes, previous: previous?.downloadBytes, elapsed: elapsed)
+            let uploadDelta = delta(current: adapter.txBytes, previous: previous?.uploadBytes, elapsed: elapsed)
             guard downloadDelta > 0 || uploadDelta > 0 else { return nil }
             return StatisticsAdapterDelta(
                 id: adapter.id,
@@ -468,9 +485,9 @@ final class StatisticsManager: ObservableObject {
 
         Task { [weak self] in
             let sampleTime = Date()
-            let sample = await Task.detached(priority: .utility) {
+            let sample = await ProcessRunner.offloaded {
                 ProcessNetworkSampler.sampleStatisticsAppTraffic()
-            }.value
+            }
 
             guard let self else { return }
             self.appSamplingInFlight = false
@@ -529,17 +546,21 @@ final class StatisticsManager: ObservableObject {
     }
 
     private func snapshotMap(from adapters: [AdapterStatus]) -> [String: (downloadBytes: UInt64, uploadBytes: UInt64)] {
-        Dictionary(uniqueKeysWithValues: adapters.map { ($0.id, (downloadBytes: $0.rxBytes, uploadBytes: $0.txBytes)) })
+        Dictionary(
+            adapters.map { ($0.id, (downloadBytes: $0.rxBytes, uploadBytes: $0.txBytes)) },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 
-    private func delta(current: UInt64, previous: UInt64?) -> UInt64 {
+    private func delta(current: UInt64, previous: UInt64?, elapsed: TimeInterval) -> UInt64 {
         guard let previous else { return 0 }
         // Interface counters can reset when macOS recreates an adapter after
         // sleep, reboot, dock reconnects, or link changes. Treat that as a new
         // baseline; adding `current` here would duplicate traffic and inflate
         // adapter history.
         guard current >= previous else { return 0 }
-        return current - previous
+        let moved = current - previous
+        return Double(moved) / elapsed <= Constants.maxPlausibleBytesPerSecond ? moved : 0
     }
 
     private static func storageURL() -> URL {

@@ -322,7 +322,7 @@ final class WifiManager: NSObject, ObservableObject {
         }
 
         self.networks = collected.map(\.net)
-        self.cwNetworksByID = Dictionary(uniqueKeysWithValues: collected.map { ($0.net.id, $0.cw) })
+        self.cwNetworksByID = Dictionary(collected.map { ($0.net.id, $0.cw) }, uniquingKeysWith: { first, _ in first })
     }
 
     func connect(to network: WifiNetwork) {
@@ -376,21 +376,21 @@ final class WifiManager: NSObject, ObservableObject {
 
     private func promptForPasswordAndConnect(interface: CWInterface, network: WifiNetwork) {
         let alert = NSAlert()
-        alert.messageText = String(format: NSLocalizedString("Connect to %@", comment: ""), network.ssid)
+        alert.messageText = String(format: L10n.text("Connect to %@"), network.ssid)
         if let security = network.security {
             alert.informativeText = String(
-                format: NSLocalizedString("Enter the password for this %@ network.", comment: ""),
+                format: L10n.text("Enter the password for this %@ network."),
                 security
             )
         } else {
-            alert.informativeText = NSLocalizedString("Enter the network password.", comment: "")
+            alert.informativeText = L10n.text("Enter the network password.")
         }
         alert.alertStyle = .informational
-        alert.addButton(withTitle: NSLocalizedString("Join", comment: ""))
-        alert.addButton(withTitle: NSLocalizedString("Cancel", comment: ""))
+        alert.addButton(withTitle: L10n.text("Join"))
+        alert.addButton(withTitle: L10n.text("Cancel"))
 
         let secureField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 22))
-        secureField.placeholderString = NSLocalizedString("Password", comment: "")
+        secureField.placeholderString = L10n.text("Password")
         alert.accessoryView = secureField
         alert.window.initialFirstResponder = secureField
 
@@ -421,7 +421,7 @@ final class WifiManager: NSObject, ObservableObject {
                 guard let self else { return }
                 guard let found else {
                     self.connectingTo = nil
-                    self.lastError = NSLocalizedString("Network is not in range right now.", comment: "")
+                    self.lastError = L10n.text("Network is not in range right now.")
                     return
                 }
                 // Splice the discovered CWNetwork into the lookup map and
@@ -450,7 +450,7 @@ final class WifiManager: NSObject, ObservableObject {
 
     private func attemptAssociate(interface: CWInterface, network: WifiNetwork, password: String?) {
         guard let cwNetwork = cwNetworksByID[network.id] else {
-            lastError = NSLocalizedString("Network is no longer in range.", comment: "")
+            lastError = L10n.text("Network is no longer in range.")
             return
         }
         connectingTo = network.ssid

@@ -1939,6 +1939,96 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column." xml:space="preserve">
     <value>Bei „Links“ und „Rechts“ bleiben die Pfeile an ihrem Platz, während sich die Zahlen ändern. „Rechts“ richtet die Zahlen außerdem wie eine Spalte aus.</value>
   </data>
+  <data name="Administrator authentication is not available right now." xml:space="preserve">
+    <value>Die Administrator-Anmeldung ist gerade nicht verfügbar.</value>
+  </data>
+  <data name="Administrator permission was denied." xml:space="preserve">
+    <value>Die Administratorberechtigung wurde verweigert.</value>
+  </data>
+  <data name="Administrator permission was not granted." xml:space="preserve">
+    <value>Die Administratorberechtigung wurde nicht erteilt.</value>
+  </data>
+  <data name="Administrator approval was denied." xml:space="preserve">
+    <value>Die Administrator-Freigabe wurde verweigert.</value>
+  </data>
+  <data name="Approve the Netfluss helper in System Settings, then try again." xml:space="preserve">
+    <value>Erlaube den NetFluss-Helfer in den Systemeinstellungen und versuche es erneut.</value>
+  </data>
+  <data name="Approve the Netfluss helper in System Settings → General → Login Items." xml:space="preserve">
+    <value>Erlaube den NetFluss-Helfer unter Systemeinstellungen → Allgemein → Anmeldeobjekte.</value>
+  </data>
+  <data name="DNS change failed." xml:space="preserve">
+    <value>Die DNS-Änderung ist fehlgeschlagen.</value>
+  </data>
+  <data name="DNS change was canceled." xml:space="preserve">
+    <value>Die DNS-Änderung wurde abgebrochen.</value>
+  </data>
+  <data name="The active network service could not be identified." xml:space="preserve">
+    <value>Der aktive Netzwerkdienst konnte nicht ermittelt werden.</value>
+  </data>
+  <data name="The privileged helper could not be started." xml:space="preserve">
+    <value>Der privilegierte Helfer konnte nicht gestartet werden.</value>
+  </data>
+  <data name="The privileged helper could not be reached." xml:space="preserve">
+    <value>Der privilegierte Helfer ist nicht erreichbar.</value>
+  </data>
+  <data name="The privileged helper could not be registered." xml:space="preserve">
+    <value>Der privilegierte Helfer konnte nicht registriert werden.</value>
+  </data>
+  <data name="The privileged helper bundle is incomplete." xml:space="preserve">
+    <value>Das Paket des privilegierten Helfers ist unvollständig.</value>
+  </data>
+  <data name="The privileged helper connection could not be created." xml:space="preserve">
+    <value>Die Verbindung zum privilegierten Helfer konnte nicht hergestellt werden.</value>
+  </data>
+  <data name="The privileged helper connection was invalidated." xml:space="preserve">
+    <value>Die Verbindung zum privilegierten Helfer wurde ungültig.</value>
+  </data>
+  <data name="The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry." xml:space="preserve">
+    <value>Der privilegierte Helfer hat nicht geantwortet. Erlaube ihn unter Systemeinstellungen → Allgemein → Anmeldeobjekte oder entferne den NetFluss-Eintrag und füge ihn neu hinzu.</value>
+  </data>
+  <data name="The privileged helper is not signed correctly." xml:space="preserve">
+    <value>Der privilegierte Helfer ist nicht korrekt signiert.</value>
+  </data>
+  <data name="The privileged helper returned an unknown status." xml:space="preserve">
+    <value>Der privilegierte Helfer hat einen unbekannten Status gemeldet.</value>
+  </data>
+  <data name="The privileged helper was interrupted." xml:space="preserve">
+    <value>Der privilegierte Helfer wurde unterbrochen.</value>
+  </data>
+  <data name="The bundled helper executable is missing." xml:space="preserve">
+    <value>Die Programmdatei des Helfers fehlt.</value>
+  </data>
+  <data name="Registration completed but the helper is still not registered." xml:space="preserve">
+    <value>Die Registrierung wurde abgeschlossen, aber der Helfer ist noch nicht registriert.</value>
+  </data>
+  <data name="macOS could not reach Service Management." xml:space="preserve">
+    <value>Windows konnte Service Management nicht erreichen.</value>
+  </data>
+  <data name="Online" xml:space="preserve">
+    <value>Online</value>
+  </data>
+  <data name="Offline" xml:space="preserve">
+    <value>Offline</value>
+  </data>
+  <data name="Limited connection" xml:space="preserve">
+    <value>Eingeschränkte Verbindung</value>
+  </data>
+  <data name="Copy" xml:space="preserve">
+    <value>Kopieren</value>
+  </data>
+  <data name="NetFluss menu" xml:space="preserve">
+    <value>NetFluss-Menü</value>
+  </data>
+  <data name="Privacy" xml:space="preserve">
+    <value>Datenschutz</value>
+  </data>
+  <data name="Look up public IP addresses and countries" xml:space="preserve">
+    <value>Öffentliche IP-Adressen und Länder abfragen</value>
+  </data>
+  <data name="Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag." xml:space="preserve">
+    <value>Fragt ipify und ipwho.is nach deiner öffentlichen IP-Adresse und ihrem Land sowie api.country.is nach den Ländern in Network Slice. Ist dies aus, zeigt NetFluss keine externe IP, kein Land und keine Flagge.</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>„{0}“ ist bereits vorhanden.</value>
   </data>
@@ -2040,9 +2130,6 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   </data>
   <data name="Combined total" xml:space="preserve">
     <value>Gesamtsumme</value>
-  </data>
-  <data name="Copy" xml:space="preserve">
-    <value>Kopieren</value>
   </data>
   <data name="Costs width the digits need below 24 px. The row colour already shows direction." xml:space="preserve">
     <value>Kostet Breite, die die Ziffern unter 24 px brauchen. Die Zeilenfarbe zeigt die Richtung bereits an.</value>
@@ -2665,14 +2752,8 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Installed, version {0} — newer than this NetFluss ({1}). Update NetFluss, or reinstall the helper from this version." xml:space="preserve">
     <value>Installiert, Version {0} – neuer als dieses NetFluss ({1}). Aktualisiere NetFluss oder installiere den Helfer dieser Version neu.</value>
   </data>
-  <data name="Privacy" xml:space="preserve">
-    <value>Datenschutz</value>
-  </data>
   <data name="Privacy Policy" xml:space="preserve">
     <value>Datenschutzerklärung</value>
-  </data>
-  <data name="Look up public IP addresses and countries" xml:space="preserve">
-    <value>Öffentliche IP-Adressen und Länder abfragen</value>
   </data>
   <data name="Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." xml:space="preserve">
     <value>Zeigt deine öffentliche Adresse und ihr Land (api.ipify.org, ipwho.is) sowie die Länder der Server in Network Slice (api.country.is). Diese Dienste sehen die abgefragten Adressen. Ausgeschaltet bleiben diese Angaben leer.</value>

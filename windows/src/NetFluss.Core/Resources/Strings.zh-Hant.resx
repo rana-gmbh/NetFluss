@@ -1939,6 +1939,96 @@
   <data name="Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column." xml:space="preserve">
     <value>選擇「靠左」或「靠右」時，數字變化時箭頭保持不動。「靠右」還會讓數字像欄一樣對齊。</value>
   </data>
+  <data name="Administrator authentication is not available right now." xml:space="preserve">
+    <value>目前無法進行管理者驗證。</value>
+  </data>
+  <data name="Administrator permission was denied." xml:space="preserve">
+    <value>管理者權限遭拒。</value>
+  </data>
+  <data name="Administrator permission was not granted." xml:space="preserve">
+    <value>未取得管理者權限。</value>
+  </data>
+  <data name="Administrator approval was denied." xml:space="preserve">
+    <value>管理者批准遭拒。</value>
+  </data>
+  <data name="Approve the Netfluss helper in System Settings, then try again." xml:space="preserve">
+    <value>請在「系統設定」中批准 NetFluss 輔助工具，然後再試一次。</value>
+  </data>
+  <data name="Approve the Netfluss helper in System Settings → General → Login Items." xml:space="preserve">
+    <value>請在「系統設定」→「一般」→「登入項目」中批准 NetFluss 輔助工具。</value>
+  </data>
+  <data name="DNS change failed." xml:space="preserve">
+    <value>變更 DNS 失敗。</value>
+  </data>
+  <data name="DNS change was canceled." xml:space="preserve">
+    <value>已取消變更 DNS。</value>
+  </data>
+  <data name="The active network service could not be identified." xml:space="preserve">
+    <value>無法識別目前的網路服務。</value>
+  </data>
+  <data name="The privileged helper could not be started." xml:space="preserve">
+    <value>無法啟動特權輔助工具。</value>
+  </data>
+  <data name="The privileged helper could not be reached." xml:space="preserve">
+    <value>無法連線至特權輔助工具。</value>
+  </data>
+  <data name="The privileged helper could not be registered." xml:space="preserve">
+    <value>無法註冊特權輔助工具。</value>
+  </data>
+  <data name="The privileged helper bundle is incomplete." xml:space="preserve">
+    <value>特權輔助工具不完整。</value>
+  </data>
+  <data name="The privileged helper connection could not be created." xml:space="preserve">
+    <value>無法建立與特權輔助工具的連線。</value>
+  </data>
+  <data name="The privileged helper connection was invalidated." xml:space="preserve">
+    <value>與特權輔助工具的連線已失效。</value>
+  </data>
+  <data name="The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry." xml:space="preserve">
+    <value>特權輔助工具沒有回應。請在「系統設定」→「一般」→「登入項目」中批准它，或移除 NetFluss 項目後重新加入。</value>
+  </data>
+  <data name="The privileged helper is not signed correctly." xml:space="preserve">
+    <value>特權輔助工具的簽章不正確。</value>
+  </data>
+  <data name="The privileged helper returned an unknown status." xml:space="preserve">
+    <value>特權輔助工具回傳了未知狀態。</value>
+  </data>
+  <data name="The privileged helper was interrupted." xml:space="preserve">
+    <value>特權輔助工具已中斷。</value>
+  </data>
+  <data name="The bundled helper executable is missing." xml:space="preserve">
+    <value>缺少內建的輔助工具程式。</value>
+  </data>
+  <data name="Registration completed but the helper is still not registered." xml:space="preserve">
+    <value>註冊已完成，但輔助工具仍未註冊。</value>
+  </data>
+  <data name="macOS could not reach Service Management." xml:space="preserve">
+    <value>Windows 無法連線至 Service Management。</value>
+  </data>
+  <data name="Online" xml:space="preserve">
+    <value>線上</value>
+  </data>
+  <data name="Offline" xml:space="preserve">
+    <value>離線</value>
+  </data>
+  <data name="Limited connection" xml:space="preserve">
+    <value>連線受限</value>
+  </data>
+  <data name="Copy" xml:space="preserve">
+    <value>複製</value>
+  </data>
+  <data name="NetFluss menu" xml:space="preserve">
+    <value>NetFluss 選單</value>
+  </data>
+  <data name="Privacy" xml:space="preserve">
+    <value>隱私</value>
+  </data>
+  <data name="Look up public IP addresses and countries" xml:space="preserve">
+    <value>查詢公用 IP 位址和國家/地區</value>
+  </data>
+  <data name="Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag." xml:space="preserve">
+    <value>向 ipify 和 ipwho.is 查詢你的公用 IP 位址及其國家/地區，並向 api.country.is 查詢 Network Slice 中的國家/地區。關閉後，NetFluss 不顯示外部 IP、國家/地區或旗幟。</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>「{0}」已存在。</value>
   </data>
@@ -2040,9 +2130,6 @@
   </data>
   <data name="Combined total" xml:space="preserve">
     <value>合計</value>
-  </data>
-  <data name="Copy" xml:space="preserve">
-    <value>複製</value>
   </data>
   <data name="Costs width the digits need below 24 px. The row colour already shows direction." xml:space="preserve">
     <value>會佔用 24 像素以下數字所需的寬度。列的顏色已表示方向。</value>
@@ -2665,14 +2752,8 @@
   <data name="Installed, version {0} — newer than this NetFluss ({1}). Update NetFluss, or reinstall the helper from this version." xml:space="preserve">
     <value>已安裝，版本 {0} —— 比此 NetFluss（{1}）新。請更新 NetFluss，或重新安裝此版本的輔助工具。</value>
   </data>
-  <data name="Privacy" xml:space="preserve">
-    <value>隱私</value>
-  </data>
   <data name="Privacy Policy" xml:space="preserve">
     <value>隱私權政策</value>
-  </data>
-  <data name="Look up public IP addresses and countries" xml:space="preserve">
-    <value>查詢公用 IP 位址和國家/地區</value>
   </data>
   <data name="Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." xml:space="preserve">
     <value>顯示你的公用位址及其所在國家/地區（api.ipify.org、ipwho.is），以及 Network Slice 中伺服器的國家/地區（api.country.is）。這些服務能看到所查詢的位址。關閉後，這些資訊將保持空白。</value>

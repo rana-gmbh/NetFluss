@@ -39,6 +39,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
     /// Whether any VPN (built-in or from another app) is up. Only maintained
     /// while a menu bar VPN indicator or country flag is enabled.
     @Published var vpnActive = false
+    /// BSD names of the tunnels carrying a VPN right now. Maintained while the
+    /// popover or a menu bar VPN indicator needs it.
+    @Published var vpnTunnels: Set<String> = []
     @Published var recentAppNames: [String] = []
     @Published var currentDNSServers: [String] = []
     @Published var activeDNSPresetID: String? = nil
@@ -73,6 +76,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var lastSample: [String: InterfaceSample] = [:]
     private var lastUpdate: Date?
     private var currentInterval: Double?
+    private var requestedInterval: Double = 1
+    private var displaysAsleep = false
+    private var primaryInterface: String?
     private var lastExternalIPUpdate: Date?
     private var externalIPInFlight = false
     private var lastExternalIPv6Setting: Bool?
@@ -146,8 +152,6 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
     // Cached interface info (type/displayName) — rarely changes
     private var cachedInterfaceInfo: [String: InterfaceSampler.InterfaceInfo] = [:]
-    // Reusable SCDynamicStore
-    private lazy var dynamicStore: SCDynamicStore? = SCDynamicStoreCreate(nil, "NetFluss" as CFString, nil, nil)
     // Cached Wi-Fi info
     private var _cachedWifiInfo: [String: InterfaceSampler.WifiInfo] = [:]
     private let wifiClient = CWWiFiClient.shared()
@@ -156,7 +160,10 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private static let wifiDetailsRefreshInterval: TimeInterval = 15
     private static let topAppsRefreshInterval: TimeInterval = 1
     private static let addressDetailsRefreshInterval: TimeInterval = 15
-    private static let dnsRefreshInterval: TimeInterval = 30
+    private static let dnsRefreshInterval: TimeInterval = 5
+    /// Nobody reads the rates while the displays sleep, and the byte counters are
+    /// cumulative, so statistics lose nothing to a slower tick.
+    private static let asleepInterval: Double = 5
     private static let routerRefreshInterval: TimeInterval = 5
     private static let externalIPRefreshInterval: TimeInterval = 300
 
@@ -190,7 +197,17 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let interfaceInfo: [String: InterfaceSampler.InterfaceInfo]?
         let wifiInfo: [String: InterfaceSampler.WifiInfo]?
         let vpnSnapshot: VPNDetector.Snapshot?
+        let addresses: AddressSample?
     }
+
+    private struct AddressSample: Sendable {
+        let primaryInterface: String?
+        let internalIP: String
+        let gatewayIP: String
+    }
+
+    /// Only ever touched from `refreshQueue`.
+    private nonisolated(unsafe) static let refreshStore = SCDynamicStoreCreate(nil, "NetFluss" as CFString, nil, nil)
 
     private static var menuBarVPNIndicatorEnabled: Bool {
         (UserDefaults.standard.string(forKey: "menuBarVPNIndicator") ?? "off") != "off"
@@ -293,7 +310,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
     }
 
     func start(interval: Double) {
-        let clamped = max(0.2, min(interval, 10.0))
+        requestedInterval = interval
+        let wanted = displaysAsleep ? max(interval, Self.asleepInterval) : interval
+        let clamped = max(0.2, min(wanted, 10.0))
         if currentInterval == clamped, timer != nil { return }
         currentInterval = clamped
 
@@ -306,6 +325,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
         }
         timer.resume()
         self.timer = timer
+    }
+
+    func setDisplaysAsleep(_ asleep: Bool) {
+        guard displaysAsleep != asleep else { return }
+        displaysAsleep = asleep
+        start(interval: requestedInterval)
     }
 
     func setDetailMonitoringEnabled(_ enabled: Bool) {
@@ -364,7 +389,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let previousUpdate = lastUpdate
         let cachedInterfaceInfo = self.cachedInterfaceInfo
         let cachedWifiInfo = self._cachedWifiInfo
-        let detectVPN = Self.menuBarVPNIndicatorEnabled || Self.menuBarCountryFlagEnabled
+        let detectVPN = detailMonitoringEnabled || Self.menuBarVPNIndicatorEnabled || Self.menuBarCountryFlagEnabled
+        let sampleAddresses = detailMonitoringEnabled || wifiInfoNeededInBackground || !kernelRxBroken.isEmpty
         forceDetailRefresh = false
 
         refreshQueue.async { [weak self] in
@@ -376,7 +402,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 cachedWifiInfo: cachedWifiInfo,
                 refreshInterfaceInfo: refreshInterfaceInfo,
                 refreshWifiInfo: refreshWifiInfo,
-                detectVPN: detectVPN
+                detectVPN: detectVPN,
+                sampleAddresses: sampleAddresses
             )
 
             DispatchQueue.main.async { [weak self] in
@@ -400,7 +427,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
         cachedWifiInfo: [String: InterfaceSampler.WifiInfo],
         refreshInterfaceInfo: Bool,
         refreshWifiInfo: Bool,
-        detectVPN: Bool
+        detectVPN: Bool,
+        sampleAddresses: Bool
     ) -> RefreshResult {
         let samples = InterfaceSampler.fetchSamples()
         let infoMap = refreshInterfaceInfo ? InterfaceSampler.interfaceInfo() : cachedInterfaceInfo
@@ -451,13 +479,25 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         updatedAdapters.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
 
+        var addresses: AddressSample?
+        if sampleAddresses {
+            let primary = primaryInterfaceName(store: refreshStore)
+            let carrier = LinkHealthTracker.physicalCarrier(primaryInterface: primary, adapters: updatedAdapters)
+            addresses = AddressSample(
+                primaryInterface: primary,
+                internalIP: InterfaceSampler.primaryInternalIP(preferring: carrier?.id),
+                gatewayIP: InterfaceSampler.defaultGatewayIP(store: refreshStore)
+            )
+        }
+
         return RefreshResult(
             adapters: updatedAdapters,
             totals: RateTotals(rxRateBps: totalRxRate, txRateBps: totalTxRate),
-            samplesByName: Dictionary(uniqueKeysWithValues: samples.map { ($0.name, $0) }),
+            samplesByName: Dictionary(samples.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first }),
             interfaceInfo: refreshInterfaceInfo ? infoMap : nil,
             wifiInfo: refreshWifiInfo ? wifiInfoMap : nil,
-            vpnSnapshot: detectVPN ? VPNDetector.snapshot() : nil
+            vpnSnapshot: detectVPN ? VPNDetector.snapshot() : nil,
+            addresses: addresses
         )
     }
 
@@ -476,6 +516,11 @@ final class NetworkMonitor: NSObject, ObservableObject {
         if let wifiInfoMap = result.wifiInfo {
             _cachedWifiInfo = wifiInfoMap
             lastWiFiDetailsRefresh = now
+        }
+        if let addresses = result.addresses {
+            primaryInterface = addresses.primaryInterface
+            setIfChanged(\.internalIP, to: addresses.internalIP)
+            setIfChanged(\.gatewayIP, to: addresses.gatewayIP)
         }
 
         let (adjustedAdapters, adjustedTotals) = applyRxFallbackIfNeeded(
@@ -658,7 +703,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         // Pick the substitution target: prefer the default-route adapter; fall
         // back to the first broken adapter we encounter.
-        let primaryBSDName = Self.primaryInterfaceName(store: dynamicStore)
+        let primaryBSDName = primaryInterface
         let targetID: String? = {
             if let primaryBSDName, kernelRxBroken.contains(primaryBSDName) {
                 return primaryBSDName
@@ -752,20 +797,19 @@ final class NetworkMonitor: NSObject, ObservableObject {
         }
     }
 
-    private static func primaryInterfaceName(store: SCDynamicStore?) -> String? {
+    /// IPv4 first; an IPv6-only network has no IPv4 global entity at all.
+    private nonisolated static func primaryInterfaceName(store: SCDynamicStore?) -> String? {
         let s = store ?? SCDynamicStoreCreate(nil, "NetFluss" as CFString, nil, nil)
         guard let s else { return nil }
-        let key = SCDynamicStoreKeyCreateNetworkGlobalEntity(
-            nil,
-            kSCDynamicStoreDomainState,
-            kSCEntNetIPv4
-        )
-        guard let dict = SCDynamicStoreCopyValue(s, key) as? [String: Any],
-              let name = dict[kSCDynamicStorePropNetPrimaryInterface as String] as? String,
-              !name.isEmpty else {
-            return nil
+        for entity in [kSCEntNetIPv4, kSCEntNetIPv6] {
+            let key = SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, entity)
+            if let dict = SCDynamicStoreCopyValue(s, key) as? [String: Any],
+               let name = dict[kSCDynamicStorePropNetPrimaryInterface as String] as? String,
+               !name.isEmpty {
+                return name
+            }
         }
-        return name
+        return nil
     }
 
     // MARK: - Top Apps
@@ -826,9 +870,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         Task { [weak self] in
             let sampleTime = Date()
-            let snapshot = await Task.detached(priority: .utility) {
+            let snapshot = await ProcessRunner.offloaded {
                 ProcessNetworkSampler.sampleConnections()
-            }.value
+            }
 
             guard let self else { return }
             self.topAppsTaskInFlight = false
@@ -915,10 +959,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private func applyVPNSnapshot(_ snapshot: VPNDetector.Snapshot?) {
         guard let snapshot else {
             setIfChanged(\.vpnActive, to: false)
+            setIfChanged(\.vpnTunnels, to: [])
             lastNetworkFingerprint = nil
             return
         }
         setIfChanged(\.vpnActive, to: snapshot.isVPNActive)
+        setIfChanged(\.vpnTunnels, to: Set(snapshot.tunnels.keys))
 
         let previous = lastNetworkFingerprint
         lastNetworkFingerprint = snapshot.fingerprint
@@ -941,9 +987,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
     /// Feeds the menu bar link indicator (issue from the 2.6 feedback thread).
     ///
     /// The two address lookups are cheap — `getifaddrs` and an SCDynamicStore
-    /// read — so unlike the popover's detail section this can run on every tick
-    /// while the indicator is on. Without it the indicator would freeze
-    /// whenever the popover is closed, which is when it matters most.
+    /// read — so unlike the popover's detail section they run on every tick while
+    /// the indicator is on, on the refresh queue. Without them the indicator would
+    /// freeze whenever the popover is closed, which is when it matters most.
     private func updateLinkHealth() {
         // The DNS rules read this too: while nothing maintains it, it stays
         // `.offline`, and the engine won't write DNS on a network that's offline.
@@ -953,12 +999,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
             return
         }
 
-        setIfChanged(\.internalIP, to: InterfaceSampler.primaryInternalIP())
-        setIfChanged(\.gatewayIP, to: InterfaceSampler.defaultGatewayIP(store: dynamicStore))
-
         let defaults = UserDefaults.standard
         linkHealthTracker.ingest(
-            primaryInterface: Self.primaryInterfaceName(store: dynamicStore),
+            primaryInterface: primaryInterface,
             adapters: adapters,
             gatewayIP: gatewayIP,
             internalIP: internalIP,
@@ -968,11 +1011,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
     }
 
     private func updateIPsIfNeeded(force: Bool) {
-        setIfChanged(\.internalIP, to: InterfaceSampler.primaryInternalIP())
-        setIfChanged(\.gatewayIP, to: InterfaceSampler.defaultGatewayIP(store: dynamicStore))
         let now = Date()
 
-        // DNS check spawns a process; keep it on its own slower cadence.
         if UserDefaults.standard.bool(forKey: "showDNSSwitcher"),
            (force || shouldRefresh(lastDNSRefresh, at: now, interval: Self.dnsRefreshInterval)) {
             updateCurrentDNS()
@@ -982,6 +1022,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
     }
 
     private func updateExternalIPIfNeeded(force: Bool) {
+        guard UserDefaults.standard.bool(forKey: "lookUpPublicIP") else {
+            setIfChanged(\.externalIP, to: "—")
+            setIfChanged(\.externalIPCountryCode, to: "")
+            lastExternalIPUpdate = nil   // so switching it back on takes effect at once
+            return
+        }
         let now = Date()
         let currentIPv6 = UserDefaults.standard.bool(forKey: "externalIPv6")
         let settingChanged = lastExternalIPv6Setting != nil && lastExternalIPv6Setting != currentIPv6
@@ -1042,15 +1088,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
     // MARK: - DNS
 
     private func updateCurrentDNS() {
-        // currentDNSServers() spawns `networksetup` (talks to configd, 50–300ms)
-        // — never on the main thread; it stalled the popover as it animated open.
-        Task.detached(priority: .userInitiated) { [weak self] in
-            guard let servers = Self.currentDNSServers() else { return }
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                self.setIfChanged(\.currentDNSServers, to: servers)
-                self.setIfChanged(\.activeDNSPresetID, to: self.matchPreset(servers: servers))
-            }
+        // A round trip to configd — never on the main thread.
+        Task { [weak self] in
+            guard let servers = await ProcessRunner.offloaded({ Self.currentDNSServers() }) else { return }
+            guard let self else { return }
+            self.setIfChanged(\.currentDNSServers, to: servers)
+            self.setIfChanged(\.activeDNSPresetID, to: self.matchPreset(servers: servers))
         }
     }
 
@@ -1113,7 +1156,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         presets.removeAll { hidden.contains($0.id) }
         let order = UserDefaults.standard.stringArray(forKey: "dnsPresetOrder") ?? []
         if !order.isEmpty {
-            let orderIndex = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
+            let orderIndex = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
             presets.sort {
                 let ai = orderIndex[$0.id] ?? Int.max
                 let bi = orderIndex[$1.id] ?? Int.max
@@ -1127,6 +1170,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
     /// resolver config can be restored on disconnect.
     private var vpnDNSApplied = false
     private var vpnDNSBackup: [String: [String]] = [:]
+    /// The write `applyVPNDNS` has in flight; a restore waits for it.
+    private var vpnDNSApplyTask: Task<Void, Never>?
 
     private lazy var dnsRuleEngine: DNSRuleEngine = {
         let engine = DNSRuleEngine()
@@ -1156,8 +1201,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     ///
     /// The popover's own refresh only runs while it is open, but the rule engine
     /// needs the live resolver to stay idempotent, and the menu bar label needs
-    /// it to be true. `networksetup` is expensive, so this rides the same 30s
-    /// cadence the switcher already uses.
+    /// it to be true.
     private func refreshDNSForBackgroundConsumers(at now: Date) {
         guard Self.dnsAutoSwitchEnabled || Self.menuBarResolverEnabled else { return }
         guard shouldRefresh(lastDNSRefresh, at: now, interval: Self.dnsRefreshInterval) else { return }
@@ -1227,44 +1271,49 @@ final class NetworkMonitor: NSObject, ObservableObject {
             .filter { !$0.isEmpty && $0.unicodeScalars.allSatisfy { validChars.contains($0) } }
         guard !cleaned.isEmpty else { return }
         vpnDNSApplied = true
-        Task.detached(priority: .userInitiated) { [weak self] in
-            let services = Self.dnsTargetServices()
+        vpnDNSApplyTask = Task { [weak self] in
+            let (services, captured) = await ProcessRunner.offloaded { () -> ([String], [String: [String]]) in
+                let services = Self.dnsTargetServices()
+                var captured: [String: [String]] = [:]
+                for service in services { captured[service] = Self.dnsServers(forService: service) }
+                return (services, captured)
+            }
             guard !services.isEmpty else {
-                await MainActor.run { [weak self] in self?.vpnDNSApplied = false }
+                self?.vpnDNSApplied = false
                 return
             }
-            var captured: [String: [String]] = [:]
-            for service in services { captured[service] = Self.dnsServers(forService: service) }
+            // Saved before the write, so a crash at any point after it can still
+            // be undone at the next launch.
+            self?.vpnDNSBackup = captured
+            Self.persistDNSBackup(captured)
             _ = await Self.setDNS(services: services, servers: cleaned)
-            let backup = captured
-            await MainActor.run { [weak self] in
-                self?.vpnDNSBackup = backup
-                // Persist so a crash / helper death that skips restoreVPNDNS()
-                // doesn't leave the tunnel's DNS stuck — it's undone next launch.
-                Self.persistDNSBackup(backup)
-                self?.updateCurrentDNS()
-            }
+            self?.updateCurrentDNS()
         }
     }
 
     /// Restore the DNS captured by `applyVPNDNS` (called on VPN disconnect/drop).
     func restoreVPNDNS() {
+        Task { await restoreVPNDNSAndWait() }
+    }
+
+    /// Waits for a write still in flight first: the backup doesn't exist until
+    /// that write has started, and restoring from an empty one left the tunnel's
+    /// DNS in place after a quick disconnect.
+    func restoreVPNDNSAndWait() async {
         guard vpnDNSApplied else { return }
         vpnDNSApplied = false
+        await vpnDNSApplyTask?.value
+        vpnDNSApplyTask = nil
         let backup = vpnDNSBackup
         vpnDNSBackup = [:]
         Self.persistDNSBackup(nil)
         guard !backup.isEmpty else { return }
-        Task.detached(priority: .userInitiated) { [weak self] in
-            for (service, servers) in backup {
-                _ = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers)
-            }
-            await MainActor.run { [weak self] in
-                self?.updateCurrentDNS()
-                // The override is gone, so an SSID rule may apply again.
-                self?.evaluateDNSRules()
-            }
+        for (service, servers) in backup {
+            _ = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers)
         }
+        updateCurrentDNS()
+        // The override is gone, so an SSID rule may apply again.
+        evaluateDNSRules()
     }
 
     private static let dnsBackupKey = "vpnDNSBackupV1"
@@ -1286,11 +1335,11 @@ final class NetworkMonitor: NSObject, ObservableObject {
               let backup = try? JSONDecoder().decode([String: [String]].self, from: data),
               !backup.isEmpty else { return }
         UserDefaults.standard.removeObject(forKey: Self.dnsBackupKey)
-        Task.detached(priority: .userInitiated) { [weak self] in
+        Task { [weak self] in
             for (service, servers) in backup {
                 _ = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers)
             }
-            await MainActor.run { [weak self] in self?.updateCurrentDNS() }
+            self?.updateCurrentDNS()
         }
     }
 
@@ -1314,34 +1363,50 @@ final class NetworkMonitor: NSObject, ObservableObject {
         dnsError = nil
 
         let servers = preset.servers
-        Task.detached(priority: .userInitiated) { [weak self] in
-            let services = Self.dnsTargetServices()
+        Task { [weak self] in
+            let services = await ProcessRunner.offloaded { Self.dnsTargetServices() }
             guard !services.isEmpty else {
-                _ = await MainActor.run { [weak self] in
-                    self?.dnsChanging = false
-                    self?.dnsError = L10n.text("No active network service found.")
-                }
+                self?.dnsChanging = false
+                self?.dnsError = L10n.text("No active network service found.")
                 return
             }
 
             let result = await Self.setDNS(services: services, servers: servers)
 
-            _ = await MainActor.run { [weak self] in
-                self?.dnsChanging = false
-                self?.dnsError = result.success ? nil : Self.describePrivilegedCommandFailure(result)
-                self?.updateCurrentDNS()
-            }
+            self?.dnsChanging = false
+            self?.dnsError = result.success ? nil : Self.describePrivilegedCommandFailure(result)
+            self?.updateCurrentDNS()
         }
     }
 
+    /// The servers set on the service in use, or `[]` when it follows DHCP: the
+    /// same answer `networksetup -getdnsservers` gives, read straight from configd.
+    /// This runs every few seconds with the DNS rules or the resolver label on,
+    /// and spawning `networksetup` for it was as much work as the rest of a refresh.
     private nonisolated static func currentDNSServers() -> [String]? {
-        for service in dnsTargetServices() {
-            let result = runSyncResult("/usr/sbin/networksetup", ["-getdnsservers", service])
-            guard result.success else { continue }
-            return parseDNSServers(from: result.stdout)
-        }
+        guard let store = SCDynamicStoreCreate(nil, "NetFluss.DNS" as CFString, nil, nil),
+              let serviceID = dnsServiceID(store: store) else { return nil }
+        let key = "Setup:/Network/Service/\(serviceID)/DNS" as CFString
+        let dns = SCDynamicStoreCopyValue(store, key) as? [String: Any]
+        return (dns?[kSCPropNetDNSServerAddresses as String] as? [String]) ?? []
+    }
 
-        return nil
+    /// The primary service, or the first enabled one when that isn't a configured
+    /// service (a VPN's, say): the first of `dnsTargetServices()`, without its
+    /// processes.
+    private nonisolated static func dnsServiceID(store: SCDynamicStore) -> String? {
+        let setup = SCDynamicStoreCopyValue(store, "Setup:/Network/Global/IPv4" as CFString) as? [String: Any]
+        let order = (setup?[kSCPropNetServiceOrder as String] as? [String]) ?? []
+        let enabled = order.filter { id in
+            let service = SCDynamicStoreCopyValue(store, "Setup:/Network/Service/\(id)" as CFString) as? [String: Any]
+            return service != nil && service?[kSCResvInactive as String] == nil
+        }
+        let stateKey = SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, kSCEntNetIPv4)
+        let state = SCDynamicStoreCopyValue(store, stateKey) as? [String: Any]
+        if let primary = state?[kSCDynamicStorePropNetPrimaryService as String] as? String, enabled.contains(primary) {
+            return primary
+        }
+        return enabled.first
     }
 
     private nonisolated static func parseDNSServers(from output: String) -> [String] {
@@ -1393,7 +1458,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         for service in services {
             guard let result = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers) else {
-                return executeWithAuth(command: fallbackCommand)
+                return await ProcessRunner.offloaded { executeWithAuth(command: fallbackCommand) }
             }
 
             guard result.success else {
@@ -1401,7 +1466,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
                     return result
                 }
 
-                let message = firstCommandMessage(from: result) ?? "DNS change failed."
+                let message = firstCommandMessage(from: result) ?? L10n.text("DNS change failed.")
                 failures.append("\(service): \(message)")
                 continue
             }
@@ -1469,20 +1534,23 @@ final class NetworkMonitor: NSObject, ObservableObject {
         guard bsdName.allSatisfy({ $0.isLetter || $0.isNumber }) else { return }
         reconnectingAdapters.insert(bsdName)
 
-        Task.detached(priority: .userInitiated) { [weak self, bsdName, type = adapter.type] in
+        Task { [weak self, bsdName, type = adapter.type] in
             switch type {
             case .wifi:
-                let port = Self.hardwarePortName(for: bsdName)
-                Self.runSync("/usr/sbin/networksetup", ["-setairportpower", port, "off"])
+                let port = await ProcessRunner.offloaded { Self.hardwarePortName(for: bsdName) }
+                await ProcessRunner.offloaded { Self.runSync("/usr/sbin/networksetup", ["-setairportpower", port, "off"]) }
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
-                Self.runSync("/usr/sbin/networksetup", ["-setairportpower", port, "on"])
+                await ProcessRunner.offloaded { Self.runSync("/usr/sbin/networksetup", ["-setairportpower", port, "on"]) }
             case .ethernet:
-                _ = await PrivilegedHelperManager.shared.reconnectEthernet(interfaceName: bsdName) ??
-                    Self.executeWithAuth(command: "ifconfig \(bsdName) down && sleep 1 && ifconfig \(bsdName) up")
+                if await PrivilegedHelperManager.shared.reconnectEthernet(interfaceName: bsdName) == nil {
+                    _ = await ProcessRunner.offloaded {
+                        Self.executeWithAuth(command: "ifconfig \(bsdName) down && sleep 1 && ifconfig \(bsdName) up")
+                    }
+                }
             case .other:
                 break
             }
-            _ = await MainActor.run { [weak self] in self?.reconnectingAdapters.remove(bsdName) }
+            self?.reconnectingAdapters.remove(bsdName)
         }
     }
 
@@ -1565,56 +1633,33 @@ final class NetworkMonitor: NSObject, ObservableObject {
     }
 
     private nonisolated static func runSync(_ path: String, _ args: [String]) {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: path)
-        p.arguments = args
-        p.standardOutput = Pipe()
-        p.standardError = Pipe()
-        try? p.run()
-        p.waitUntilExit()
+        _ = ProcessRunner.run(path, args)
     }
 
     private nonisolated static func runSyncResult(_ path: String, _ args: [String]) -> CommandResult {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = args
-
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        guard (try? process.run()) != nil else {
-            return CommandResult(
-                terminationStatus: -1,
-                stdout: "",
-                stderr: "Failed to launch \(path)."
-            )
+        let result = ProcessRunner.run(path, args)
+        guard result.launched else {
+            return CommandResult(terminationStatus: -1, stdout: "", stderr: "Failed to launch \(path).")
         }
-
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
         return CommandResult(
-            terminationStatus: process.terminationStatus,
-            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-            stderr: String(data: stderrData, encoding: .utf8) ?? ""
+            terminationStatus: result.status,
+            stdout: result.stdoutText,
+            stderr: result.timedOut ? "\(path) timed out." : result.stderrText
         )
     }
 
     private nonisolated static func describePrivilegedCommandFailure(_ result: CommandResult) -> String {
         switch result.terminationStatus {
         case PrivilegedCommandStatus.helperApprovalRequired:
-            return "Approve the Netfluss helper in System Settings, then try again."
+            return L10n.text("Approve the Netfluss helper in System Settings, then try again.")
         case Int32(errAuthorizationCanceled):
-            return "DNS change was canceled."
+            return L10n.text("DNS change was canceled.")
         case Int32(errAuthorizationDenied):
-            return "Administrator permission was denied."
+            return L10n.text("Administrator permission was denied.")
         case Int32(errAuthorizationInteractionNotAllowed):
-            return "Administrator authentication is not available right now."
+            return L10n.text("Administrator authentication is not available right now.")
         case Int32(errAuthorizationToolExecuteFailure):
-            return "The privileged helper could not be started."
+            return L10n.text("The privileged helper could not be started.")
         default:
             break
         }
@@ -1624,14 +1669,14 @@ final class NetworkMonitor: NSObject, ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         if combined.localizedCaseInsensitiveContains("User canceled") {
-            return "DNS change was canceled."
+            return L10n.text("DNS change was canceled.")
         }
         if combined.localizedCaseInsensitiveContains("privilege") ||
             combined.localizedCaseInsensitiveContains("not authorized") {
-            return "Administrator permission was not granted."
+            return L10n.text("Administrator permission was not granted.")
         }
         if combined.localizedCaseInsensitiveContains("not a recognized network service") {
-            return "The active network service could not be identified."
+            return L10n.text("The active network service could not be identified.")
         }
 
         if let firstLine = combined
@@ -1641,7 +1686,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
             return firstLine
         }
 
-        return "DNS change failed."
+        return L10n.text("DNS change failed.")
     }
 
     private nonisolated static func shouldFallbackToAppleScript(for authorizationStatus: Int32) -> Bool {
@@ -1728,7 +1773,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
             do {
                 let bandwidth: UniFiBandwidth
                 if useAPIKey {
-                    guard let apiKey = UniFiMonitor.loadAPIKey(host: host) else {
+                    guard let apiKey = await ProcessRunner.offloaded({ UniFiMonitor.loadAPIKey(host: host) }) else {
                         let msg = L10n.text("No API key configured")
                         self.setIfChanged(\.unifiError, to: msg)
                         self.setIfChanged(\.unifi, to: nil)
@@ -1737,7 +1782,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
                     }
                     bandwidth = try await UniFiMonitor.fetchBandwidth(host: host, apiKey: apiKey)
                 } else {
-                    guard let creds = UniFiMonitor.loadCredentials(host: host) else {
+                    guard let creds = await ProcessRunner.offloaded({ UniFiMonitor.loadCredentials(host: host) }) else {
                         let msg = L10n.text("No credentials configured")
                         self.setIfChanged(\.unifiError, to: msg)
                         self.setIfChanged(\.unifi, to: nil)
@@ -1836,7 +1881,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             do {
-                guard let creds = OpenWRTMonitor.loadCredentials(host: host) else {
+                guard let creds = await ProcessRunner.offloaded({ OpenWRTMonitor.loadCredentials(host: host) }) else {
                     let msg = L10n.text("No credentials configured")
                     self.setIfChanged(\.openWRTError, to: msg)
                     self.setIfChanged(\.openWRT, to: nil)
@@ -1850,8 +1895,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 if let prev = self.openWRTLastSample, self.openWRTLastSampleHost == host {
                     let dt = sample.timestamp.timeIntervalSince(prev.timestamp)
                     if dt > 0 {
-                        let rxRate = Double(sample.rxBytes &- prev.rxBytes) / dt
-                        let txRate = Double(sample.txBytes &- prev.txBytes) / dt
+                        let rxRate = InterfaceSampler.rate(current: sample.rxBytes, previous: prev.rxBytes, deltaTime: dt)
+                        let txRate = InterfaceSampler.rate(current: sample.txBytes, previous: prev.txBytes, deltaTime: dt)
                         self.setIfChanged(\.openWRT, to: OpenWRTBandwidth(
                             rxRateBps: rxRate,
                             txRateBps: txRate,
@@ -1896,7 +1941,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             do {
-                guard let creds = OPNsenseMonitor.loadCredentials(host: host) else {
+                guard let creds = await ProcessRunner.offloaded({ OPNsenseMonitor.loadCredentials(host: host) }) else {
                     let msg = L10n.text("No credentials configured")
                     self.setIfChanged(\.opnsenseError, to: msg)
                     self.setIfChanged(\.opnsense, to: nil)
@@ -1910,8 +1955,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 if let prev = self.opnsenseLastSample, self.opnsenseLastSampleHost == host {
                     let dt = sample.timestamp.timeIntervalSince(prev.timestamp)
                     if dt > 0 {
-                        let rxRate = Double(sample.rxBytes &- prev.rxBytes) / dt
-                        let txRate = Double(sample.txBytes &- prev.txBytes) / dt
+                        let rxRate = InterfaceSampler.rate(current: sample.rxBytes, previous: prev.rxBytes, deltaTime: dt)
+                        let txRate = InterfaceSampler.rate(current: sample.txBytes, previous: prev.txBytes, deltaTime: dt)
                         self.setIfChanged(\.opnsense, to: OPNsenseBandwidth(
                             rxRateBps: rxRate,
                             txRateBps: txRate,
@@ -2105,9 +2150,14 @@ struct CommandResult: Sendable {
     }
 }
 
-@MainActor
-extension NetworkMonitor: @preconcurrency CWEventDelegate {
-    func ssidDidChangeForWiFiInterface(withName interfaceName: String) {
+extension NetworkMonitor: CWEventDelegate {
+    /// CoreWLAN doesn't say which thread this arrives on, and everything it
+    /// touches belongs to the main actor.
+    nonisolated func ssidDidChangeForWiFiInterface(withName interfaceName: String) {
+        Task { @MainActor [weak self] in self?.handleSSIDChange() }
+    }
+
+    private func handleSSIDChange() {
         lastWiFiDetailsRefresh = nil
         _cachedWifiInfo = [:]
         forceDetailRefresh = true
@@ -2450,30 +2500,11 @@ enum ProcessNetworkSampler {
     // MARK: - Helpers
 
     private static func runNetstat() -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/netstat")
-        process.arguments = ["-n", "-b", "-v"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        guard (try? process.run()) != nil else { return "" }
-        // Read before waitUntilExit to avoid pipe-buffer deadlock (~185 KB output)
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return String(data: data, encoding: .utf8) ?? ""
+        ProcessRunner.run("/usr/sbin/netstat", ["-n", "-b", "-v"]).stdoutText
     }
 
     private static func runNettop() -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
-        process.arguments = ["-P", "-x", "-L", "1", "-J", "bytes_in,bytes_out"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        guard (try? process.run()) != nil else { return "" }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return String(data: data, encoding: .utf8) ?? ""
+        ProcessRunner.run("/usr/bin/nettop", ["-P", "-x", "-L", "1", "-J", "bytes_in,bytes_out"]).stdoutText
     }
 
     /// Best-effort process name: tries full path (for clean app names), falls back to proc_name.
@@ -2800,23 +2831,38 @@ enum InterfaceSampler {
     static func rate(current: UInt64, previous: UInt64?, deltaTime: Double) -> Double {
         guard let previous, deltaTime > 0 else { return 0 }
         let delta = current >= previous ? current - previous : 0
-        return Double(delta) / deltaTime
+        let rate = Double(delta) / deltaTime
+        // A reset counter gives 0 above; a jump this size can only be a glitch,
+        // such as the 32-bit getifaddrs fallback answering for one sample.
+        return rate <= maxPlausibleBytesPerSecond ? rate : 0
     }
+
+    /// About 400 Gbit/s, well beyond any interface a Mac has.
+    private static let maxPlausibleBytesPerSecond: Double = 50_000_000_000
 
     static func defaultGatewayIP(store: SCDynamicStore? = nil) -> String {
         let s = store ?? SCDynamicStoreCreate(nil, "NetFluss" as CFString, nil, nil)
-        let key = SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, kSCEntNetIPv4)
-        guard let dict = SCDynamicStoreCopyValue(s, key) as? [String: Any],
-              let router = dict[kSCPropNetIPv4Router as String] as? String,
-              !router.isEmpty else { return "—" }
-        return router
+        // IPv6-only networks have no IPv4 entity, and no gateway would read as a
+        // dead link.
+        for (entity, routerKey) in [(kSCEntNetIPv4, kSCPropNetIPv4Router), (kSCEntNetIPv6, kSCPropNetIPv6Router)] {
+            let key = SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, entity)
+            if let dict = SCDynamicStoreCopyValue(s, key) as? [String: Any],
+               let router = dict[routerKey as String] as? String,
+               !router.isEmpty {
+                return router
+            }
+        }
+        return "—"
     }
 
-    static func primaryInternalIP() -> String {
+    /// The address of the interface carrying the traffic. `preferring` matters on
+    /// a Mac with both Ethernet and Wi-Fi up, where `en0` is usually the idle one.
+    static func primaryInternalIP(preferring preferred: String? = nil) -> String {
         var pointer: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&pointer) == 0, let first = pointer else { return "—" }
         defer { freeifaddrs(pointer) }
 
+        var wifiDefault: String?
         var fallback: String?
         var current: UnsafeMutablePointer<ifaddrs>? = first
         while let entry = current?.pointee {
@@ -2832,9 +2878,10 @@ enum InterfaceSampler {
             let ip = hostname.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
             guard !ip.isEmpty, ip != "0.0.0.0", !ip.hasPrefix("169.254") else { continue }
             let ifName = String(cString: entry.ifa_name)
-            if ifName == "en0" { return ip }
+            if ifName == preferred { return ip }
+            if ifName == "en0" { wifiDefault = ip }
             if fallback == nil { fallback = ip }
         }
-        return fallback ?? "—"
+        return wifiDefault ?? fallback ?? "—"
     }
 }

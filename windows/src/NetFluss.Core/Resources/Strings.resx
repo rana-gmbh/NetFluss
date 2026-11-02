@@ -1939,6 +1939,96 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column." xml:space="preserve">
     <value>Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column.</value>
   </data>
+  <data name="Administrator authentication is not available right now." xml:space="preserve">
+    <value>Administrator authentication is not available right now.</value>
+  </data>
+  <data name="Administrator permission was denied." xml:space="preserve">
+    <value>Administrator permission was denied.</value>
+  </data>
+  <data name="Administrator permission was not granted." xml:space="preserve">
+    <value>Administrator permission was not granted.</value>
+  </data>
+  <data name="Administrator approval was denied." xml:space="preserve">
+    <value>Administrator approval was denied.</value>
+  </data>
+  <data name="Approve the Netfluss helper in System Settings, then try again." xml:space="preserve">
+    <value>Approve the Netfluss helper in Settings, then try again.</value>
+  </data>
+  <data name="Approve the Netfluss helper in System Settings → General → Login Items." xml:space="preserve">
+    <value>Approve the Netfluss helper in Settings → General → Login Items.</value>
+  </data>
+  <data name="DNS change failed." xml:space="preserve">
+    <value>DNS change failed.</value>
+  </data>
+  <data name="DNS change was canceled." xml:space="preserve">
+    <value>DNS change was canceled.</value>
+  </data>
+  <data name="The active network service could not be identified." xml:space="preserve">
+    <value>The active network service could not be identified.</value>
+  </data>
+  <data name="The privileged helper could not be started." xml:space="preserve">
+    <value>The privileged helper could not be started.</value>
+  </data>
+  <data name="The privileged helper could not be reached." xml:space="preserve">
+    <value>The privileged helper could not be reached.</value>
+  </data>
+  <data name="The privileged helper could not be registered." xml:space="preserve">
+    <value>The privileged helper could not be registered.</value>
+  </data>
+  <data name="The privileged helper bundle is incomplete." xml:space="preserve">
+    <value>The privileged helper bundle is incomplete.</value>
+  </data>
+  <data name="The privileged helper connection could not be created." xml:space="preserve">
+    <value>The privileged helper connection could not be created.</value>
+  </data>
+  <data name="The privileged helper connection was invalidated." xml:space="preserve">
+    <value>The privileged helper connection was invalidated.</value>
+  </data>
+  <data name="The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry." xml:space="preserve">
+    <value>The privileged helper did not respond. Approve it in Settings → General → Login Items, or remove and re-add the Netfluss entry.</value>
+  </data>
+  <data name="The privileged helper is not signed correctly." xml:space="preserve">
+    <value>The privileged helper is not signed correctly.</value>
+  </data>
+  <data name="The privileged helper returned an unknown status." xml:space="preserve">
+    <value>The privileged helper returned an unknown status.</value>
+  </data>
+  <data name="The privileged helper was interrupted." xml:space="preserve">
+    <value>The privileged helper was interrupted.</value>
+  </data>
+  <data name="The bundled helper executable is missing." xml:space="preserve">
+    <value>The bundled helper executable is missing.</value>
+  </data>
+  <data name="Registration completed but the helper is still not registered." xml:space="preserve">
+    <value>Registration completed but the helper is still not registered.</value>
+  </data>
+  <data name="macOS could not reach Service Management." xml:space="preserve">
+    <value>Windows could not reach Service Management.</value>
+  </data>
+  <data name="Online" xml:space="preserve">
+    <value>Online</value>
+  </data>
+  <data name="Offline" xml:space="preserve">
+    <value>Offline</value>
+  </data>
+  <data name="Limited connection" xml:space="preserve">
+    <value>Limited connection</value>
+  </data>
+  <data name="Copy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="NetFluss menu" xml:space="preserve">
+    <value>NetFluss menu</value>
+  </data>
+  <data name="Privacy" xml:space="preserve">
+    <value>Privacy</value>
+  </data>
+  <data name="Look up public IP addresses and countries" xml:space="preserve">
+    <value>Look up public IP addresses and countries</value>
+  </data>
+  <data name="Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag." xml:space="preserve">
+    <value>Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag.</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>'{0}' already exists.</value>
   </data>
@@ -2040,9 +2130,6 @@ No network traffic is sent — only local counters from your machine are recorde
   </data>
   <data name="Combined total" xml:space="preserve">
     <value>Combined total</value>
-  </data>
-  <data name="Copy" xml:space="preserve">
-    <value>Copy</value>
   </data>
   <data name="Costs width the digits need below 24 px. The row colour already shows direction." xml:space="preserve">
     <value>Costs width the digits need below 24 px. The row colour already shows direction.</value>
@@ -2665,14 +2752,8 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="Installed, version {0} — newer than this NetFluss ({1}). Update NetFluss, or reinstall the helper from this version." xml:space="preserve">
     <value>Installed, version {0} — newer than this NetFluss ({1}). Update NetFluss, or reinstall the helper from this version.</value>
   </data>
-  <data name="Privacy" xml:space="preserve">
-    <value>Privacy</value>
-  </data>
   <data name="Privacy Policy" xml:space="preserve">
     <value>Privacy Policy</value>
-  </data>
-  <data name="Look up public IP addresses and countries" xml:space="preserve">
-    <value>Look up public IP addresses and countries</value>
   </data>
   <data name="Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." xml:space="preserve">
     <value>Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty.</value>
