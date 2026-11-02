@@ -50,6 +50,11 @@ PINS=(
 TARGET_BINS=(openvpn wireguard-go wg bash)
 TARGET_SCRIPTS=(wg-quick)
 
+# SHA-256 of every bottle above. These binaries end up running as root inside a
+# notarized app, so a bottle that differs from the reviewed one must stop the
+# build. A version bump needs its two lines here updated too.
+CHECKSUMS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/bottles.sha256"
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -85,6 +90,13 @@ print(next(m['digest'] for m in d['manifests']
   mkdir -p "$cellar"
   curl -fsSL -H "Authorization: Bearer $token" \
     "https://ghcr.io/v2/$repo/blobs/$layer" -o "$WORK/bottle.tar.gz"
+  local expected actual
+  expected="$(awk -v f="$formula" -v v="$version" -v t="$tag" '$2==f && $3==v && $4==t {print $1}' "$CHECKSUMS")"
+  actual="$(shasum -a 256 "$WORK/bottle.tar.gz" | awk '{print $1}')"
+  if [[ -z "$expected" || "$actual" != "$expected" ]]; then
+    echo "error: $formula $version ($tag): checksum ${actual} does not match pinned '${expected}'" >&2
+    exit 1
+  fi
   tar xzf "$WORK/bottle.tar.gz" -C "$cellar"
 }
 
