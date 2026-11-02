@@ -34,7 +34,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     @Published var externalIP: String = "—"
     @Published var externalIPCountryCode: String = ""
     /// Health and medium of the interface carrying the default route. Only
-    /// maintained while the menu bar link indicator is enabled.
+    /// maintained while the menu bar link indicator or the DNS rules need it.
     @Published var linkStatus: LinkStatus = .offline
     /// Whether any VPN (built-in or from another app) is up. Only maintained
     /// while a menu bar VPN indicator or country flag is enabled.
@@ -945,7 +945,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
     /// while the indicator is on. Without it the indicator would freeze
     /// whenever the popover is closed, which is when it matters most.
     private func updateLinkHealth() {
-        guard Self.menuBarLinkIndicatorEnabled else {
+        // The DNS rules read this too: while nothing maintains it, it stays
+        // `.offline`, and the engine won't write DNS on a network that's offline.
+        guard Self.menuBarLinkIndicatorEnabled || Self.dnsAutoSwitchEnabled else {
             if linkStatus != .offline { linkStatus = .offline }
             linkHealthTracker.reset()
             return
@@ -1179,6 +1181,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let wifi = adapters.first { $0.type == .wifi && $0.isUp && !($0.wifiSSID ?? "").isEmpty }
         let defaults = UserDefaults.standard
         let fallback = defaults.string(forKey: "dnsRuleFallbackPresetID")
+        let presets = Self.allDNSPresets()
         let input = DNSRuleEngine.Input(
             enabled: true,
             helperEnabled: helperEnabledCache,
@@ -1186,16 +1189,18 @@ final class NetworkMonitor: NSObject, ObservableObject {
             bssid: wifi?.wifiDetail?.bssid,
             linkHealth: linkStatus.health,
             // Without the internet check there is no portal verdict to wait for.
-            portalSignalAvailable: defaults.bool(forKey: "menuBarLinkIndicator")
-                && defaults.bool(forKey: "menuBarLinkCheckInternet"),
+            portalSignalAvailable: defaults.bool(forKey: "menuBarLinkCheckInternet"),
             vpnDNSActive: vpnDNSApplied,
             activePresetID: activeDNSPresetID,
+            // Empty and unmatched means it hasn't been read yet.
+            currentServers: activeDNSPresetID == nil && currentDNSServers.isEmpty ? nil : currentDNSServers,
+            presetServers: Dictionary(presets.map { ($0.id, $0.servers) }, uniquingKeysWith: { first, _ in first }),
             rules: DNSRule.load(),
             fallbackPresetID: (fallback?.isEmpty ?? true) ? nil : fallback
         )
 
         guard let presetID = dnsRuleEngine.evaluate(input) else { return }
-        guard let preset = Self.allDNSPresets().first(where: { $0.id == presetID }) else { return }
+        guard let preset = presets.first(where: { $0.id == presetID }) else { return }
         applyDNS(preset: preset)
     }
 

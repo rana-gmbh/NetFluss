@@ -76,6 +76,11 @@ final class DNSRuleEngine {
     private enum Constants {
         /// Let routes, DHCP and the portal check settle before writing DNS.
         static let settleDelay: TimeInterval = 2
+        /// A write that didn't take is retried on a growing delay. Every attempt
+        /// is a privileged call, and a resolver change flushes the system's DNS
+        /// cache, so a failure must not repeat on every tick.
+        static let firstRetryDelay: TimeInterval = 5
+        static let maxRetryDelay: TimeInterval = 300
     }
 
     struct Input: Sendable {
@@ -89,6 +94,10 @@ final class DNSRuleEngine {
         var portalSignalAvailable: Bool
         var vpnDNSActive: Bool
         var activePresetID: String?
+        /// The live resolver, or nil until it has been read.
+        var currentServers: [String]?
+        /// Servers of every known preset, by id.
+        var presetServers: [String: [String]]
         var rules: [DNSRule]
         var fallbackPresetID: String?
     }
@@ -101,12 +110,14 @@ final class DNSRuleEngine {
     private(set) var state: DNSAutoSwitchState = .off
     private var lastNetworkKey: String?
     private var pendingSince: Date?
+    private var lastAttempt: (presetID: String, at: Date, count: Int)?
 
     var onChange: ((DNSAutoSwitchState) -> Void)?
 
     func reset() {
         lastNetworkKey = nil
         pendingSince = nil
+        lastAttempt = nil
     }
 
     /// The decision table. Order is the whole design: each guard explains why
@@ -127,7 +138,7 @@ final class DNSRuleEngine {
         guard let ssid = input.ssid, !ssid.isEmpty else {
             // Wired, or no association: only the catch-all can apply.
             guard let fallback = input.fallbackPresetID else { return .doNothing(.noRule) }
-            if fallback == input.activePresetID { return .doNothing(.applied(ssid: "", presetID: fallback)) }
+            if isApplied(fallback, input) { return .doNothing(.applied(ssid: "", presetID: fallback)) }
             return .apply(presetID: fallback, state: .applied(ssid: "", presetID: fallback))
         }
 
@@ -147,11 +158,21 @@ final class DNSRuleEngine {
         }
 
         // Already right: never spend a privileged call confirming it.
-        if target == input.activePresetID {
+        if isApplied(target, input) {
             return .doNothing(.applied(ssid: ssid, presetID: target))
         }
 
         return .apply(presetID: target, state: .applied(ssid: ssid, presetID: target))
+    }
+
+    /// Whether the live resolver already is this preset. Compared by servers as
+    /// well as by id: `activePresetID` is the first preset matching the live
+    /// servers, so a custom preset with the same servers as a built-in would
+    /// otherwise never count as applied and be rewritten for ever.
+    private nonisolated static func isApplied(_ presetID: String, _ input: Input) -> Bool {
+        if presetID == input.activePresetID { return true }
+        guard let current = input.currentServers, let servers = input.presetServers[presetID] else { return false }
+        return current == servers
     }
 
     /// Most specific first: this access point, then this network name.
@@ -171,10 +192,12 @@ final class DNSRuleEngine {
         if key != lastNetworkKey {
             lastNetworkKey = key
             pendingSince = now
+            lastAttempt = nil
         }
 
         switch decision {
         case .doNothing(let newState):
+            if case .applied = newState { lastAttempt = nil }
             publish(newState)
             return nil
         case .apply(let presetID, let newState):
@@ -184,9 +207,20 @@ final class DNSRuleEngine {
             guard let pendingSince, now.timeIntervalSince(pendingSince) >= Constants.settleDelay else {
                 return nil
             }
+            let attempts = lastAttempt?.presetID == presetID ? lastAttempt?.count ?? 0 : 0
+            if attempts > 0, let lastAttempt,
+               now.timeIntervalSince(lastAttempt.at) < Self.retryDelay(afterAttempts: attempts) {
+                return nil
+            }
+            lastAttempt = (presetID, now, attempts + 1)
             publish(newState)
             return presetID
         }
+    }
+
+    /// 5, 10, 20 … seconds, up to five minutes.
+    nonisolated static func retryDelay(afterAttempts attempts: Int) -> TimeInterval {
+        min(Constants.maxRetryDelay, Constants.firstRetryDelay * pow(2, Double(attempts - 1)))
     }
 
     private func publish(_ newState: DNSAutoSwitchState) {
