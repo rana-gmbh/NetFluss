@@ -1568,6 +1568,9 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
 
     /// Builds the optional VPN indicator + country flag shown right of the
     /// rates, plus a key describing them for render-state deduplication.
+    /// The menu bar VPN indicator styles that draw something ("off" draws nothing).
+    static let vpnIndicatorStyles: Set<String> = ["dot", "shield", "globe", "bars"]
+
     private func menuBarAccessories(
         style: MenuBarDisplayStyle,
         defaultTextColor: NSColor,
@@ -1584,7 +1587,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
 
         var vpnMark: MenuBarAccessories.VPNMark?
         var vpnKey = "none"
-        if indicator == "dot" || indicator == "shield" || indicator == "lockShield", vpnActive || showWhenOff {
+        if Self.vpnIndicatorStyles.contains(indicator), vpnActive || showWhenOff {
             let colorName = defaults.string(forKey: "menuBarVPNIndicatorColor") ?? "green"
             let colorHex = defaults.string(forKey: "menuBarVPNIndicatorColorHex") ?? ""
             var activeColor = resolvedAccentNSColor(selection: colorName, customHex: colorHex, fallback: .systemGreen)
@@ -1602,14 +1605,24 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             if indicator == "dot" {
                 let diameter = max(5, (markSize * 0.6).rounded())
                 vpnMark = .dot(active: vpnActive, color: color, diameter: diameter)
+            } else if indicator == "bars" {
+                let key = "bars|\(vpnActive)|\(colorName)|\(colorHex)|\(style.rawValue)|\(isDarkAppearance)|\(markSize)"
+                if let image = accessoryImage(key, build: {
+                    VPNBarsGlyph.image(height: markSize, color: color, active: vpnActive)
+                }) {
+                    vpnMark = .symbol(image)
+                }
             } else {
                 // `shield.slash` is the shape from the issue's mockup; the lock
                 // inside `lock.shield.fill` turns to mush below ~16 pt, so the
-                // Shield style's active state is the plain filled shield. Lock
-                // shield is the outline `lock.shield` of the Preferences toolbar,
-                // which stays readable at the smallest size (issue #68).
-                let activeSymbol = indicator == "lockShield" ? "lock.shield" : "shield.fill"
-                let symbolName = vpnActive ? activeSymbol : "shield.slash"
+                // Shield style's active state is the plain filled shield. Globe
+                // is the network with a shield badge (issue #68).
+                let symbolName: String
+                if indicator == "globe" {
+                    symbolName = vpnActive ? "network.badge.shield.half.filled" : "network.slash"
+                } else {
+                    symbolName = vpnActive ? "shield.fill" : "shield.slash"
+                }
                 let key = "\(symbolName)|\(colorName)|\(colorHex)|\(style.rawValue)|\(isDarkAppearance)|\(markSize)"
                 let image = accessoryImage(key) {
                     let configuration = NSImage.SymbolConfiguration(pointSize: markSize, weight: .semibold)
@@ -1994,5 +2007,65 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             button.image = highlightPlaceholderImage
             button.imagePosition = .imageOnly
         }
+    }
+}
+
+
+/// The "Bars" VPN indicator: macOS's own VPN menu bar artwork (all four bars
+/// when connected, none when not), tinted with the chosen colour like the
+/// other styles. It is read from the system's VPN menu extra at run time, not
+/// shipped; if a macOS release moves it, a drawn copy of the shape stands in.
+enum VPNBarsGlyph {
+    private static let systemArtwork = "/System/Library/CoreServices/Menu Extras/VPN.menu/Contents/Resources"
+    /// VPN0 … VPN4 are the system's connecting animation; 4 is connected.
+    private static let connected = NSImage(contentsOfFile: systemArtwork + "/VPN4.pdf")
+    private static let disconnected = NSImage(contentsOfFile: systemArtwork + "/VPN0.pdf")
+
+    static func image(height: CGFloat, color: NSColor, active: Bool) -> NSImage {
+        guard let artwork = active ? connected : disconnected, artwork.size.height > 0 else {
+            return drawn(height: height, color: color, active: active)
+        }
+        let size = NSSize(width: (height * artwork.size.width / artwork.size.height).rounded(), height: height)
+        let image = NSImage(size: size, flipped: false) { rect in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            // The artwork is a black template; recolour it, then apply the
+            // colour's own transparency (the dimmed "off" state) to the result.
+            context.setAlpha(color.alphaComponent)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            artwork.draw(in: rect)
+            color.withAlphaComponent(1).set()
+            rect.fill(using: .sourceAtop)
+            context.endTransparencyLayer()
+            return true
+        }
+        image.accessibilityDescription = "VPN"
+        return image
+    }
+
+    /// The same shape, drawn: a frame with four bars cut into it.
+    private static func drawn(height: CGFloat, color: NSColor, active: Bool) -> NSImage {
+        let size = NSSize(width: (height * 18 / 14).rounded(), height: height)
+        let image = NSImage(size: size, flipped: false) { rect in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.setAlpha(color.alphaComponent)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            let frame = rect.insetBy(dx: 0, dy: height * 0.07)
+            color.withAlphaComponent(1).setFill()
+            NSBezierPath(roundedRect: frame, xRadius: frame.height * 0.3, yRadius: frame.height * 0.3).fill()
+            let inner = frame.insetBy(dx: frame.width * 0.2, dy: frame.height * 0.28)
+            let gap = inner.width * 0.12
+            let barWidth = (inner.width - gap * 3) / 4
+            for index in 0..<4 {
+                let bar = NSRect(x: inner.minX + CGFloat(index) * (barWidth + gap), y: inner.minY,
+                                 width: barWidth, height: inner.height)
+                // Connected cuts the bars out completely; off only part-way.
+                NSColor(white: 0, alpha: active ? 1 : 0.6).set()
+                bar.fill(using: .destinationOut)
+            }
+            context.endTransparencyLayer()
+            return true
+        }
+        image.accessibilityDescription = "VPN"
+        return image
     }
 }

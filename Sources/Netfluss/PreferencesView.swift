@@ -730,10 +730,11 @@ struct PreferencesView: View {
                                 LText("Off").tag("off")
                                 LText("Dot").tag("dot")
                                 LText("Shield").tag("shield")
-                                LText("Lock shield").tag("lockShield")
+                                LText("Globe").tag("globe")
+                                LText("Bars").tag("bars")
                             }
                             .pickerStyle(.segmented)
-                            .frame(width: 320)
+                            .frame(width: 340)
                         }
                     } label: {
                         LText("VPN indicator")

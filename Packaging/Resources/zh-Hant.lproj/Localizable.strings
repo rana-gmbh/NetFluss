@@ -424,7 +424,8 @@
 "Off" = "關閉";
 "Dot" = "圓點";
 "Shield" = "盾牌";
-"Lock shield" = "帶鎖盾牌";
+"Globe" = "地球";
+"Bars" = "條形";
 "VPN indicator color" = "VPN 指示器顏色";
 "Show when VPN is off" = "VPN 關閉時也顯示";
 "Show flag only while a VPN is active" = "僅在 VPN 啟用時顯示旗幟";

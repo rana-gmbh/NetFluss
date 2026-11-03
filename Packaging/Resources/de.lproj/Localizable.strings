@@ -424,7 +424,8 @@
 "Off" = "Aus";
 "Dot" = "Punkt";
 "Shield" = "Schild";
-"Lock shield" = "Schild mit Schloss";
+"Globe" = "Globus";
+"Bars" = "Balken";
 "VPN indicator color" = "Farbe der VPN-Anzeige";
 "Show when VPN is off" = "Auch anzeigen, wenn VPN aus ist";
 "Show flag only while a VPN is active" = "Flagge nur bei aktivem VPN anzeigen";

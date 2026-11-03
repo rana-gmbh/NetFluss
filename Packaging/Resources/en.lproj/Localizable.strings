@@ -424,7 +424,8 @@
 "Off" = "Off";
 "Dot" = "Dot";
 "Shield" = "Shield";
-"Lock shield" = "Lock shield";
+"Globe" = "Globe";
+"Bars" = "Bars";
 "VPN indicator color" = "VPN indicator color";
 "Show when VPN is off" = "Show when VPN is off";
 "Show flag only while a VPN is active" = "Show flag only while a VPN is active";
