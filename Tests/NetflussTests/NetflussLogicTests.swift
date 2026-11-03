@@ -39,9 +39,22 @@ final class DNSRuleEngineTests: XCTestCase {
         XCTAssertEqual(decision, .doNothing(.waitingForPortal(ssid: "Home")))
     }
 
-    func testDoesNothingOffline() {
+    /// A matched rule waiting on the link must not read as "no rule applies".
+    func testWaitsForTheNetworkWhenOffline() {
         let decision = DNSRuleEngine.decide(input(rule: "other", health: .offline, active: "system", current: []))
+        XCTAssertEqual(decision, .doNothing(.waitingForNetwork(ssid: "Home")))
+    }
+
+    func testNoRuleOnAnUnknownNetworkEvenOffline() {
+        let decision = DNSRuleEngine.decide(input(rule: "other", health: .offline, active: "system", current: [], ssid: "Cafe"))
         XCTAssertEqual(decision, .doNothing(.noRule))
+    }
+
+    /// With the internet check off there is no portal signal, so a link that
+    /// only looks limited must not hold the rule back (issue #69).
+    func testAppliesWithoutAPortalSignal() {
+        let decision = DNSRuleEngine.decide(input(rule: "other", health: .limited, portal: false, active: "system", current: []))
+        XCTAssertEqual(decision, .apply(presetID: "other", state: .applied(ssid: "Home", presetID: "other")))
     }
 
     @MainActor

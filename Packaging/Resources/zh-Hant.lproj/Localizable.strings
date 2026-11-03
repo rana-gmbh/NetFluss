@@ -643,6 +643,7 @@
 "Install the privileged helper to let NetFluss change DNS without asking each time." = "安裝特權協助程式，讓 NetFluss 無需每次詢問即可變更 DNS。";
 "Paused: a VPN profile is controlling DNS right now." = "已暫停：VPN 設定檔目前正在控制 DNS。";
 "Waiting for %@ to let you online before changing DNS." = "等待 %@ 允許你上網後再變更 DNS。";
+"Waiting for a connection to %@ before changing DNS." = "等待連線到 %@ 後再變更 DNS。";
 "Using %@ on this network." = "在此網路上使用 %@。";
 "Using %@ on %@." = "在 %2$@ 上使用 %1$@。";
 "No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "沒有可用的 Wi-Fi 網路名稱。請加入 Wi-Fi 網路，或在下方允許位置存取——沒有它 macOS 不會提供網路名稱。";

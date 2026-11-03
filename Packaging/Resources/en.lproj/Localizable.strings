@@ -643,6 +643,7 @@
 "Install the privileged helper to let NetFluss change DNS without asking each time." = "Install the privileged helper to let NetFluss change DNS without asking each time.";
 "Paused: a VPN profile is controlling DNS right now." = "Paused: a VPN profile is controlling DNS right now.";
 "Waiting for %@ to let you online before changing DNS." = "Waiting for %@ to let you online before changing DNS.";
+"Waiting for a connection to %@ before changing DNS." = "Waiting for a connection to %@ before changing DNS.";
 "Using %@ on this network." = "Using %@ on this network.";
 "Using %@ on %@." = "Using %@ on %@.";
 "No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.";

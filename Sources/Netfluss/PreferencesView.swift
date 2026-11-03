@@ -1558,6 +1558,8 @@ struct PreferencesView: View {
             return L10n.text("Paused: a VPN profile is controlling DNS right now.")
         case .waitingForPortal(let ssid):
             return L10n.format("Waiting for %@ to let you online before changing DNS.", ssid)
+        case .waitingForNetwork(let ssid):
+            return L10n.format("Waiting for a connection to %@ before changing DNS.", ssid)
         case .applied(let ssid, let presetID):
             let name = NetworkMonitor.allDNSPresets().first { $0.id == presetID }?.name ?? presetID
             return ssid.isEmpty

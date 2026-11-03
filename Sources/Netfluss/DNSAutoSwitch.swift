@@ -63,6 +63,9 @@ enum DNSAutoSwitchState: Equatable, Sendable {
     /// On a network with a rule, but holding at DHCP until the captive portal
     /// is cleared — applying early is what breaks the login page.
     case waitingForPortal(ssid: String)
+    /// On a network with a rule, but the link is down. Kept apart from
+    /// `.noRule` so a matched rule never reads as "no rule applies".
+    case waitingForNetwork(ssid: String)
     case applied(ssid: String, presetID: String)
     case noRule
 }
@@ -154,7 +157,7 @@ final class DNSRuleEngine {
             return .doNothing(.waitingForPortal(ssid: ssid))
         }
         if input.linkHealth == .offline {
-            return .doNothing(.noRule)
+            return .doNothing(.waitingForNetwork(ssid: ssid))
         }
 
         // Already right: never spend a privileged call confirming it.
