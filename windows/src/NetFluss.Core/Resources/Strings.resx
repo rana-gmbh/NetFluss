@@ -1255,6 +1255,12 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="Shield" xml:space="preserve">
     <value>Shield</value>
   </data>
+  <data name="Globe" xml:space="preserve">
+    <value>Globe</value>
+  </data>
+  <data name="Bars" xml:space="preserve">
+    <value>Bars</value>
+  </data>
   <data name="VPN indicator color" xml:space="preserve">
     <value>VPN indicator color</value>
   </data>
@@ -1600,6 +1606,9 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="The VPN connection stopped." xml:space="preserve">
     <value>The VPN connection stopped.</value>
   </data>
+  <data name="NetFluss couldn&apos;t stop the VPN tunnel, so it may still be up. Try Disconnect again." xml:space="preserve">
+    <value>NetFluss couldn't stop the VPN tunnel, so it may still be up. Try Disconnect again.</value>
+  </data>
   <data name="This IKEv2 profile is missing its server settings." xml:space="preserve">
     <value>This IKEv2 profile is missing its server settings.</value>
   </data>
@@ -1893,6 +1902,9 @@ No network traffic is sent — only local counters from your machine are recorde
   </data>
   <data name="Waiting for {0} to let you online before changing DNS." xml:space="preserve">
     <value>Waiting for {0} to let you online before changing DNS.</value>
+  </data>
+  <data name="Waiting for a connection to {0} before changing DNS." xml:space="preserve">
+    <value>Waiting for a connection to {0} before changing DNS.</value>
   </data>
   <data name="Using {0} on this network." xml:space="preserve">
     <value>Using {0} on this network.</value>

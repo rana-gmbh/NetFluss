@@ -1255,6 +1255,12 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Shield" xml:space="preserve">
     <value>Schild</value>
   </data>
+  <data name="Globe" xml:space="preserve">
+    <value>Globus</value>
+  </data>
+  <data name="Bars" xml:space="preserve">
+    <value>Balken</value>
+  </data>
   <data name="VPN indicator color" xml:space="preserve">
     <value>Farbe der VPN-Anzeige</value>
   </data>
@@ -1600,6 +1606,9 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="The VPN connection stopped." xml:space="preserve">
     <value>Die VPN-Verbindung wurde beendet.</value>
   </data>
+  <data name="NetFluss couldn&apos;t stop the VPN tunnel, so it may still be up. Try Disconnect again." xml:space="preserve">
+    <value>NetFluss konnte den VPN-Tunnel nicht beenden, er könnte also noch aktiv sein. Klicke erneut auf „Trennen“.</value>
+  </data>
   <data name="This IKEv2 profile is missing its server settings." xml:space="preserve">
     <value>Diesem IKEv2-Profil fehlen die Server-Einstellungen.</value>
   </data>
@@ -1893,6 +1902,9 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   </data>
   <data name="Waiting for {0} to let you online before changing DNS." xml:space="preserve">
     <value>Warten darauf, dass {0} dich online lässt, bevor DNS geändert wird.</value>
+  </data>
+  <data name="Waiting for a connection to {0} before changing DNS." xml:space="preserve">
+    <value>Warten auf eine Verbindung mit {0}, bevor DNS geändert wird.</value>
   </data>
   <data name="Using {0} on this network." xml:space="preserve">
     <value>Verwendet {0} in diesem Netzwerk.</value>

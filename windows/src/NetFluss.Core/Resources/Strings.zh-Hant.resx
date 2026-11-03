@@ -1255,6 +1255,12 @@
   <data name="Shield" xml:space="preserve">
     <value>盾牌</value>
   </data>
+  <data name="Globe" xml:space="preserve">
+    <value>地球</value>
+  </data>
+  <data name="Bars" xml:space="preserve">
+    <value>條形</value>
+  </data>
   <data name="VPN indicator color" xml:space="preserve">
     <value>VPN 指示器顏色</value>
   </data>
@@ -1600,6 +1606,9 @@
   <data name="The VPN connection stopped." xml:space="preserve">
     <value>VPN 連線已停止。</value>
   </data>
+  <data name="NetFluss couldn&apos;t stop the VPN tunnel, so it may still be up. Try Disconnect again." xml:space="preserve">
+    <value>NetFluss 無法停止 VPN 通道，它可能仍在執行。請再次按下「中斷連線」。</value>
+  </data>
   <data name="This IKEv2 profile is missing its server settings." xml:space="preserve">
     <value>此 IKEv2 設定檔缺少伺服器設定。</value>
   </data>
@@ -1893,6 +1902,9 @@
   </data>
   <data name="Waiting for {0} to let you online before changing DNS." xml:space="preserve">
     <value>等待 {0} 允許你上網後再變更 DNS。</value>
+  </data>
+  <data name="Waiting for a connection to {0} before changing DNS." xml:space="preserve">
+    <value>等待連線到 {0} 後再變更 DNS。</value>
   </data>
   <data name="Using {0} on this network." xml:space="preserve">
     <value>在此網路上使用 {0}。</value>
