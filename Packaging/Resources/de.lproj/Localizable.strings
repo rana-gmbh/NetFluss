@@ -424,6 +424,7 @@
 "Off" = "Aus";
 "Dot" = "Punkt";
 "Shield" = "Schild";
+"Lock shield" = "Schild mit Schloss";
 "VPN indicator color" = "Farbe der VPN-Anzeige";
 "Show when VPN is off" = "Auch anzeigen, wenn VPN aus ist";
 "Show flag only while a VPN is active" = "Flagge nur bei aktivem VPN anzeigen";
@@ -539,6 +540,7 @@
 "Could not start the VPN helper." = "Der VPN-Helfer konnte nicht gestartet werden.";
 "This VPN needs a username and password. Add them in the profile's settings and reconnect." = "Dieses VPN benötigt Benutzername und Passwort. Trage sie in den Profileinstellungen ein und verbinde dich erneut.";
 "The VPN connection stopped." = "Die VPN-Verbindung wurde beendet.";
+"NetFluss couldn't stop the VPN tunnel, so it may still be up. Try Disconnect again." = "NetFluss konnte den VPN-Tunnel nicht beenden, er könnte also noch aktiv sein. Klicke erneut auf „Trennen“.";
 "This IKEv2 profile is missing its server settings." = "Diesem IKEv2-Profil fehlen die Server-Einstellungen.";
 "The VPN password isn't stored — remove the profile and add it again." = "Das VPN-Passwort ist nicht gespeichert – entferne das Profil und füge es erneut hinzu.";
 "No system VPN service is associated with this profile." = "Diesem Profil ist kein System-VPN-Dienst zugeordnet.";

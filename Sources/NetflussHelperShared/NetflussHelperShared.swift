@@ -5,7 +5,7 @@ public enum NetflussHelperConstants {
     /// daemon when the bundled version differs from the last registered one, so
     /// launchd picks up the new helper binary instead of keeping the old daemon
     /// (SMAppService does not refresh an already-enabled daemon on its own).
-    public static let helperVersion = 16
+    public static let helperVersion = 17
 
     public static let appBundleIdentifier = "com.local.netfluss"
     public static let teamIdentifier = "D6P24X5377"
@@ -67,4 +67,9 @@ public enum NetflussHelperConstants {
     /// run of the app calls this: anything still up was left by one that crashed.
     /// The reply message carries the number stopped.
     func stopOrphanedVPNTunnels(owner: String, withReply reply: @escaping (Bool, String?) -> Void)
+
+    /// Handles of the tunnels `owner` started that are still running, one per
+    /// line. The app compares them with the one it knows about to find tunnels
+    /// it lost track of.
+    func listVPNTunnels(owner: String, withReply reply: @escaping (Bool, String?) -> Void)
 }

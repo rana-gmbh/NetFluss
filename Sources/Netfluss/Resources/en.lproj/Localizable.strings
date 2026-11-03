@@ -424,6 +424,7 @@
 "Off" = "Off";
 "Dot" = "Dot";
 "Shield" = "Shield";
+"Lock shield" = "Lock shield";
 "VPN indicator color" = "VPN indicator color";
 "Show when VPN is off" = "Show when VPN is off";
 "Show flag only while a VPN is active" = "Show flag only while a VPN is active";
@@ -539,6 +540,7 @@
 "Could not start the VPN helper." = "Could not start the VPN helper.";
 "This VPN needs a username and password. Add them in the profile's settings and reconnect." = "This VPN needs a username and password. Add them in the profile's settings and reconnect.";
 "The VPN connection stopped." = "The VPN connection stopped.";
+"NetFluss couldn't stop the VPN tunnel, so it may still be up. Try Disconnect again." = "NetFluss couldn't stop the VPN tunnel, so it may still be up. Try Disconnect again.";
 "This IKEv2 profile is missing its server settings." = "This IKEv2 profile is missing its server settings.";
 "The VPN password isn't stored — remove the profile and add it again." = "The VPN password isn't stored — remove the profile and add it again.";
 "No system VPN service is associated with this profile." = "No system VPN service is associated with this profile.";

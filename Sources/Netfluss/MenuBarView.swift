@@ -711,16 +711,50 @@ struct ConnectionStatusSection: View {
         .padding(.vertical, 10)
     }
 
-    @ViewBuilder
     private var vpnNode: some View {
-        let flag = CountryFlag.emoji(for: countryCode)
-        if activeVPNs.count == 1 {
-            let vpn = activeVPNs[0]
-            ConnectionNode(icon: "lock.shield", label: vpn.displayName, detail: vpn.id, color: .purple, flag: flag)
-        } else {
-            let names = activeVPNs.map(\.id).joined(separator: ", ")
-            ConnectionNode(icon: "lock.shield", label: L10n.format("%ld VPNs", activeVPNs.count), detail: names, color: .purple, flag: flag)
+        VPNRouteNode(tunnels: activeVPNs, flag: CountryFlag.emoji(for: countryCode))
+    }
+}
+
+/// The VPN step of the route card. Names NetFluss's own tunnel by its profile,
+/// so a second utun next to it reads as some other VPN rather than as the one
+/// NetFluss just disconnected (issue #68). Its own view so that only this node
+/// follows the VPN manager's frequent byte-count updates.
+private struct VPNRouteNode: View {
+    @EnvironmentObject private var vpn: VPNManager
+    let tunnels: [AdapterStatus]
+    let flag: String?
+
+    var body: some View {
+        let text = VPNRouteLabel.make(
+            tunnels: tunnels.map { (id: $0.id, displayName: $0.displayName) },
+            own: ownTunnel
+        )
+        ConnectionNode(icon: "lock.shield", label: text.label, detail: text.detail, color: .purple, flag: flag)
+    }
+
+    private var ownTunnel: (interface: String, name: String)? {
+        guard vpn.status.state == .connected,
+              let interface = vpn.status.tunnelInterface,
+              let profile = vpn.profiles.first(where: { $0.id == vpn.status.profileID }) else { return nil }
+        return (interface, profile.name)
+    }
+}
+
+enum VPNRouteLabel {
+    static func make(
+        tunnels: [(id: String, displayName: String)],
+        own: (interface: String, name: String)?
+    ) -> (label: String, detail: String) {
+        func name(_ tunnel: (id: String, displayName: String)) -> String? {
+            own.flatMap { $0.interface == tunnel.id ? $0.name : nil }
         }
+        if tunnels.count == 1 {
+            let tunnel = tunnels[0]
+            return (name(tunnel) ?? tunnel.displayName, tunnel.id)
+        }
+        let detail = tunnels.map { name($0) ?? $0.id }.joined(separator: ", ")
+        return (L10n.format("%ld VPNs", tunnels.count), detail)
     }
 }
 

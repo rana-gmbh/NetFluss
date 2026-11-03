@@ -91,6 +91,15 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
     private var ovpnStages: [String: String] = [:] // OpenVPN: handle(pid) -> staged profile dir
     private var wgTunnels: [String: String] = [:]  // WireGuard: handle(iface) -> staged .conf path
     private var tunnelOwners: [String: String] = [:] // Either: handle -> user who started it
+    /// OpenVPN processes an earlier run of the helper started, found again from
+    /// their records. Not our children, so they are watched and signalled by pid.
+    private var adoptedOpenVPN: [String: pid_t] = [:]
+    private var adoptedExitSources: [String: DispatchSourceProcess] = [:]
+
+    override init() {
+        super.init()
+        tunnelsQueue.sync { adoptRecordedTunnelsLocked() }
+    }
 
     func startVPNTunnel(
         kind: String,
@@ -195,6 +204,7 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
                 self?.tunnels[handle] = nil
                 self?.ovpnStages[handle] = nil
                 self?.tunnelOwners[handle] = nil
+                Self.removeRecord(handle: handle)
             }
             try? FileManager.default.removeItem(atPath: stage)
         }
@@ -213,6 +223,10 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             tunnels[handle] = process
             ovpnStages[handle] = stage
             tunnelOwners[handle] = socketOwner
+            Self.writeRecord(TunnelRecord(
+                kind: .openVPN, handle: handle, owner: socketOwner,
+                startTime: ProcessInfoLookup.startTime(of: process.processIdentifier), stagedPath: stage
+            ))
         }
         reply(true, handle)
     }
@@ -301,6 +315,9 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             tunnelsQueue.sync {
                 wgTunnels[iface] = stagedConf
                 tunnelOwners[iface] = socketOwner
+                Self.writeRecord(TunnelRecord(
+                    kind: .wireGuard, handle: iface, owner: socketOwner, startTime: nil, stagedPath: stagedConf
+                ))
             }
             reply(true, iface)
         } else {
@@ -660,28 +677,80 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
                     let result = Self.runProcess(toolsDir + "/bash", [toolsDir + "/wg-quick", "down", conf], env: env)
                     ok = result.success; message = result.message
                 }
-                self.tunnelsQueue.sync {
-                    self.wgTunnels[handle] = nil
-                    self.tunnelOwners[handle] = nil
+                // A tunnel that is gone counts as stopped, whatever wg-quick said.
+                if !ok, !Self.interfaceExists(handle) { ok = true }
+                if ok {
+                    self.tunnelsQueue.sync {
+                        self.wgTunnels[handle] = nil
+                        self.tunnelOwners[handle] = nil
+                        Self.removeRecord(handle: handle)
+                    }
+                    try? FileManager.default.removeItem(atPath: conf)
                 }
-                try? FileManager.default.removeItem(atPath: conf)
                 reply(ok, message)
             }
             return
         }
         tunnelsQueue.async {
-            guard let process = self.tunnels[handle] else {
-                reply(false, "No active tunnel for handle \(handle).")
+            let pid: pid_t
+            let isRunning: () -> Bool
+            if let process = self.tunnels[handle] {
+                pid = process.processIdentifier
+                isRunning = { process.isRunning }
+            } else if let adopted = self.adoptedOpenVPN[handle] {
+                pid = adopted
+                isRunning = { ProcessInfoLookup.isAlive(adopted) }
+            } else {
+                // Already gone: openvpn exited on its own and was cleaned up.
+                reply(true, "Already stopped.")
                 return
             }
-            if process.isRunning { process.terminate() }
-            self.tunnels[handle] = nil
-            self.tunnelOwners[handle] = nil
-            reply(true, nil)
+            // Wait off the queue: the child's termination handler needs it.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let stopped = Self.terminate(pid: pid, isRunning: isRunning)
+                self.tunnelsQueue.sync {
+                    guard stopped else { return }
+                    self.tunnels[handle] = nil
+                    self.tunnelOwners[handle] = nil
+                    if self.adoptedOpenVPN.removeValue(forKey: handle) != nil {
+                        self.adoptedExitSources.removeValue(forKey: handle)?.cancel()
+                        if let stage = self.ovpnStages.removeValue(forKey: handle) {
+                            try? FileManager.default.removeItem(atPath: stage)
+                        }
+                    }
+                    Self.removeRecord(handle: handle)
+                }
+                reply(stopped, stopped ? nil : "openvpn (pid \(pid)) did not exit.")
+            }
         }
     }
 
+    /// SIGTERM, then SIGKILL if openvpn is still there after a few seconds.
+    /// Waiting is the point: a stop that only sent the signal reported success
+    /// for a tunnel that could still be up, and the helper forgot it anyway.
+    /// The first wait covers `explicit-exit-notify`, which delays the exit.
+    private static func terminate(pid: pid_t, isRunning: () -> Bool) -> Bool {
+        guard isRunning() else { return true }
+        kill(pid, SIGTERM)
+        if waitForExit(isRunning, seconds: 5) { return true }
+        kill(pid, SIGKILL)
+        return waitForExit(isRunning, seconds: 2)
+    }
+
+    private static func waitForExit(_ isRunning: () -> Bool, seconds: Double) -> Bool {
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
+            if !isRunning() { return true }
+            usleep(100_000)
+        }
+        return !isRunning()
+    }
+
     func stopOrphanedVPNTunnels(owner: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        guard HelperInputPolicy.isUserName(owner) else {
+            reply(false, "Invalid user name.")
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async {
             let handles = self.tunnelsQueue.sync {
                 self.tunnelOwners.filter { $0.value == owner }.map(\.key)
@@ -695,13 +764,112 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         }
     }
 
+    func listVPNTunnels(owner: String, withReply reply: @escaping (Bool, String?) -> Void) {
+        guard HelperInputPolicy.isUserName(owner) else {
+            reply(false, "Invalid user name.")
+            return
+        }
+        tunnelsQueue.async {
+            let handles = self.tunnelOwners.filter { $0.value == owner }.map(\.key).sorted()
+            reply(true, handles.joined(separator: "\n"))
+        }
+    }
+
     func vpnTunnelStatus(handle: String, withReply reply: @escaping (Bool, String?) -> Void) {
         tunnelsQueue.async {
             // OpenVPN: a live child process. WireGuard: a tracked tunnel whose utun
             // interface still exists (the handle IS the utun name).
             let running = self.tunnels[handle]?.isRunning
+                ?? self.adoptedOpenVPN[handle].map(ProcessInfoLookup.isAlive)
                 ?? (self.wgTunnels[handle] != nil && Self.interfaceExists(handle))
             reply(running, running ? "running" : "stopped")
+        }
+    }
+
+    // MARK: - Tunnel records
+
+    private static func recordPath(for handle: String) -> String? {
+        TunnelRecord.fileName(for: handle).map { "\(stageRootPath)/\($0)" }
+    }
+
+    private static func writeRecord(_ record: TunnelRecord) {
+        guard let path = recordPath(for: record.handle), let data = record.encoded(),
+              (try? stageRoot()) != nil else { return }
+        try? FileManager.default.removeItem(atPath: path)
+        FileManager.default.createFile(atPath: path, contents: data, attributes: [.posixPermissions: 0o600])
+    }
+
+    private static func removeRecord(handle: String) {
+        guard let path = recordPath(for: handle) else { return }
+        try? FileManager.default.removeItem(atPath: path)
+    }
+
+    /// Take back the tunnels an earlier helper run started. A record whose
+    /// tunnel is gone, or whose pid now belongs to some other process, is
+    /// dropped along with what it staged.
+    private func adoptRecordedTunnelsLocked() {
+        guard (try? Self.stageRoot()) != nil,
+              let entries = try? FileManager.default.contentsOfDirectory(atPath: Self.stageRootPath) else { return }
+        for entry in entries where entry.hasPrefix(TunnelRecord.filePrefix) && entry.hasSuffix(TunnelRecord.fileSuffix) {
+            let path = "\(Self.stageRootPath)/\(entry)"
+            guard let data = FileManager.default.contents(atPath: path), let record = TunnelRecord.decode(data),
+                  TunnelRecord.fileName(for: record.handle) == entry,
+                  record.stagedPath.hasPrefix(Self.stageRootPath + "/") else {
+                try? FileManager.default.removeItem(atPath: path)
+                continue
+            }
+            switch record.kind {
+            case .openVPN:
+                guard let pid = pid_t(record.handle),
+                      record.describesOpenVPN(
+                        processPath: ProcessInfoLookup.executablePath(of: pid),
+                        startTime: ProcessInfoLookup.startTime(of: pid)
+                      ) else {
+                    try? FileManager.default.removeItem(atPath: record.stagedPath)
+                    try? FileManager.default.removeItem(atPath: path)
+                    continue
+                }
+                adoptedOpenVPN[record.handle] = pid
+                ovpnStages[record.handle] = record.stagedPath
+                tunnelOwners[record.handle] = record.owner
+                watchAdoptedExitLocked(handle: record.handle, pid: pid, stage: record.stagedPath)
+            case .wireGuard:
+                guard FileManager.default.fileExists(atPath: record.stagedPath),
+                      Self.interfaceExists(record.handle) else {
+                    try? FileManager.default.removeItem(atPath: record.stagedPath)
+                    try? FileManager.default.removeItem(atPath: path)
+                    continue
+                }
+                wgTunnels[record.handle] = record.stagedPath
+                tunnelOwners[record.handle] = record.owner
+            }
+        }
+    }
+
+    /// An adopted openvpn isn't our child, so there is no termination handler:
+    /// watch its pid instead and forget it the moment it exits on its own.
+    private func watchAdoptedExitLocked(handle: String, pid: pid_t, stage: String) {
+        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: tunnelsQueue)
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.adoptedExitSources.removeValue(forKey: handle)?.cancel()
+            guard self.adoptedOpenVPN.removeValue(forKey: handle) != nil else { return }
+            self.tunnelOwners[handle] = nil
+            self.ovpnStages[handle] = nil
+            try? FileManager.default.removeItem(atPath: stage)
+            Self.removeRecord(handle: handle)
+        }
+        adoptedExitSources[handle] = source
+        source.resume()
+        // Exited between the check and the watch: the source never fires.
+        if !ProcessInfoLookup.isAlive(pid) {
+            source.cancel()
+            adoptedExitSources[handle] = nil
+            adoptedOpenVPN[handle] = nil
+            tunnelOwners[handle] = nil
+            ovpnStages[handle] = nil
+            try? FileManager.default.removeItem(atPath: stage)
+            Self.removeRecord(handle: handle)
         }
     }
 

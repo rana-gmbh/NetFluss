@@ -34,8 +34,10 @@ struct VPNSectionView: View {
         return vpn.profiles.first
     }
 
+    /// Also true after a Disconnect that couldn't stop the tunnel, so the
+    /// button stays Disconnect rather than starting a second connection.
     private func isActive(_ profile: VPNProfile) -> Bool {
-        vpn.status.profileID == profile.id && vpn.status.state.isActive
+        vpn.status.profileID == profile.id && (vpn.status.state.isActive || vpn.stopFailed)
     }
 
     var body: some View {

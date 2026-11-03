@@ -111,6 +111,7 @@ enum PreferenceSearch {
         Entry("Off", .appearance),
         Entry("Dot", .appearance),
         Entry("Shield", .appearance),
+        Entry("Lock shield", .appearance),
         Entry("VPN indicator", .appearance),
         Entry("VPN indicator color", .appearance),
         Entry("Show when VPN is off", .appearance),

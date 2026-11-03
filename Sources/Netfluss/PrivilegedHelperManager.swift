@@ -174,6 +174,13 @@ actor PrivilegedHelperManager {
         }
     }
 
+    /// Handles of the tunnels the helper runs for `owner`, one per line in `stdout`.
+    func listVPNTunnels(owner: String) async -> CommandResult? {
+        await performIfAvailable { helper, reply in
+            helper.listVPNTunnels(owner: owner, withReply: reply)
+        }
+    }
+
     func connectNativeVPN(serviceName: String) async -> CommandResult? {
         await performIfAvailable { helper, reply in
             helper.connectNativeVPN(serviceName: serviceName, withReply: reply)

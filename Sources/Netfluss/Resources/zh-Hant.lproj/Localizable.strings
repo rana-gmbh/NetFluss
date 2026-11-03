@@ -424,6 +424,7 @@
 "Off" = "關閉";
 "Dot" = "圓點";
 "Shield" = "盾牌";
+"Lock shield" = "帶鎖盾牌";
 "VPN indicator color" = "VPN 指示器顏色";
 "Show when VPN is off" = "VPN 關閉時也顯示";
 "Show flag only while a VPN is active" = "僅在 VPN 啟用時顯示旗幟";
@@ -539,6 +540,7 @@
 "Could not start the VPN helper." = "無法啟動 VPN 輔助程式。";
 "This VPN needs a username and password. Add them in the profile's settings and reconnect." = "此 VPN 需要使用者名稱和密碼。請在設定檔設定中新增後重新連線。";
 "The VPN connection stopped." = "VPN 連線已停止。";
+"NetFluss couldn't stop the VPN tunnel, so it may still be up. Try Disconnect again." = "NetFluss 無法停止 VPN 通道，它可能仍在執行。請再次按下「中斷連線」。";
 "This IKEv2 profile is missing its server settings." = "此 IKEv2 設定檔缺少伺服器設定。";
 "The VPN password isn't stored — remove the profile and add it again." = "未儲存 VPN 密碼——請移除此設定檔後重新加入。";
 "No system VPN service is associated with this profile." = "此設定檔未關聯任何系統 VPN 服務。";

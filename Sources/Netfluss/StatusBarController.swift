@@ -1584,7 +1584,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
 
         var vpnMark: MenuBarAccessories.VPNMark?
         var vpnKey = "none"
-        if indicator == "dot" || indicator == "shield", vpnActive || showWhenOff {
+        if indicator == "dot" || indicator == "shield" || indicator == "lockShield", vpnActive || showWhenOff {
             let colorName = defaults.string(forKey: "menuBarVPNIndicatorColor") ?? "green"
             let colorHex = defaults.string(forKey: "menuBarVPNIndicatorColorHex") ?? ""
             var activeColor = resolvedAccentNSColor(selection: colorName, customHex: colorHex, fallback: .systemGreen)
@@ -1605,8 +1605,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             } else {
                 // `shield.slash` is the shape from the issue's mockup; the lock
                 // inside `lock.shield.fill` turns to mush below ~16 pt, so the
-                // active state is the plain filled shield.
-                let symbolName = vpnActive ? "shield.fill" : "shield.slash"
+                // Shield style's active state is the plain filled shield. Lock
+                // shield is the outline `lock.shield` of the Preferences toolbar,
+                // which stays readable at the smallest size (issue #68).
+                let activeSymbol = indicator == "lockShield" ? "lock.shield" : "shield.fill"
+                let symbolName = vpnActive ? activeSymbol : "shield.slash"
                 let key = "\(symbolName)|\(colorName)|\(colorHex)|\(style.rawValue)|\(isDarkAppearance)|\(markSize)"
                 let image = accessoryImage(key) {
                     let configuration = NSImage.SymbolConfiguration(pointSize: markSize, weight: .semibold)
