@@ -35,6 +35,17 @@ Every release is built from this repository by [GitHub Actions](.github/workflow
 
 **Privacy:** see the privacy policy for [Windows](PRIVACY.md) or [Mac](PRIVACY-macOS.md). NetFluss sends no telemetry. The few online lookups it makes on its own — the daily update check and the public IP and country lookups — are listed there, and each can be switched off in Preferences, and on Windows in the installer too.
 
+## New in 2.7.2
+
+- **Two new looks for the VPN indicator.** Besides the dot and the shield, the menu bar VPN mark can now be a **Globe** — a network globe with a shield badge, crossed out when off — or **Bars**, the same artwork macOS uses for its own VPN menu. All four take your chosen colour and dim while the tunnel is down. Preferences → Appearance.
+- **VPN that stops when you tell it to.** Disconnect now waits until the tunnel is really gone (#68). Quitting, updating or logging out takes the connection down first, and a tunnel left behind by a crash is cleaned up. VPNs you set up in System Settings are followed live.
+- **Safer VPN configs.** Before an imported config runs, NetFluss checks it and refuses anything that could run code as root: WireGuard `PreUp`/`PostUp`/`PreDown`/`PostDown` lines, and OpenVPN plugins and file-writing options. It then runs a private copy that nothing else can change. The bundled tools are updated to OpenVPN 2.6.19 and OpenSSL 3.5.8, and their signature is checked before they run.
+- **More stable.** DNS rules now work with the link indicator switched off, stop retrying a resolver that won't take, and say when a rule is waiting for the connection (#69). Damaged statistics are restored from a daily backup instead of being lost. System commands can no longer hang the app.
+- **Easier to find your way.** A gear button in the popover opens the menu, Preferences has a search field, and a new install starts with a short welcome. VoiceOver can now read the menu bar and the popover's buttons.
+- **A switch for the public IP lookups**, in Preferences → General, and a [privacy policy for the Mac app](PRIVACY-macOS.md).
+
+OpenVPN and WireGuard now need macOS 14 or later; IKEv2 and system VPNs still work on macOS 13.
+
 ## New in 2.7
 
 - **Automatic DNS by Wi-Fi network — the right resolver wherever you are.** Give a network a rule and NetFluss switches the resolver when you join it: your own DNS at home, something else on café Wi-Fi.
@@ -198,7 +209,7 @@ Every release is built from this repository by [GitHub Actions](.github/workflow
 - Monospaced digits for stable layout
 - Configurable font size (8–16 pt), font style (Monospaced / System / Rounded), pinned unit, and decimal precision
 - **Icon mode** — switch to a single symbol in the menu bar and choose between multiple icon options, including the NetFluss app-style icon
-- **VPN indicator & country flag** — optional marks right of the rates: a VPN status dot or shield (custom colour, dimmed while the tunnel is down, optionally hidden altogether when disconnected) that works with NetFluss' built-in VPN connections and with external VPN clients (Tunnelblick, WireGuard, Mullvad, Tailscale, macOS VPN settings, …), plus the flag of your public IP's country, which can be limited to the times a tunnel is actually up. Both marks share one size setting, independent of the rate font.
+- **VPN indicator & country flag** — optional marks right of the rates: a VPN status dot, shield, globe or bars (custom colour, dimmed while the tunnel is down, optionally hidden altogether when disconnected) that works with NetFluss' built-in VPN connections and with external VPN clients (Tunnelblick, WireGuard, Mullvad, Tailscale, macOS VPN settings, …), plus the flag of your public IP's country, which can be limited to the times a tunnel is actually up. Both marks share one size setting, independent of the rate font.
 - **Wi-Fi / Ethernet link indicator** — an optional symbol that follows the interface carrying your traffic and colours itself by state: connected, connected without internet (captive portal or dead upstream), or not connected. All three colours are configurable
 - **Active DNS resolver** — optionally show the current resolver's name in the menu bar, in a colour of your choosing, shown only while it differs from the system default
 - **Launch at login** — toggle in Preferences → Launch
@@ -274,6 +285,7 @@ Every release is built from this repository by [GitHub Actions](.github/workflow
 - **Auto-reconnect** — automatically re-establish a dropped tunnel, with exponential backoff
 - **Connect on launch** — start a chosen profile automatically when NetFluss launches
 - **Profile management** — import, rename, reorder, and delete profiles in Preferences → VPN; credentials stored securely in the macOS Keychain
+- **Config checks** — imported configs are checked before they run, and anything that could run code with administrator rights (WireGuard `PostUp`-style hooks, OpenVPN plugins) is refused
 - **VPN Diagnostics** — a log in Preferences → VPN recording the bundled tools, their architecture, and the connection tool's full output; copy it to the clipboard in one click for bug reports
 
 ### Statistics
