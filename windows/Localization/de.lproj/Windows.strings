@@ -258,7 +258,7 @@
 
 /* 2.7 automatic DNS and renamed profiles */
 "Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." = "Wählt den Resolver anhand des WLANs, mit dem du dich verbindest — einen für zu Hause, einen für öffentliche Netze. Benötigt den NetFluss-Helfer (Allgemein → Systemzugriff), sonst würde jeder Wechsel nach einer Administratorbestätigung fragen.";
-"No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube den Standortzugriff auf der Seite WLAN — ohne ihn gibt Windows den Netzwerknamen nicht preis.";
+"No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube den Standortzugriff unter Allgemein → Systemzugriff — ohne ihn gibt Windows den Netzwerknamen nicht preis.";
 "Install the privileged helper to let NetFluss change DNS without asking each time." = "Installiere den NetFluss-Helfer (Allgemein → Systemzugriff), damit NetFluss DNS ändern kann, ohne jedes Mal zu fragen.";
 "Leave empty to restore the original name." = "Leer lassen, um den ursprünglichen Namen wiederherzustellen.";
 

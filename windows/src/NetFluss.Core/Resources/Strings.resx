@@ -1913,7 +1913,7 @@ No network traffic is sent — only local counters from your machine are recorde
     <value>Using {0} on {1}.</value>
   </data>
   <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
-    <value>No Wi-Fi network name is available. Join a Wi-Fi network, or allow location access on the Wi-Fi page — Windows withholds the network name without it.</value>
+    <value>No Wi-Fi network name is available. Join a Wi-Fi network, or allow location access under General → System access — Windows withholds the network name without it.</value>
   </data>
   <data name="Resolver name colour" xml:space="preserve">
     <value>Resolver name colour</value>

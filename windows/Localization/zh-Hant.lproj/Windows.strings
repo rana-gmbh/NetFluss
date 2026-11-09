@@ -258,7 +258,7 @@
 
 /* 2.7 automatic DNS and renamed profiles */
 "Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." = "根據你連線的 Wi-Fi 網路選擇解析器——家裡用一個，公共網路用另一個。需要 NetFluss 輔助工具（一般 → 系統存取），否則每次切換都會要求管理員核准。";
-"No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "無法取得 Wi-Fi 網路名稱。請連線 Wi-Fi 網路，或在 Wi-Fi 頁面允許位置存取——否則 Windows 不會提供網路名稱。";
+"No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "無法取得 Wi-Fi 網路名稱。請連線 Wi-Fi 網路，或在「一般 → 系統存取」中允許位置存取——否則 Windows 不會提供網路名稱。";
 "Install the privileged helper to let NetFluss change DNS without asking each time." = "安裝 NetFluss 輔助工具（一般 → 系統存取），讓 NetFluss 無需每次詢問即可變更 DNS。";
 "Leave empty to restore the original name." = "留空以還原原始名稱。";
 

@@ -10,19 +10,19 @@ Latest release: **NetFluss 2.6**
 
 ## NetFluss for Windows — public beta
 
-NetFluss now runs on Windows too: a native Windows 10 and 11 app with the same feature set as NetFluss 2.6 for Mac — live rates on the taskbar, the popover, Bandwidth Statistics, Speed Test, Network Slice, router monitoring and the built-in VPN client.
+NetFluss now runs on Windows too: a native Windows 10 and 11 app with the same feature set as NetFluss 2.7.2 for Mac — live rates on the taskbar, the popover, Bandwidth Statistics, Speed Test, Network Slice, router monitoring, automatic DNS and the built-in VPN client.
 
-**[Download NetFluss 2.6 Beta 2 for Windows](https://github.com/rana-gmbh/NetFluss/releases/tag/win-v2.6.0-beta.2)** — the installer needs no administrator rights and keeps itself up to date. The beta is not yet code-signed for Windows, so SmartScreen asks you to confirm the first start (**More info → Run anyway**). Feedback is very welcome: [open an issue](https://github.com/rana-gmbh/NetFluss/issues/new) and mention Windows. Building it yourself is described in [windows/README.md](windows/README.md).
+**[Download NetFluss 2.7.2 Beta for Windows](https://github.com/rana-gmbh/NetFluss/releases/tag/win-v2.7.2-beta.1)** — the installer needs no administrator rights and keeps itself up to date. The beta is not yet code-signed with a trusted certificate, so SmartScreen asks you to confirm the first start (**More info → Run anyway**). Feedback is very welcome: [open an issue](https://github.com/rana-gmbh/NetFluss/issues/new) and mention Windows. Building it yourself is described in [windows/README.md](windows/README.md).
 
-### New in Windows Beta 2
+### New in Windows 2.7.2 Beta
 
-- **One program file.** NetFluss is now a single `NetFluss.exe`; the only other files are Microsoft's own signed libraries. Beta 1 shipped its code as many separate files, and Windows' Smart App Control could block one of them minutes after NetFluss had started, which ended the app.
-- **No more vanishing on sleep.** Saving statistics and the Traffic Timer as the PC went to sleep could end NetFluss; it no longer can.
-- **Crash reports that name the cause.** If NetFluss ever quits unexpectedly, the next start says so and keeps what Windows recorded. Click the notification to see it, and please include it in a report.
-- **Easier to find on first launch.** NetFluss says where it is running and opens its popover there — Windows hides new icons behind the **^** next to the clock, which made the app look like it had quit.
-- **Clearer helper messages.** A helper newer than the app is no longer called "out of date", and quitting or updating NetFluss no longer logs errors on the way out.
+- **Automatic DNS by Wi-Fi network**, with rules pinned to an access point if you like, a catch-all for other networks, and patience for hotel and café logins.
+- **A connection indicator** next to the rates (connected, no internet, not connected), the **active resolver's name**, two new VPN marks (**Globe** and **Bars**) and a **rate alignment** setting. The two-line layout now keeps upload and download together.
+- **Renamable DNS profiles**, **per-node proxy statistics** for Clash-API clients, **Search settings** in Preferences and a short welcome on new installs.
+- **Disconnect really disconnects:** quitting, updating or signing out takes the VPN down, a tunnel left by a crash is cleaned up, and Windows VPN connections are followed live.
+- **Imported WireGuard configs are checked:** script lines that could run with administrator rights are refused, naming the line. Unreadable statistics are restored from a daily backup.
 
-Updating from Beta 1: the installed version offers Beta 2 by itself (About → Install and Relaunch). Top Apps then asks once to update the helper, which needs administrator approval.
+Updating from Beta 2: the installed version offers this update by itself (About → Install and Relaunch). NetFluss then asks once to update the helper, which needs administrator approval.
 
 ### Code signing policy
 

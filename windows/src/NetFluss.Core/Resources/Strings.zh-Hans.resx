@@ -1913,7 +1913,7 @@
     <value>在 {0} 上使用 {1}。</value>
   </data>
   <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
-    <value>无法获取 Wi-Fi 网络名称。请连接 Wi-Fi 网络，或在 Wi-Fi 页面允许位置访问——否则 Windows 不会提供网络名称。</value>
+    <value>无法获取 Wi-Fi 网络名称。请连接 Wi-Fi 网络，或在“通用 → 系统访问”中允许位置访问——否则 Windows 不会提供网络名称。</value>
   </data>
   <data name="Resolver name colour" xml:space="preserve">
     <value>解析器名称颜色</value>

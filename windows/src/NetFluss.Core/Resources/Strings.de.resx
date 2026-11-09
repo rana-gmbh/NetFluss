@@ -1913,7 +1913,7 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
     <value>Verwendet {0} in {1}.</value>
   </data>
   <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
-    <value>Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube den Standortzugriff auf der Seite WLAN — ohne ihn gibt Windows den Netzwerknamen nicht preis.</value>
+    <value>Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube den Standortzugriff unter Allgemein → Systemzugriff — ohne ihn gibt Windows den Netzwerknamen nicht preis.</value>
   </data>
   <data name="Resolver name colour" xml:space="preserve">
     <value>Farbe des Resolver-Namens</value>
