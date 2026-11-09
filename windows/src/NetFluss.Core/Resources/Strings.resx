@@ -2821,4 +2821,22 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="This WireGuard config was refused because line {0} (“{1}”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import." xml:space="preserve">
     <value>This WireGuard config was refused because line {0} (“{1}”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import.</value>
   </data>
+  <data name="DNS switching and OpenVPN or WireGuard use the optional NetFluss helper (Preferences → General → System access). Without it, each DNS change asks for administrator approval." xml:space="preserve">
+    <value>DNS switching and OpenVPN or WireGuard use the optional NetFluss helper (Preferences → General → System access). Without it, each DNS change asks for administrator approval.</value>
+  </data>
+  <data name="Open Startup apps…" xml:space="preserve">
+    <value>Open Startup apps…</value>
+  </data>
+  <data name="This copy of NetFluss is not running from its own program file, so Windows cannot start it at sign-in." xml:space="preserve">
+    <value>This copy of NetFluss is not running from its own program file, so Windows cannot start it at sign-in.</value>
+  </data>
+  <data name="Windows has switched NetFluss off in Startup apps, so it will not start at sign-in. Turn it back on there." xml:space="preserve">
+    <value>Windows has switched NetFluss off in Startup apps, so it will not start at sign-in. Turn it back on there.</value>
+  </data>
+  <data name="Your live network speed is now in the notification area. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
+    <value>Your live network speed is now in the notification area. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more.</value>
+  </data>
+  <data name="Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
+    <value>Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more.</value>
+  </data>
 </root>

@@ -114,6 +114,8 @@ public partial class NetFlussApplication : Application
         var uncleanSince = SessionGuard.Begin();
         _ownsSession = true;
 
+        // A new install has no settings file yet; read before the store writes one.
+        var firstLaunch = !System.IO.File.Exists(SettingsStore.DefaultPath);
         _store = new SettingsStore(SettingsStore.DefaultPath);
         ApplyInstallerChoices(_store);
         NetFluss.Core.Localization.Use(_store.Settings.Language);
@@ -223,6 +225,11 @@ public partial class NetFlussApplication : Application
         // opened later already knows whether per-app traffic is available.
         _helper.EnsureConnecting();
         _updates.Start();
+
+        if (firstLaunch)
+        {
+            ShowWelcome();
+        }
         _vpn.ConnectOnLaunchIfNeeded();
 
         // Sign-out, shutdown and sleep must not lose the last few minutes of history or a
@@ -537,7 +544,18 @@ public partial class NetFlussApplication : Application
                 preferences.ContentRendered += (_, _) => preferences.ScrollToEnd();
             }
 
+            // "preferences:general:search=dns server" shows the results for a query.
+            if (parts.FirstOrDefault(part => part.StartsWith("search=", StringComparison.Ordinal)) is { } query)
+            {
+                preferences.SetSearchText(query["search=".Length..].Replace('+', ' '));
+            }
+
             window = preferences;
+        }
+        else if (target == "welcome" && _store is not null)
+        {
+            var (surface, download, upload) = Palette();
+            window = new WelcomeWindow(_store, surface, download, upload, () => { });
         }
         else if (target == "menu" && _commands is not null)
         {
@@ -1013,6 +1031,20 @@ public partial class NetFlussApplication : Application
     {
         var (surface, download, upload) = Palette();
         return new NetworkSliceWindow(_monitor!, _traffic!, _helper!, _store!, surface, download, upload, demo);
+    }
+
+    /// <summary>The once-only welcome for a new install (macOS 2.7.2).</summary>
+    private void ShowWelcome()
+    {
+        if (_store is null)
+        {
+            return;
+        }
+
+        var (surface, download, upload) = Palette();
+        var welcome = new WelcomeWindow(_store, surface, download, upload, () => ShowPreferences());
+        welcome.Show();
+        welcome.Activate();
     }
 
     private void ShowAbout()

@@ -21,7 +21,27 @@ namespace NetFluss.App;
 internal static class LaunchAtLogin
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string ApprovedKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
     private const string ValueName = "NetFluss";
+
+    /// <summary>
+    /// Whether Task Manager or Settings → Apps → Startup has switched the entry off. The Run
+    /// value stays, so the switch would read "on" while Windows skips NetFluss at sign-in —
+    /// the Windows form of the macOS 2.7.1 "waiting for approval" state. Windows records the
+    /// choice in StartupApproved: an odd first byte means disabled.
+    /// </summary>
+    internal static bool IsDisabledByWindows()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(ApprovedKey);
+            return key?.GetValue(ValueName) is byte[] { Length: > 0 } state && (state[0] & 1) == 1;
+        }
+        catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     internal static bool IsEnabled()
     {
@@ -36,33 +56,35 @@ internal static class LaunchAtLogin
         }
     }
 
-    internal static void Set(bool enabled)
+    /// <summary>
+    /// Writes or removes the Run entry. Null on success, else why not — shown under the switch
+    /// rather than swallowed, so it never just flips back with no explanation (macOS 2.7.1).
+    /// </summary>
+    internal static string? Set(bool enabled)
     {
         try
         {
-            using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
-            if (key is null)
-            {
-                return;
-            }
-
+            using var key = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
             if (!enabled)
             {
                 key.DeleteValue(ValueName, throwOnMissingValue: false);
-                return;
+                return null;
             }
 
-            if (ExecutablePath() is { } path)
+            if (ExecutablePath() is not { } path)
             {
-                // Quoted: the default install path contains a space, and an unquoted Run
-                // entry would have Windows try to launch "C:\Program".
-                key.SetValue(ValueName, $"\"{path}\"", RegistryValueKind.String);
+                return Localization.L("This copy of NetFluss is not running from its own program file, so Windows cannot start it at sign-in.");
             }
+
+            // Quoted: the default install path contains a space, and an unquoted Run
+            // entry would have Windows try to launch "C:\Program".
+            key.SetValue(ValueName, $"\"{path}\"", RegistryValueKind.String);
+            return null;
         }
         catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException or IOException)
         {
-            // A locked-down profile can forbid this. The preference simply will not stick,
-            // and the toggle re-reads to show that rather than claiming success.
+            // A locked-down profile can forbid this.
+            return e.Message;
         }
     }
 

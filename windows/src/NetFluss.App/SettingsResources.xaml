@@ -72,6 +72,7 @@
     <Style x:Key="SetButton" TargetType="Button">
         <Setter Property="FontFamily" Value="{StaticResource SetFont}" />
         <Setter Property="FontSize" Value="13" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="Padding" Value="12,5" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
@@ -84,7 +85,7 @@
                             BorderThickness="1"
                             CornerRadius="4"
                             Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">

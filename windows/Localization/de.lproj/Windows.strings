@@ -266,3 +266,11 @@
 "The command did not finish in time." = "Der Befehl wurde nicht rechtzeitig fertig.";
 "This WireGuard config was refused because it contains a NUL byte. Fix it and re-import." = "Diese WireGuard-Konfiguration wurde abgelehnt, weil sie ein NUL-Byte enthält. Korrigiere sie und importiere sie erneut.";
 "This WireGuard config was refused because line %@ (“%@”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import." = "Diese WireGuard-Konfiguration wurde abgelehnt, weil Zeile %@ („%@“) keine Einstellung ist, die NetFluss mit Administratorrechten ausführt. Entferne diese Zeile und importiere die Konfiguration erneut.";
+
+/* 2.7.1/2.7.2: launch explanations, welcome window */
+"DNS switching and OpenVPN or WireGuard use the optional NetFluss helper (Preferences → General → System access). Without it, each DNS change asks for administrator approval." = "DNS-Wechsel sowie OpenVPN und WireGuard nutzen den optionalen NetFluss-Helfer (Einstellungen → Allgemein → Systemzugriff). Ohne ihn fragt jede DNS-Änderung nach einer Administratorbestätigung.";
+"Open Startup apps…" = "Autostart-Apps öffnen…";
+"This copy of NetFluss is not running from its own program file, so Windows cannot start it at sign-in." = "Diese Kopie von NetFluss läuft nicht aus ihrer eigenen Programmdatei, daher kann Windows sie bei der Anmeldung nicht starten.";
+"Windows has switched NetFluss off in Startup apps, so it will not start at sign-in. Turn it back on there." = "Windows hat NetFluss in den Autostart-Apps deaktiviert, daher startet es bei der Anmeldung nicht. Aktiviere es dort wieder.";
+"Your live network speed is now in the notification area. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." = "Deine aktuelle Netzwerkgeschwindigkeit steht jetzt im Infobereich. Klicke darauf für Details; die Schaltfläche „Mehr“ öffnet Einstellungen, Statistiken, Speedtest und mehr.";
+"Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." = "Deine aktuelle Netzwerkgeschwindigkeit steht jetzt in der Taskleiste neben der Uhr. Klicke darauf für Details; die Schaltfläche „Mehr“ öffnet Einstellungen, Statistiken, Speedtest und mehr.";

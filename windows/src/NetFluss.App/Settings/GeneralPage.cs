@@ -19,6 +19,10 @@ internal static class GeneralPage
         var settings = context.Settings;
         var page = new StackPanel();
 
+        // First, as on macOS 2.7.1: it is the setting people come here for.
+        page.Children.Add(Kit.Header(Kit.L("Launch")));
+        page.Children.Add(LaunchCard(owner));
+
         page.Children.Add(Kit.Header(Kit.L("System access")));
         page.Children.Add(LocationCard());
         page.Children.Add(HelperCard(context));
@@ -41,18 +45,6 @@ internal static class GeneralPage
             Kit.L("Display rates in bits per second"),
             Kit.L("Bytes per second, or bits as ISPs quote them."),
             Kit.Switch(settings, nameof(AppSettings.UseBits))));
-
-        page.Children.Add(Kit.Header(Kit.L("Launch")));
-        CheckBox? launch = null;
-        launch = Kit.Switch(LaunchAtLogin.IsEnabled(), on =>
-        {
-            // Windows owns this one, not the settings file: the Run key is what actually
-            // starts the app, and the user can remove it from Task Manager behind our back.
-            // So write it, then show what the registry now says.
-            LaunchAtLogin.Set(on);
-            launch!.IsChecked = LaunchAtLogin.IsEnabled();
-        });
-        page.Children.Add(Kit.Card(Kit.L("Start with Windows"), Kit.L("Adds NetFluss to your sign-in apps, where Task Manager can also turn it off."), launch));
 
         page.Children.Add(Kit.Header(Kit.L("Refresh")));
         page.Children.Add(Kit.Card(
@@ -241,5 +233,66 @@ internal static class GeneralPage
         catch (System.ComponentModel.Win32Exception)
         {
         }
+    }
+
+    /// <summary>
+    /// Start with Windows, explaining itself (macOS 2.7.1). Windows owns this state, not the
+    /// settings file — the Run key is what starts the app, and Task Manager can switch it off
+    /// behind NetFluss's back — so it is read back after every change and whenever the window
+    /// comes back to the front, which is when the user returns from Windows Settings.
+    /// </summary>
+    private static FrameworkElement LaunchCard(Window owner)
+    {
+        var note = Kit.Caption(string.Empty);
+        note.Visibility = Visibility.Collapsed;
+        var open = Kit.Button(Kit.L("Open Startup apps…"), () =>
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:startupapps") { UseShellExecute = true })?.Dispose();
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+            }
+        });
+        open.HorizontalAlignment = HorizontalAlignment.Left;
+        open.Margin = new Thickness(0, 8, 0, 0);
+        open.Visibility = Visibility.Collapsed;
+
+        string? error = null;
+        CheckBox? launch = null;
+
+        void Refresh()
+        {
+            var on = LaunchAtLogin.IsEnabled();
+            var blocked = on && LaunchAtLogin.IsDisabledByWindows();
+            launch!.IsChecked = on;
+
+            note.Text = error ?? (blocked
+                ? Kit.L("Windows has switched NetFluss off in Startup apps, so it will not start at sign-in. Turn it back on there.")
+                : string.Empty);
+            note.Visibility = string.IsNullOrEmpty(note.Text) ? Visibility.Collapsed : Visibility.Visible;
+            note.SetResourceReference(TextBlock.ForegroundProperty, "WarningBrush");
+            open.Visibility = blocked && error is null ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        launch = Kit.Switch(LaunchAtLogin.IsEnabled(), on =>
+        {
+            error = LaunchAtLogin.Set(on);
+            Refresh();
+        });
+
+        var left = new StackPanel();
+        left.Children.Add(Kit.Text(Kit.L("Start with Windows")));
+        left.Children.Add(Kit.Caption(Kit.L("Adds NetFluss to your sign-in apps, where Task Manager can also turn it off.")));
+        left.Children.Add(note);
+        left.Children.Add(open);
+
+        var card = Kit.Card(left, launch);
+        void OnActivated(object? sender, EventArgs e) => Refresh();
+        card.Loaded += (_, _) => owner.Activated += OnActivated;
+        card.Unloaded += (_, _) => owner.Activated -= OnActivated;
+        Refresh();
+        return card;
     }
 }

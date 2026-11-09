@@ -2821,4 +2821,22 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="This WireGuard config was refused because line {0} (“{1}”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import." xml:space="preserve">
     <value>Diese WireGuard-Konfiguration wurde abgelehnt, weil Zeile {0} („{1}“) keine Einstellung ist, die NetFluss mit Administratorrechten ausführt. Entferne diese Zeile und importiere die Konfiguration erneut.</value>
   </data>
+  <data name="DNS switching and OpenVPN or WireGuard use the optional NetFluss helper (Preferences → General → System access). Without it, each DNS change asks for administrator approval." xml:space="preserve">
+    <value>DNS-Wechsel sowie OpenVPN und WireGuard nutzen den optionalen NetFluss-Helfer (Einstellungen → Allgemein → Systemzugriff). Ohne ihn fragt jede DNS-Änderung nach einer Administratorbestätigung.</value>
+  </data>
+  <data name="Open Startup apps…" xml:space="preserve">
+    <value>Autostart-Apps öffnen…</value>
+  </data>
+  <data name="This copy of NetFluss is not running from its own program file, so Windows cannot start it at sign-in." xml:space="preserve">
+    <value>Diese Kopie von NetFluss läuft nicht aus ihrer eigenen Programmdatei, daher kann Windows sie bei der Anmeldung nicht starten.</value>
+  </data>
+  <data name="Windows has switched NetFluss off in Startup apps, so it will not start at sign-in. Turn it back on there." xml:space="preserve">
+    <value>Windows hat NetFluss in den Autostart-Apps deaktiviert, daher startet es bei der Anmeldung nicht. Aktiviere es dort wieder.</value>
+  </data>
+  <data name="Your live network speed is now in the notification area. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
+    <value>Deine aktuelle Netzwerkgeschwindigkeit steht jetzt im Infobereich. Klicke darauf für Details; die Schaltfläche „Mehr“ öffnet Einstellungen, Statistiken, Speedtest und mehr.</value>
+  </data>
+  <data name="Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
+    <value>Deine aktuelle Netzwerkgeschwindigkeit steht jetzt in der Taskleiste neben der Uhr. Klicke darauf für Details; die Schaltfläche „Mehr“ öffnet Einstellungen, Statistiken, Speedtest und mehr.</value>
+  </data>
 </root>

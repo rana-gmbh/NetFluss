@@ -59,7 +59,14 @@ internal sealed class PreferencesWindow : Window
     private readonly ContentControl _page = new();
     private readonly TextBlock _title;
     private readonly ScrollViewer _scroller;
+    private readonly TextBox _search = new();
+    private readonly TextBlock _searchHint;
     private string _current = "general";
+
+    /// <summary>Every text on every page, by page — built on the first search, dropped on a language change.</summary>
+    private List<(string Text, string Key)>? _index;
+
+    private const int MaxSearchResults = 40;
 
     private static readonly (string Key, string Glyph, string Label)[] Pages =
     [
@@ -121,13 +128,49 @@ internal sealed class PreferencesWindow : Window
         right.Children.Add(_title);
         right.Children.Add(_scroller);
 
+        // "Search settings" above the navigation, where Windows Settings has its own (macOS 2.7.2).
+        _searchHint = Kit.Text(Kit.L("Search settings"), 14, "SecondaryTextBrush");
+        _searchHint.IsHitTestVisible = false;
+        _searchHint.Margin = new Thickness(10, 0, 0, 0);
+        _search.VerticalContentAlignment = VerticalAlignment.Center;
+        _search.Height = 34;
+        System.Windows.Automation.AutomationProperties.SetName(_search, Kit.L("Search settings"));
+        _search.TextChanged += (_, _) => Search(_search.Text);
+        _search.KeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.Escape && _search.Text.Length > 0)
+            {
+                _search.Clear();
+                e.Handled = true;
+            }
+        };
+        var searchBox = new Grid { Margin = new Thickness(24, 20, 20, 0) };
+        searchBox.Children.Add(_search);
+        searchBox.Children.Add(_searchHint);
+
+        var left = new DockPanel();
+        DockPanel.SetDock(searchBox, Dock.Top);
+        left.Children.Add(searchBox);
+        left.Children.Add(_nav);
+
         var root = new Grid();
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         Grid.SetColumn(right, 1);
-        root.Children.Add(_nav);
+        root.Children.Add(left);
         root.Children.Add(right);
         Content = root;
+
+        // Ctrl+F, as in every Windows window with a search box.
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.F && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+            {
+                _search.Focus();
+                _search.SelectAll();
+                e.Handled = true;
+            }
+        };
 
         BuildNav();
         Show(_current);
@@ -140,6 +183,9 @@ internal sealed class PreferencesWindow : Window
             {
                 Dispatcher.BeginInvoke(() =>
                 {
+                    _index = null;
+                    _searchHint.Text = Kit.L("Search settings");
+                    _search.Clear();
                     BuildNav();
                     Show(_current);
                 });
@@ -156,6 +202,9 @@ internal sealed class PreferencesWindow : Window
     /// <summary>Opens on a pane by key ("dns", "adapters", …), for deep links and the harness.</summary>
     /// <summary>For the snapshot harness: shows the end of a long page.</summary>
     internal void ScrollToEnd() => _scroller.ScrollToEnd();
+
+    /// <summary>For the snapshot harness: shows the results for a query.</summary>
+    internal void SetSearchText(string text) => _search.Text = text;
 
     internal void SelectTab(string key)
     {
@@ -225,6 +274,158 @@ internal sealed class PreferencesWindow : Window
         };
 
         _scroller.ScrollToTop();
+    }
+
+    // ===================================== Search =====================================
+
+    /// <summary>
+    /// Finds a setting by what it says on screen, across every page. The pages are built in
+    /// code, so instead of the hand-kept list the Mac needs, each page is built once, unshown,
+    /// and its text read off — a new setting is searchable the day it is added. Building is
+    /// free of side effects: pages only subscribe to anything once they are loaded.
+    /// </summary>
+    private void Search(string query)
+    {
+        _searchHint.Visibility = query.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var words = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0)
+        {
+            Show(_current);
+            return;
+        }
+
+        _index ??= BuildIndex();
+        var compare = Localization.Culture.CompareInfo;
+        const System.Globalization.CompareOptions options =
+            System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace | System.Globalization.CompareOptions.IgnoreWidth;
+
+        // Labels ahead of the longer explanations, as on macOS.
+        var results = _index
+            .Where(entry => words.All(word => compare.IndexOf(entry.Text, word, options) >= 0))
+            .OrderBy(entry => entry.Text.Length)
+            .Take(MaxSearchResults)
+            .ToList();
+
+        foreach (var item in _nav.Items.OfType<ListBoxItem>())
+        {
+            item.IsSelected = false;
+        }
+
+        _title.Text = Kit.L("Search settings");
+        var list = new StackPanel();
+        if (results.Count == 0)
+        {
+            list.Children.Add(Kit.Caption(Kit.L("No matching settings")));
+        }
+
+        foreach (var (text, key) in results)
+        {
+            var label = Kit.Text(text, 14);
+            label.TextTrimming = TextTrimming.CharacterEllipsis;
+            label.MaxHeight = 40;
+            var page = Kit.Text(Kit.L(Pages.First(p => p.Key == key).Label), 12, "SecondaryTextBrush");
+            page.Margin = new Thickness(16, 0, 0, 0);
+
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(page, 1);
+            row.Children.Add(label);
+            row.Children.Add(page);
+
+            var button = new Button { Content = row, HorizontalContentAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 0, 6) };
+            button.SetResourceReference(StyleProperty, "SetButton");
+            System.Windows.Automation.AutomationProperties.SetName(button, text);
+            button.Click += (_, _) => Reveal(key, text);
+            list.Children.Add(button);
+        }
+
+        _page.Content = list;
+        _scroller.ScrollToTop();
+    }
+
+    /// <summary>Opens the page and scrolls the matching text into view.</summary>
+    private void Reveal(string key, string text)
+    {
+        // Clearing the box would show the page the search started from; show the hit's instead.
+        _current = key;
+        _search.Text = string.Empty;
+
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () =>
+        {
+            if (Texts(_page.Content as DependencyObject).FirstOrDefault(t => t.Block.Text == text).Block is { } target)
+            {
+                target.BringIntoView();
+            }
+        });
+    }
+
+    private List<(string Text, string Key)> BuildIndex()
+    {
+        var index = new List<(string Text, string Key)>();
+        var seen = new HashSet<(string, string)>();
+        foreach (var (key, _, label) in Pages)
+        {
+            FrameworkElement? page;
+            try
+            {
+                page = key switch
+                {
+                    "general" => GeneralPage.Build(_context, this),
+                    "taskbar" => TaskbarPage.Build(_context),
+                    "appearance" => AppearancePage.Build(_context),
+                    "adapters" => AdaptersPage.Build(_context),
+                    "statistics" => StatisticsPage.Build(_context),
+                    "topapps" => TopAppsPage.Build(_context),
+                    "dns" => DnsPage.Build(_context),
+                    "wifi" => WifiPage.Build(_context),
+                    "vpn" => VpnPage.Build(_context),
+                    "router" => RouterPage.Build(_context),
+                    _ => null,
+                };
+            }
+            catch (Exception e)
+            {
+                // A page that cannot be built just goes unsearched; Preferences still works.
+                CrashLog.Write("preferences search " + key, e);
+                continue;
+            }
+
+            foreach (var text in Texts(page).Select(t => t.Block.Text.Trim()).Prepend(Kit.L(label)))
+            {
+                if (text.Length > 1 && seen.Add((text, key)))
+                {
+                    index.Add((text, key));
+                }
+            }
+        }
+
+        return index;
+    }
+
+    /// <summary>Every text block under <paramref name="root"/>, through the logical tree — the page need not be shown.</summary>
+    private static IEnumerable<(TextBlock Block, int Depth)> Texts(DependencyObject? root)
+    {
+        if (root is null)
+        {
+            yield break;
+        }
+
+        var stack = new Stack<(DependencyObject Node, int Depth)>();
+        stack.Push((root, 0));
+        while (stack.Count > 0)
+        {
+            var (node, depth) = stack.Pop();
+            if (node is TextBlock { Text.Length: > 0 } block)
+            {
+                yield return (block, depth);
+            }
+
+            foreach (var child in LogicalTreeHelper.GetChildren(node).OfType<DependencyObject>().Reverse())
+            {
+                stack.Push((child, depth + 1));
+            }
+        }
     }
 
     /// <summary>Windows 11 Settings' own values for each surface, so it sits beside real Settings.</summary>

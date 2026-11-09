@@ -2821,4 +2821,22 @@
   <data name="This WireGuard config was refused because line {0} (“{1}”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import." xml:space="preserve">
     <value>此 WireGuard 配置已被拒绝，因为第 {0} 行（“{1}”）不是 NetFluss 会以管理员权限运行的设置。请删除该行后重新导入。</value>
   </data>
+  <data name="DNS switching and OpenVPN or WireGuard use the optional NetFluss helper (Preferences → General → System access). Without it, each DNS change asks for administrator approval." xml:space="preserve">
+    <value>DNS 切换以及 OpenVPN 或 WireGuard 使用可选的 NetFluss 辅助工具（偏好设置 → 通用 → 系统访问）。没有它，每次更改 DNS 都会请求管理员批准。</value>
+  </data>
+  <data name="Open Startup apps…" xml:space="preserve">
+    <value>打开启动应用…</value>
+  </data>
+  <data name="This copy of NetFluss is not running from its own program file, so Windows cannot start it at sign-in." xml:space="preserve">
+    <value>此 NetFluss 副本并非从其自身的程序文件运行，因此 Windows 无法在登录时启动它。</value>
+  </data>
+  <data name="Windows has switched NetFluss off in Startup apps, so it will not start at sign-in. Turn it back on there." xml:space="preserve">
+    <value>Windows 已在启动应用中关闭 NetFluss，因此它不会在登录时启动。请在那里重新打开。</value>
+  </data>
+  <data name="Your live network speed is now in the notification area. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
+    <value>你的实时网速现在显示在通知区域。点击查看详情；那里的“更多”按钮可打开偏好设置、统计、测速等。</value>
+  </data>
+  <data name="Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
+    <value>你的实时网速现在显示在任务栏的时钟旁边。点击查看详情；那里的“更多”按钮可打开偏好设置、统计、测速等。</value>
+  </data>
 </root>
