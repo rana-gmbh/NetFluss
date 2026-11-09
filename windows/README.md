@@ -3,12 +3,14 @@
 Native Windows port of NetFluss, tracking the macOS app's feature set.
 Design and rationale live in [../docs/WINDOWS-PORT-PLAN.md](../docs/WINDOWS-PORT-PLAN.md).
 
-**Status: public beta (2.6.0-beta.2), at feature parity with NetFluss 2.6 for macOS.**
-Every macOS feature has a Windows counterpart:
+**Status: public beta (latest release 2.6.0-beta.2). This branch is at feature parity with
+NetFluss 2.7.2 for macOS.** Every macOS feature has a Windows counterpart:
 
 | Area | Windows |
 |---|---|
-| Live meter | Taskbar overlay, notification-area icon or floating widget; one line, two lines, total, **Dashboard** and **Dashboard Basic** styles; VPN indicator and exit-country badge |
+| Live meter | Taskbar overlay, notification-area icon or floating widget; one line, two lines, total, **Dashboard** and **Dashboard Basic** styles; rate alignment left / centred / right; VPN indicator (dot, shield, globe, bars; 10–18 pt), exit-country badge, Wi-Fi / Ethernet link indicator, active-resolver label |
+| DNS | Switcher with renamable built-in profiles; **automatic DNS by Wi-Fi network** (per SSID, optionally pinned to one access point, catch-all for other networks, waits out captive portals) |
+| Statistics | Adapters, apps and **per-node proxy traffic** from the Clash API (sing-box, mihomo, Clash Verge); daily backup restores an unreadable history |
 | Popover | Totals, adapters (rename, reorder, hide, grace period), network flow / IP list, DNS switcher, router, Wi-Fi switcher, VPN, Top Apps, Data Usage, Traffic Timer — reorderable, pinnable, resizable |
 | Windows | Preferences (Windows 11 Settings style), Bandwidth Statistics (1H–1Y, custom ranges), Speed Test (Cloudflare / M-Lab, history with notes), Network Slice, About |
 | Routers | Fritz!Box (TR-064), UniFi (local admin or API key), OpenWRT (ubus), OPNsense (REST) — credentials in Credential Manager, TOFU certificate pinning |
@@ -178,6 +180,17 @@ gives a window half the size it needs at 200% scaling, which clips the left-hand
 off the readout — the meter still looks plausible, just wrong. `TaskbarAnchor.Locate` takes
 DIPs and scales by the taskbar's own DPI for exactly this reason.
 
+**Accessories beside the rates** (macOS 2.7): the link indicator, the VPN mark, the country
+flag and the active resolver, each optional. The overlay is sized from the readout's own
+measurement of its widest rate plus the accessories, not from a font-size estimate — the
+estimate left a band of empty taskbar beside the numbers. The **link indicator** follows the
+physical adapter carrying traffic (tunnels skipped: the VPN has its own mark) and turns amber
+only on evidence: a self-assigned address, no gateway, or Windows' own internet check
+(`NetworkInformation`, the verdict behind the taskbar's network icon) saying constrained or
+none — so NetFluss makes no request of its own unless the user enters a probe URL, which is
+then asked on the macOS schedule (60 s healthy, 10 s degraded, two failures before amber).
+Narrator reads the meter as "Download …, Upload …" plus the accessory states.
+
 ## The popover
 
 Opened by clicking any surface — the tray icon, the taskbar overlay or the floating widget —
@@ -279,6 +292,18 @@ IPv4 and IPv6 are separate stores in Windows, so a preset carrying only IPv4 mus
 IPv6 back on automatic; otherwise a leftover IPv6 resolver keeps answering and the change
 looks like it did nothing.
 
+**Built-in profiles can be renamed** ("Home" for Cloudflare); only the name changes, never the
+servers, so a name cannot point somewhere it does not say.
+
+**Automatic DNS** (macOS 2.7) is `DnsRuleEngine` in Core: a pure decision table plus a 2 s
+settle delay and a 5 s → 5 min retry backoff. Each guard is a case where writing DNS would
+do harm — no helper (it would be a UAC prompt per network change, so it refuses), a VPN
+profile's DNS in charge, a captive portal still open (public resolvers break the login page),
+the link down — and an already-applied preset is never rewritten. Rules act on the adapter
+the switcher targets, so the checkmark, the resolver label and the rules agree. While the
+link indicator or automatic DNS is on, addresses and Wi-Fi details stay current with the
+popover closed.
+
 ## The helper service
 
 `NetFluss.Service` is the counterpart of the macOS privileged helper, and optional in the
@@ -313,9 +338,20 @@ name — a denylist missed `providers`, `engine`, `pkcs11-providers` and `win-sy
 Lines are tokenized exactly as OpenVPN's `parse_line` does (quotes, escapes), `<connection>`
 blocks are checked like top-level directives, and anything the two parsers could read
 differently is refused. `--script-security 1` still stops up/down scripts. Import already
-warns about a config the helper would refuse. WireGuard script hooks are stripped, and the
-helper's WireGuard tunnels are always named `NetFluss-…`, so it can neither replace nor stop
-a tunnel it did not create. OpenVPN's management interface is on a loopback port behind a
+warns about a config the helper would refuse. WireGuard configs are held to the macOS 2.7.2
+key allowlist: `PreUp`/`PostUp`/`PreDown`/`PostDown` or any unknown key is refused with the
+line number, at import and in the helper (they used to be stripped silently, which ran a
+tunnel other than the one the config described). The helper's WireGuard tunnels are always
+named `NetFluss-…`, so it can neither replace nor stop a tunnel it did not create.
+
+**No tunnel outlives the app** (macOS 2.7.2). Quitting, updating and signing out take the VPN
+down and wait for it to be gone. The helper also records which pipe client started each
+tunnel and stops them when that client disconnects, which covers a crash; and at its own
+start it removes leftover `NetFluss-…` tunnel services (WireGuard tunnel services start with
+Windows, so an orphan would otherwise come back on every boot) and stale staging folders.
+**System VPNs are followed live:** a Windows VPN connection linked to a profile that is
+connected in Windows Settings shows as connected here — and is left alone on quit — and one
+disconnected there goes idle instead of being redialled as a drop. OpenVPN's management interface is on a loopback port behind a
 one-time password, and the app checks that the port's listener is the OpenVPN process the
 helper started before it sends that password or any credentials.
 
@@ -374,6 +410,12 @@ one scrolling column of grouped cards per page, control on the right, changes ap
 persisted immediately with no OK button. It is hand-styled rather than built on a UI
 package, whose own theming would have to be reconciled with the NetFluss themes anyway.
 
+**Search settings** (Ctrl+F) sits above the navigation, where Windows Settings has its own.
+The macOS search needs a hand-kept list of every label; the Windows pages are built in code,
+so each is built once, unshown, and its text read off the logical tree — building a page has
+no side effects because pages subscribe to anything only once loaded. A result opens its
+page and scrolls to the match. New installs (no settings file yet) get a short welcome.
+
 The **preview strip** renders the real `TrayMeterRenderer` output at 16/20/24/32 px on the
 user's actual taskbar colour. A 16 px icon is the whole difficulty of this port, so the
 meter-style choice is shown rather than described.
@@ -390,7 +432,10 @@ Two pieces of state are deliberately **not** in that file:
 
 - **Start with Windows** lives in `HKCU\...\CurrentVersion\Run`, because writing it is what
   actually makes the app start and a user can remove it from Task Manager's Startup tab. The
-  toggle always reads the registry back rather than trusting what was last written.
+  toggle always reads the registry back rather than trusting what was last written. Task
+  Manager and Settings → Apps → Startup switch an entry off without removing it (an odd
+  first byte in `StartupApproved\Run`), so that state is read too and explained, with an
+  Open Startup apps button — the Windows form of the macOS 2.7.1 "waiting for approval".
 - **Light or dark** comes from `SystemUsesLightTheme` / `AppsUseLightTheme`. Windows exposes
   the shell and app themes independently, and the tray meter follows the *shell* one because
   that is what it is composited over.
