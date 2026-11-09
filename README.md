@@ -403,6 +403,12 @@ Or open `Package.swift` in Xcode and run the executable scheme.
 - OPNsense monitoring requires API credentials created in OPNsense and can use a manually configured host when auto-detection points to another router.
 - Speed test adapter pinning is not implemented yet; tests currently follow the default active route.
 
+## Contributors
+
+Thanks to everyone who has improved NetFluss with their code:
+
+- [ninelives233](https://github.com/ninelives233): NetFluss no longer falls back to a CPU-heavy `nettop` when macOS reports harmless network-statistics errors ([#66](https://github.com/rana-gmbh/NetFluss/pull/66), in 2.7.3).
+
 ## Buy me a coffee
 
 If you enjoy using NetFluss please consider supporting the project via this link: https://buymeacoffee.com/robertrudolph
