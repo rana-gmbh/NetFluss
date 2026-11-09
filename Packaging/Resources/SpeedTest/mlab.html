@@ -319,6 +319,11 @@
             var startAt = 0;
             var endAt = 0;
             var payload = new Uint8Array(8192);
+            // What the server says it has received. WebKit does not always drain
+            // WebSocket.bufferedAmount while sending, so a rate computed from it alone
+            // can stay at 0 Mbps (issue #64); the server's count does not depend on it.
+            var serverBytes = 0;
+            var serverMbps = null;
             var hardTimeout = setTimeout(function() {
                 if (!settled) {
                     settled = true;
@@ -369,12 +374,40 @@
                     return;
                 }
 
-                var bytesSent = totalBytes - socket.bufferedAmount;
-                if (bytesSent < 0) {
-                    bytesSent = 0;
-                }
-                state.uploadMbps = bytesSent * 8 / 1000000 / elapsedTime;
+                state.uploadMbps = serverMbps !== null
+                    ? serverMbps
+                    : bytesDelivered() * 8 / 1000000 / elapsedTime;
                 postProgress("upload");
+            }
+
+            function bytesDelivered() {
+                var sent = totalBytes - socket.bufferedAmount;
+                return Math.max(sent > 0 ? sent : 0, Math.min(serverBytes, totalBytes));
+            }
+
+            function readServerMeasurement(measurement) {
+                if (!measurement || typeof measurement !== "object") {
+                    return;
+                }
+
+                // Both ElapsedTime values are microseconds, so bytes * 8 / µs is Mbit/s.
+                var tcpInfo = measurement.TCPInfo || {};
+                var appInfo = measurement.AppInfo || {};
+                var tcpBytes = numeric(tcpInfo.BytesReceived);
+                var tcpElapsed = numeric(tcpInfo.ElapsedTime);
+                var appBytes = numeric(appInfo.NumBytes);
+                var appElapsed = numeric(appInfo.ElapsedTime);
+
+                if (tcpBytes !== null && tcpElapsed !== null && tcpElapsed > 0) {
+                    serverMbps = tcpBytes * 8 / tcpElapsed;
+                } else if (appBytes !== null && appElapsed !== null && appElapsed > 0) {
+                    serverMbps = appBytes * 8 / appElapsed;
+                }
+
+                var received = appBytes !== null ? appBytes : tcpBytes;
+                if (received !== null && received > serverBytes) {
+                    serverBytes = received;
+                }
             }
 
             function pumpUpload() {
@@ -400,12 +433,15 @@
 
                 var maxMessageSize = 8388608;
                 var nextSizeIncrement = payload.length >= maxMessageSize ? Infinity : 16 * payload.length;
-                if ((totalBytes - socket.bufferedAmount) >= nextSizeIncrement) {
+                var delivered = bytesDelivered();
+                if (delivered >= nextSizeIncrement) {
                     payload = new Uint8Array(payload.length * 2);
                 }
 
+                // Keep about seven messages in flight. Counting what the server has
+                // confirmed keeps the pump going when bufferedAmount never drains.
                 var desiredBuffer = 7 * payload.length;
-                if (socket.bufferedAmount < desiredBuffer) {
+                if (totalBytes - delivered < desiredBuffer) {
                     socket.send(payload);
                     totalBytes += payload.length;
                 }
@@ -442,6 +478,7 @@
                     if (nextLatency !== null) {
                         state.latencyMs = nextLatency;
                     }
+                    readServerMeasurement(serverMeasurement);
                 } catch (error) {
                     // Ignore malformed server measurements and keep the client-side rate.
                 }
@@ -458,7 +495,9 @@
 
                 var currentTime = nowMs();
                 postClientMeasurement(currentTime);
-                if (state.uploadMbps === null) {
+                // A 0 here means nothing was measured, not a dead uplink: the download
+                // just worked over the same connection. Don't record it as a result.
+                if (state.uploadMbps === null || state.uploadMbps <= 0) {
                     finishWithError("The M-Lab upload phase did not produce a measurement.");
                     return;
                 }
