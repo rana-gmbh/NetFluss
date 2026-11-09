@@ -2383,9 +2383,6 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="On the taskbar" xml:space="preserve">
     <value>On the taskbar</value>
   </data>
-  <data name="Once a day, NetFluss looks for a new Windows release on GitHub and tells you once when one is available. You can also check any time in About." xml:space="preserve">
-    <value>Once a day, NetFluss looks for a new Windows release on GitHub and tells you once when one is available. You can also check any time in About.</value>
-  </data>
   <data name="One line" xml:space="preserve">
     <value>One line</value>
   </data>
@@ -2838,5 +2835,50 @@ No network traffic is sent — only local counters from your machine are recorde
   </data>
   <data name="Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
     <value>Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more.</value>
+  </data>
+  <data name="Once a day, NetFluss looks for a new Windows release on GitHub and asks whether to install it. You can also check any time in About." xml:space="preserve">
+    <value>Once a day, NetFluss looks for a new Windows release on GitHub and asks whether to install it. You can also check any time in About.</value>
+  </data>
+  <data name="Automatically download and install updates" xml:space="preserve">
+    <value>Automatically download and install updates</value>
+  </data>
+  <data name="Installs a verified update without asking, while no NetFluss window is open and no NetFluss VPN is connected, then restarts NetFluss." xml:space="preserve">
+    <value>Installs a verified update without asking, while no NetFluss window is open and no NetFluss VPN is connected, then restarts NetFluss.</value>
+  </data>
+  <data name="Software Update" xml:space="preserve">
+    <value>Software Update</value>
+  </data>
+  <data name="A new version of NetFluss is available!" xml:space="preserve">
+    <value>A new version of NetFluss is available!</value>
+  </data>
+  <data name="NetFluss {0} is now available — you have {1}. Would you like to install it now?" xml:space="preserve">
+    <value>NetFluss {0} is now available — you have {1}. Would you like to install it now?</value>
+  </data>
+  <data name="NetFluss {0} is now available — you have {1}. Would you like to download it now?" xml:space="preserve">
+    <value>NetFluss {0} is now available — you have {1}. Would you like to download it now?</value>
+  </data>
+  <data name="Release Notes:" xml:space="preserve">
+    <value>Release Notes:</value>
+  </data>
+  <data name="No release notes." xml:space="preserve">
+    <value>No release notes.</value>
+  </data>
+  <data name="Automatically download and install updates in the future" xml:space="preserve">
+    <value>Automatically download and install updates in the future</value>
+  </data>
+  <data name="Skip This Version" xml:space="preserve">
+    <value>Skip This Version</value>
+  </data>
+  <data name="Remind Me Later" xml:space="preserve">
+    <value>Remind Me Later</value>
+  </data>
+  <data name="Install Update" xml:space="preserve">
+    <value>Install Update</value>
+  </data>
+  <data name="The update could not be installed." xml:space="preserve">
+    <value>The update could not be installed.</value>
+  </data>
+  <data name="NetFluss has been updated to {0}. Click for what&apos;s new." xml:space="preserve">
+    <value>NetFluss has been updated to {0}. Click for what's new.</value>
   </data>
 </root>

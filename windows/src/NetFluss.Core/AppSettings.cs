@@ -152,6 +152,9 @@ public sealed class AppSettings : INotifyPropertyChanged
     private string _opnSenseHost = string.Empty;
     private string _lastNotifiedVersion = string.Empty;
     private DateTimeOffset? _lastUpdateCheck;
+    private bool _automaticallyInstallUpdates;
+    private string _skippedUpdateVersion = string.Empty;
+    private string _installingUpdateVersion = string.Empty;
     private bool _firstLaunchHintShown;
     private bool _allowIpLookups = true;
     private bool _popoverPinned;
@@ -1066,6 +1069,31 @@ public sealed class AppSettings : INotifyPropertyChanged
     {
         get => _lastUpdateCheck;
         set => Set(ref _lastUpdateCheck, value);
+    }
+
+    /// <summary>
+    /// Sparkle's "Automatically download and install updates": a verified update is fetched in
+    /// the background and installed, with a relaunch, while no NetFluss window is in use.
+    /// Off, NetFluss still downloads it ahead and asks first.
+    /// </summary>
+    public bool AutomaticallyInstallUpdates
+    {
+        get => _automaticallyInstallUpdates;
+        set => Set(ref _automaticallyInstallUpdates, value);
+    }
+
+    /// <summary>"Skip This Version": never offered again on its own; a newer one is.</summary>
+    public string SkippedUpdateVersion
+    {
+        get => _skippedUpdateVersion;
+        set => Set(ref _skippedUpdateVersion, value ?? string.Empty);
+    }
+
+    /// <summary>The version a setup was started for, so the relaunched app can say it updated.</summary>
+    public string InstallingUpdateVersion
+    {
+        get => _installingUpdateVersion;
+        set => Set(ref _installingUpdateVersion, value ?? string.Empty);
     }
 
     /// <summary>

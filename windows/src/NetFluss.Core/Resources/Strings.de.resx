@@ -2383,9 +2383,6 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="On the taskbar" xml:space="preserve">
     <value>Auf der Taskleiste</value>
   </data>
-  <data name="Once a day, NetFluss looks for a new Windows release on GitHub and tells you once when one is available. You can also check any time in About." xml:space="preserve">
-    <value>Einmal täglich sucht NetFluss auf GitHub nach einer neuen Windows-Version und meldet sich einmal, wenn eine verfügbar ist. Du kannst auch jederzeit unter „Über“ nachsehen.</value>
-  </data>
   <data name="One line" xml:space="preserve">
     <value>Eine Zeile</value>
   </data>
@@ -2838,5 +2835,50 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   </data>
   <data name="Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
     <value>Deine aktuelle Netzwerkgeschwindigkeit steht jetzt in der Taskleiste neben der Uhr. Klicke darauf für Details; die Schaltfläche „Mehr“ öffnet Einstellungen, Statistiken, Speedtest und mehr.</value>
+  </data>
+  <data name="Once a day, NetFluss looks for a new Windows release on GitHub and asks whether to install it. You can also check any time in About." xml:space="preserve">
+    <value>Einmal täglich sucht NetFluss auf GitHub nach einer neuen Windows-Version und fragt, ob sie installiert werden soll. Du kannst auch jederzeit unter „Über“ nachsehen.</value>
+  </data>
+  <data name="Automatically download and install updates" xml:space="preserve">
+    <value>Updates automatisch laden und installieren</value>
+  </data>
+  <data name="Installs a verified update without asking, while no NetFluss window is open and no NetFluss VPN is connected, then restarts NetFluss." xml:space="preserve">
+    <value>Installiert ein geprüftes Update ohne Rückfrage, sobald kein NetFluss-Fenster offen und kein NetFluss-VPN verbunden ist, und startet NetFluss danach neu.</value>
+  </data>
+  <data name="Software Update" xml:space="preserve">
+    <value>Softwareaktualisierung</value>
+  </data>
+  <data name="A new version of NetFluss is available!" xml:space="preserve">
+    <value>Eine neue Version von NetFluss ist verfügbar!</value>
+  </data>
+  <data name="NetFluss {0} is now available — you have {1}. Would you like to install it now?" xml:space="preserve">
+    <value>NetFluss {0} ist jetzt verfügbar – du hast {1}. Möchtest du es jetzt installieren?</value>
+  </data>
+  <data name="NetFluss {0} is now available — you have {1}. Would you like to download it now?" xml:space="preserve">
+    <value>NetFluss {0} ist jetzt verfügbar – du hast {1}. Möchtest du es jetzt herunterladen?</value>
+  </data>
+  <data name="Release Notes:" xml:space="preserve">
+    <value>Versionshinweise:</value>
+  </data>
+  <data name="No release notes." xml:space="preserve">
+    <value>Keine Versionshinweise.</value>
+  </data>
+  <data name="Automatically download and install updates in the future" xml:space="preserve">
+    <value>Updates künftig automatisch laden und installieren</value>
+  </data>
+  <data name="Skip This Version" xml:space="preserve">
+    <value>Diese Version überspringen</value>
+  </data>
+  <data name="Remind Me Later" xml:space="preserve">
+    <value>Später erinnern</value>
+  </data>
+  <data name="Install Update" xml:space="preserve">
+    <value>Update installieren</value>
+  </data>
+  <data name="The update could not be installed." xml:space="preserve">
+    <value>Das Update konnte nicht installiert werden.</value>
+  </data>
+  <data name="NetFluss has been updated to {0}. Click for what&apos;s new." xml:space="preserve">
+    <value>NetFluss wurde auf {0} aktualisiert. Klicke hier für die Neuerungen.</value>
   </data>
 </root>

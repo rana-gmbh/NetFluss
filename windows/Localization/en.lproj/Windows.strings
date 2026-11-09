@@ -113,7 +113,6 @@
 "Not installed. DNS changes and Ethernet resets ask for administrator approval each time, and Top Apps is unavailable." = "Not installed. DNS changes and Ethernet resets ask for administrator approval each time, and Top Apps is unavailable.";
 "Notification area" = "Notification area";
 "On the taskbar" = "On the taskbar";
-"Once a day, NetFluss looks for a new Windows release on GitHub and tells you once when one is available. You can also check any time in About." = "Once a day, NetFluss looks for a new Windows release on GitHub and tells you once when one is available. You can also check any time in About.";
 "One line" = "One line";
 "One line has room for full units; stacked matches the notification area." = "One line has room for full units; stacked matches the notification area.";
 "Only available when the meter is on the taskbar — otherwise this is where the meter lives." = "Only available when the meter is on the taskbar — otherwise this is where the meter lives.";
@@ -278,3 +277,20 @@
 "Windows has switched NetFluss off in Startup apps, so it will not start at sign-in. Turn it back on there." = "Windows has switched NetFluss off in Startup apps, so it will not start at sign-in. Turn it back on there.";
 "Your live network speed is now in the notification area. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." = "Your live network speed is now in the notification area. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more.";
 "Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." = "Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more.";
+
+/* In-app updates (Sparkle-style update window) */
+"Once a day, NetFluss looks for a new Windows release on GitHub and asks whether to install it. You can also check any time in About." = "Once a day, NetFluss looks for a new Windows release on GitHub and asks whether to install it. You can also check any time in About.";
+"Automatically download and install updates" = "Automatically download and install updates";
+"Installs a verified update without asking, while no NetFluss window is open and no NetFluss VPN is connected, then restarts NetFluss." = "Installs a verified update without asking, while no NetFluss window is open and no NetFluss VPN is connected, then restarts NetFluss.";
+"Software Update" = "Software Update";
+"A new version of NetFluss is available!" = "A new version of NetFluss is available!";
+"NetFluss %@ is now available — you have %@. Would you like to install it now?" = "NetFluss %@ is now available — you have %@. Would you like to install it now?";
+"NetFluss %@ is now available — you have %@. Would you like to download it now?" = "NetFluss %@ is now available — you have %@. Would you like to download it now?";
+"Release Notes:" = "Release Notes:";
+"No release notes." = "No release notes.";
+"Automatically download and install updates in the future" = "Automatically download and install updates in the future";
+"Skip This Version" = "Skip This Version";
+"Remind Me Later" = "Remind Me Later";
+"Install Update" = "Install Update";
+"The update could not be installed." = "The update could not be installed.";
+"NetFluss has been updated to %@. Click for what's new." = "NetFluss has been updated to %@. Click for what's new.";

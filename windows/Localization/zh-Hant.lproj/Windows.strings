@@ -109,7 +109,6 @@
 "Not installed. DNS changes and Ethernet resets ask for administrator approval each time, and Top Apps is unavailable." = "未安裝。DNS 變更和乙太網路重設每次都需要系統管理員核准，且熱門 App 無法使用。";
 "Notification area" = "通知區域";
 "On the taskbar" = "在工作列上";
-"Once a day, NetFluss looks for a new Windows release on GitHub and tells you once when one is available. You can also check any time in About." = "NetFluss 每天在 GitHub 上檢查一次新的 Windows 版本，並在有可用版本時通知您一次。您也可以隨時在「關於」中檢查。";
 "One line" = "單列";
 "One line has room for full units; stacked matches the notification area." = "單列可容納完整單位；堆疊樣式與通知區域一致。";
 "Only available when the meter is on the taskbar — otherwise this is where the meter lives." = "僅在速率顯示位於工作列時可用——否則速率顯示就在這裡。";
@@ -274,3 +273,20 @@
 "Windows has switched NetFluss off in Startup apps, so it will not start at sign-in. Turn it back on there." = "Windows 已在啟動應用程式中關閉 NetFluss，因此它不會在登入時啟動。請在那裡重新開啟。";
 "Your live network speed is now in the notification area. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." = "你的即時網速現在顯示在通知區域。點選查看詳細資料；那裡的「更多」按鈕可開啟偏好設定、統計、測速等。";
 "Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." = "你的即時網速現在顯示在工作列的時鐘旁邊。點選查看詳細資料；那裡的「更多」按鈕可開啟偏好設定、統計、測速等。";
+
+/* In-app updates (Sparkle-style update window) */
+"Once a day, NetFluss looks for a new Windows release on GitHub and asks whether to install it. You can also check any time in About." = "NetFluss 每天在 GitHub 上檢查一次新的 Windows 版本，並詢問是否安裝。你也可以隨時在「關於」中檢查。";
+"Automatically download and install updates" = "自動下載並安裝更新";
+"Installs a verified update without asking, while no NetFluss window is open and no NetFluss VPN is connected, then restarts NetFluss." = "在沒有開啟 NetFluss 視窗且未連線 NetFluss VPN 時，無需詢問即安裝經過驗證的更新，然後重新啟動 NetFluss。";
+"Software Update" = "軟體更新";
+"A new version of NetFluss is available!" = "NetFluss 有新版本可用！";
+"NetFluss %@ is now available — you have %@. Would you like to install it now?" = "NetFluss %@ 現已推出——你目前的版本是 %@。要立即安裝嗎？";
+"NetFluss %@ is now available — you have %@. Would you like to download it now?" = "NetFluss %@ 現已推出——你目前的版本是 %@。要立即下載嗎？";
+"Release Notes:" = "版本說明：";
+"No release notes." = "沒有版本說明。";
+"Automatically download and install updates in the future" = "以後自動下載並安裝更新";
+"Skip This Version" = "略過此版本";
+"Remind Me Later" = "稍後提醒";
+"Install Update" = "安裝更新";
+"The update could not be installed." = "無法安裝更新。";
+"NetFluss has been updated to %@. Click for what's new." = "NetFluss 已更新至 %@。按一下查看新功能。";

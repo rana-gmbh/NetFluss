@@ -189,6 +189,8 @@ public sealed class SettingsChangedEventArgs(IReadOnlyCollection<string> propert
         nameof(AppSettings.PinnedTop),
         nameof(AppSettings.LastUpdateCheck),
         nameof(AppSettings.LastNotifiedVersion),
+        nameof(AppSettings.SkippedUpdateVersion),
+        nameof(AppSettings.InstallingUpdateVersion),
         nameof(AppSettings.FirstLaunchHintShown),
     };
 }

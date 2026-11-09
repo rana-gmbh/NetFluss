@@ -2383,9 +2383,6 @@
   <data name="On the taskbar" xml:space="preserve">
     <value>在任务栏上</value>
   </data>
-  <data name="Once a day, NetFluss looks for a new Windows release on GitHub and tells you once when one is available. You can also check any time in About." xml:space="preserve">
-    <value>NetFluss 每天在 GitHub 上检查一次新的 Windows 版本，并在有可用版本时提醒你一次。你也可以随时在“关于”中检查。</value>
-  </data>
   <data name="One line" xml:space="preserve">
     <value>单行</value>
   </data>
@@ -2838,5 +2835,50 @@
   </data>
   <data name="Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
     <value>你的实时网速现在显示在任务栏的时钟旁边。点击查看详情；那里的“更多”按钮可打开偏好设置、统计、测速等。</value>
+  </data>
+  <data name="Once a day, NetFluss looks for a new Windows release on GitHub and asks whether to install it. You can also check any time in About." xml:space="preserve">
+    <value>NetFluss 每天在 GitHub 上检查一次新的 Windows 版本，并询问是否安装。你也可以随时在“关于”中检查。</value>
+  </data>
+  <data name="Automatically download and install updates" xml:space="preserve">
+    <value>自动下载并安装更新</value>
+  </data>
+  <data name="Installs a verified update without asking, while no NetFluss window is open and no NetFluss VPN is connected, then restarts NetFluss." xml:space="preserve">
+    <value>在没有打开 NetFluss 窗口且未连接 NetFluss VPN 时，无需询问即安装经过验证的更新，然后重新启动 NetFluss。</value>
+  </data>
+  <data name="Software Update" xml:space="preserve">
+    <value>软件更新</value>
+  </data>
+  <data name="A new version of NetFluss is available!" xml:space="preserve">
+    <value>NetFluss 有新版本可用！</value>
+  </data>
+  <data name="NetFluss {0} is now available — you have {1}. Would you like to install it now?" xml:space="preserve">
+    <value>NetFluss {0} 现已推出——你当前的版本是 {1}。要立即安装吗？</value>
+  </data>
+  <data name="NetFluss {0} is now available — you have {1}. Would you like to download it now?" xml:space="preserve">
+    <value>NetFluss {0} 现已推出——你当前的版本是 {1}。要立即下载吗？</value>
+  </data>
+  <data name="Release Notes:" xml:space="preserve">
+    <value>发行说明：</value>
+  </data>
+  <data name="No release notes." xml:space="preserve">
+    <value>没有发行说明。</value>
+  </data>
+  <data name="Automatically download and install updates in the future" xml:space="preserve">
+    <value>以后自动下载并安装更新</value>
+  </data>
+  <data name="Skip This Version" xml:space="preserve">
+    <value>跳过此版本</value>
+  </data>
+  <data name="Remind Me Later" xml:space="preserve">
+    <value>稍后提醒</value>
+  </data>
+  <data name="Install Update" xml:space="preserve">
+    <value>安装更新</value>
+  </data>
+  <data name="The update could not be installed." xml:space="preserve">
+    <value>无法安装更新。</value>
+  </data>
+  <data name="NetFluss has been updated to {0}. Click for what&apos;s new." xml:space="preserve">
+    <value>NetFluss 已更新到 {0}。点击查看新功能。</value>
   </data>
 </root>

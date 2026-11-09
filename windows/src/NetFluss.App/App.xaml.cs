@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Interop;
 using NetFluss.App.Popover;
 using NetFluss.Core;
+using NetFluss.Core.Vpn;
 using NetFluss.Tray;
 
 namespace NetFluss.App;
@@ -43,6 +44,7 @@ public partial class NetFlussApplication : Application
     private StatisticsWindow? _statisticsWindow;
     private NetworkSliceWindow? _sliceWindow;
     private AboutWindow? _aboutWindow;
+    private UpdateWindow? _updateWindow;
     private DiagnosticsWindow? _diagnosticsWindow;
     private UpdateNotifier? _updates;
     private readonly TrafficTimer _timer = new();
@@ -132,7 +134,7 @@ public partial class NetFlussApplication : Application
         _routers = new RouterService(_monitor, _store);
         _vpn = new Vpn.VpnManager(_helper, _privileged, _store, _monitor, Dispatcher);
         _autoDns = new DnsAutoSwitcher(_store, _monitor, _dns, _link, _privileged, () => _vpn.Status, () => _vpn.Profiles);
-        _updates = new UpdateNotifier(_store);
+        _updates = new UpdateNotifier(_store, IsInUse);
         _updates.UpdateFound += OnUpdateFound;
 
         _commands = new AppCommands
@@ -371,6 +373,14 @@ public partial class NetFlussApplication : Application
                 _tray?.Notify("NetFluss", Localization.L("NetFluss quit unexpectedly last time. Click to see what Windows recorded, and please include it in a report."));
                 return;
             }
+        }
+
+        // The setup that just relaunched NetFluss was started by the in-app updater.
+        if (_updates?.TakeCompletedUpdate() is { } updated && !_exiting)
+        {
+            _notificationAction = () => UpdateNotifier.Open(new Uri($"https://github.com/rana-gmbh/NetFluss/releases/tag/{UpdateLookup.TagPrefix}{updated}"));
+            _tray?.Notify("NetFluss", Localization.L("NetFluss has been updated to {0}. Click for what's new.", updated));
+            return;
         }
 
         if (_store is { Settings.FirstLaunchHintShown: false })
@@ -1105,15 +1115,55 @@ public partial class NetFlussApplication : Application
     }
 
     /// <summary>
-    /// A newer release was found: one notification from the tray, and a quiet line in the
-    /// popover footer for as long as it stays relevant.
+    /// A scheduled check found a release to ask about: the update window, as Sparkle shows its
+    /// alert, and a quiet line in the popover footer for as long as it stays relevant.
     /// </summary>
     private void OnUpdateFound(object? sender, AvailableUpdate update)
     {
-        var message = Localization.L("NetFluss {0} is available!", update.Version);
-        _notificationAction = ShowAbout;
-        _tray?.Notify("NetFluss", message);
-        _popover?.SetFooterStatus(message);
+        _popover?.SetFooterStatus(Localization.L("NetFluss {0} is available!", update.Version));
+        ShowUpdate(update);
+    }
+
+    private void ShowUpdate(AvailableUpdate update)
+    {
+        if (_store is null || _updates is null || _exiting)
+        {
+            return;
+        }
+
+        // A window still showing an older find is replaced, not reused.
+        if (_updateWindow is { } shown && !shown.Shows(update))
+        {
+            shown.Close();
+        }
+
+        Open(() => _updateWindow, w => _updateWindow = w, () =>
+        {
+            var (surface, download, upload) = Palette();
+            return new UpdateWindow(_updates, update, _store, surface, download, upload);
+        });
+    }
+
+    /// <summary>
+    /// Whether an automatic update would get in the way now: a NetFluss window is open (the
+    /// meter surfaces do not count), or NetFluss's VPN is up, which quitting would drop.
+    /// </summary>
+    private bool IsInUse()
+    {
+        if (_exiting || _vpn?.Status.State.IsActive() == true)
+        {
+            return true;
+        }
+
+        foreach (Window window in Windows)
+        {
+            if (window.IsVisible && window is not TaskbarOverlayWindow and not FloatingWidgetWindow)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void TogglePopover(Rect anchor)

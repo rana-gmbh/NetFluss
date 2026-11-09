@@ -64,8 +64,12 @@ internal static class GeneralPage
         check.Margin = new Thickness(0, 0, 12, 0);
         page.Children.Add(Kit.Card(
             Kit.L("Check for updates automatically"),
-            Kit.L("Once a day, NetFluss looks for a new Windows release on GitHub and tells you once when one is available. You can also check any time in About."),
+            Kit.L("Once a day, NetFluss looks for a new Windows release on GitHub and asks whether to install it. You can also check any time in About."),
             Kit.Row(check, Kit.Switch(settings, nameof(AppSettings.AutomaticUpdateChecks)))));
+        page.Children.Add(Kit.Card(
+            Kit.L("Automatically download and install updates"),
+            Kit.L("Installs a verified update without asking, while no NetFluss window is open and no NetFluss VPN is connected, then restarts NetFluss."),
+            Kit.Switch(settings, nameof(AppSettings.AutomaticallyInstallUpdates))));
 
         // The installer asks about the same two things; SignPath Foundation's privacy rules
         // want every lookup the user did not ask for to be described and to be switchable off.

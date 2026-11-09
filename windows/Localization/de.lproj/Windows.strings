@@ -109,7 +109,6 @@
 "Not installed. DNS changes and Ethernet resets ask for administrator approval each time, and Top Apps is unavailable." = "Nicht installiert. DNS-Änderungen und Ethernet-Neustarts fragen jedes Mal nach einer Administratorbestätigung, und Top-Apps ist nicht verfügbar.";
 "Notification area" = "Infobereich";
 "On the taskbar" = "Auf der Taskleiste";
-"Once a day, NetFluss looks for a new Windows release on GitHub and tells you once when one is available. You can also check any time in About." = "Einmal täglich sucht NetFluss auf GitHub nach einer neuen Windows-Version und meldet sich einmal, wenn eine verfügbar ist. Du kannst auch jederzeit unter „Über“ nachsehen.";
 "One line" = "Eine Zeile";
 "One line has room for full units; stacked matches the notification area." = "Eine Zeile bietet Platz für vollständige Einheiten; gestapelt entspricht dem Infobereich.";
 "Only available when the meter is on the taskbar — otherwise this is where the meter lives." = "Nur verfügbar, wenn die Anzeige auf der Taskleiste ist — andernfalls befindet sich die Anzeige hier.";
@@ -274,3 +273,20 @@
 "Windows has switched NetFluss off in Startup apps, so it will not start at sign-in. Turn it back on there." = "Windows hat NetFluss in den Autostart-Apps deaktiviert, daher startet es bei der Anmeldung nicht. Aktiviere es dort wieder.";
 "Your live network speed is now in the notification area. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." = "Deine aktuelle Netzwerkgeschwindigkeit steht jetzt im Infobereich. Klicke darauf für Details; die Schaltfläche „Mehr“ öffnet Einstellungen, Statistiken, Speedtest und mehr.";
 "Your live network speed is now on the taskbar, next to the clock. Click it for the details; the More button there opens Preferences, Statistics, Speed Test and more." = "Deine aktuelle Netzwerkgeschwindigkeit steht jetzt in der Taskleiste neben der Uhr. Klicke darauf für Details; die Schaltfläche „Mehr“ öffnet Einstellungen, Statistiken, Speedtest und mehr.";
+
+/* In-app updates (Sparkle-style update window) */
+"Once a day, NetFluss looks for a new Windows release on GitHub and asks whether to install it. You can also check any time in About." = "Einmal täglich sucht NetFluss auf GitHub nach einer neuen Windows-Version und fragt, ob sie installiert werden soll. Du kannst auch jederzeit unter „Über“ nachsehen.";
+"Automatically download and install updates" = "Updates automatisch laden und installieren";
+"Installs a verified update without asking, while no NetFluss window is open and no NetFluss VPN is connected, then restarts NetFluss." = "Installiert ein geprüftes Update ohne Rückfrage, sobald kein NetFluss-Fenster offen und kein NetFluss-VPN verbunden ist, und startet NetFluss danach neu.";
+"Software Update" = "Softwareaktualisierung";
+"A new version of NetFluss is available!" = "Eine neue Version von NetFluss ist verfügbar!";
+"NetFluss %@ is now available — you have %@. Would you like to install it now?" = "NetFluss %@ ist jetzt verfügbar – du hast %@. Möchtest du es jetzt installieren?";
+"NetFluss %@ is now available — you have %@. Would you like to download it now?" = "NetFluss %@ ist jetzt verfügbar – du hast %@. Möchtest du es jetzt herunterladen?";
+"Release Notes:" = "Versionshinweise:";
+"No release notes." = "Keine Versionshinweise.";
+"Automatically download and install updates in the future" = "Updates künftig automatisch laden und installieren";
+"Skip This Version" = "Diese Version überspringen";
+"Remind Me Later" = "Später erinnern";
+"Install Update" = "Update installieren";
+"The update could not be installed." = "Das Update konnte nicht installiert werden.";
+"NetFluss has been updated to %@. Click for what's new." = "NetFluss wurde auf %@ aktualisiert. Klicke hier für die Neuerungen.";

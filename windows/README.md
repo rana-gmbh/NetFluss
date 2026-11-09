@@ -80,7 +80,9 @@ pre-releases, with `--prerelease`. Versions are ordered by semver (2.6.0-beta.1 
 never see a beta and beta testers get the next beta and then the release, which returns
 them to the stable channel. `NETFLUSS_UPDATE_PRERELEASES=1` opts any build into
 pre-releases, for trying an update end to end on a throwaway pre-release first.
-Release notes live in `windows/Packaging/release-notes/`. Each release's notes end with `release-notes/code-signing-policy.md`: SignPath Foundation, which signs the Windows builds, requires the code signing policy on every download page. Signing runs in the release workflow through SignPath in two rounds (executables, then installers), each approved by hand; the artifact configurations are in `windows/Packaging/signpath/`.
+Release notes live in `windows/Packaging/release-notes/`. Each release's notes end with `release-notes/code-signing-policy.md`: SignPath Foundation, which signs the Windows builds, requires the code signing policy on every download page. Signing runs in the release workflow through SignPath in two rounds (executables, then installers), each approved by hand; the artifact configurations are in `windows/Packaging/signpath/`. Betas and releases are signed only once the repository variable `SIGNPATH_SIGNING_POLICY_SLUG` is `release-signing` (the production certificate); until then they ship unsigned, without the code signing policy in their notes. Alpha tags go through whichever policy is set, for testing it.
+
+**In-app updates** (`UpdateNotifier`, `UpdateInstaller`, `UpdateWindow`) work like Sparkle: the daily check downloads and verifies the setup in the background, then asks (Install Update / Remind Me Later / Skip This Version) or, with *Automatically download and install updates*, installs it while no NetFluss window is open and no NetFluss VPN is connected. The setup runs with `/VERYSILENT /LAUNCH` and relaunches NetFluss, which then says what it updated to.
 
 **`--latest=false` is not optional.** The macOS app's Sparkle feed is
 `releases/latest/download/appcast.xml`, so a Windows release marked "latest" would cut every

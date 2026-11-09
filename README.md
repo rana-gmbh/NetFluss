@@ -21,6 +21,8 @@ NetFluss now runs on Windows too: a native Windows 10 and 11 app with the same f
 - **Renamable DNS profiles**, **per-node proxy statistics** for Clash-API clients, **Search settings** in Preferences and a short welcome on new installs.
 - **Disconnect really disconnects:** quitting, updating or signing out takes the VPN down, a tunnel left by a crash is cleaned up, and Windows VPN connections are followed live.
 - **Imported WireGuard configs are checked:** script lines that could run with administrator rights are refused, naming the line. Unreadable statistics are restored from a daily backup.
+- **Updates like on the Mac:** a found update opens a window with its release notes and **Install Update**, **Remind Me Later** and **Skip This Version** — already downloaded and verified, so installing is quick. Or let updates install themselves while NetFluss isn't in use.
+- **M-Lab speed test measures upload again** ([#64](https://github.com/rana-gmbh/NetFluss/issues/64)).
 
 Updating from Beta 2: the installed version offers this update by itself (About → Install and Relaunch). NetFluss then asks once to update the helper, which needs administrator approval.
 

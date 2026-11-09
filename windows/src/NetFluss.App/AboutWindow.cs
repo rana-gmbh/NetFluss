@@ -185,12 +185,12 @@ internal sealed class AboutWindow : Window
                 var progress = new Progress<double>(fraction =>
                     status.Text = Localization.L("Downloading… {0}", fraction.ToString("P0", Localization.Culture)));
 
-                var error = await UpdateInstaller.InstallAsync(update, progress, CancellationToken.None);
+                // Reuses a setup already fetched in the background; on success NetFluss quits
+                // cleanly and the setup, which waits for that, relaunches it.
+                var error = await _updates.InstallAsync(update, progress);
                 if (error is null)
                 {
-                    // The setup waits for NetFluss to go; quitting cleanly saves statistics first.
                     status.Text = Localization.L("Installing…");
-                    Application.Current.Shutdown();
                     return;
                 }
 

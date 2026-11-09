@@ -30,7 +30,10 @@ jobs:
       # Code signing through SignPath, once its secret and repository variables are set:
       # secret SIGNPATH_API_TOKEN; variables SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG,
       # SIGNPATH_SIGNING_POLICY_SLUG (the test policy first, the release policy later).
-      HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
+      # Public releases are signed only with the release policy: a test certificate is no
+      # better than none for users, and every signing request waits for manual approval.
+      # Alpha tags (win-vX.Y.Z-alpha.N) still go through whichever policy is set, to test it.
+      HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' && (vars.SIGNPATH_SIGNING_POLICY_SLUG == 'release-signing' || contains(github.ref_name, '-alpha.')) }}
 
     steps:
       - uses: actions/checkout@v4
