@@ -232,7 +232,11 @@ public static class RasVpn
 
         var output = process.StandardOutput.ReadToEndAsync();
         _ = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
+        if (!await NetFluss.Core.ProcessWait.ForExitAsync(process, NetFluss.Core.ProcessWait.Command))
+        {
+            return NetFluss.Core.ProcessWait.TimedOutMessage;
+        }
+
         var text = (await output).Trim();
         if (process.ExitCode == 0)
         {

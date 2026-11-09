@@ -2812,4 +2812,13 @@
   <data name="Leave empty to restore the original name." xml:space="preserve">
     <value>留空以恢复原始名称。</value>
   </data>
+  <data name="The command did not finish in time." xml:space="preserve">
+    <value>命令未能及时完成。</value>
+  </data>
+  <data name="This WireGuard config was refused because it contains a NUL byte. Fix it and re-import." xml:space="preserve">
+    <value>此 WireGuard 配置已被拒绝，因为其中包含 NUL 字节。请修正后重新导入。</value>
+  </data>
+  <data name="This WireGuard config was refused because line {0} (“{1}”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import." xml:space="preserve">
+    <value>此 WireGuard 配置已被拒绝，因为第 {0} 行（“{1}”）不是 NetFluss 会以管理员权限运行的设置。请删除该行后重新导入。</value>
+  </data>
 </root>

@@ -233,6 +233,11 @@ public partial class NetFlussApplication : Application
             // Windows ending the session is a clean end, even if OnExit never runs.
             SessionGuard.End();
             PersistState();
+
+            // Signing out takes the VPN down first, as quitting does (macOS 2.7.2). The helper
+            // would stop the tunnel anyway once this process is gone; asking now lets OpenVPN
+            // exit cleanly instead of being killed.
+            _vpn?.StopNow();
         };
         // While the session is locked nobody sees the popover, the meter's VPN mark or the
         // router rates: pause their lookups (macOS does the same on lock and display sleep).

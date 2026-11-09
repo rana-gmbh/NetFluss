@@ -74,7 +74,15 @@ internal sealed class HelperServer : IDisposable
 
     private Action<string>? _log;
 
-    internal void Start() => _ = Task.Run(AcceptLoopAsync);
+    internal void Start()
+    {
+        // Before the first client can connect: nothing a previous run left behind is owned.
+        _ = Task.Run(async () =>
+        {
+            await _vpn.CleanUpLeftoversAsync();
+            await AcceptLoopAsync();
+        });
+    }
 
     private async Task AcceptLoopAsync()
     {
@@ -201,6 +209,9 @@ internal sealed class HelperServer : IDisposable
         {
             Remove(client);
             Log?.Invoke("client disconnected");
+
+            // The app that started these is gone — quit, crashed, or ended with the session.
+            await _vpn.StopOwnedByAsync(client);
         }
     }
 
@@ -240,7 +251,7 @@ internal sealed class HelperServer : IDisposable
                 break;
 
             case "vpnStart":
-                await client.SendAsync(await _vpn.StartAsync(request) with { Id = request.Id });
+                await client.SendAsync(await _vpn.StartAsync(request, client) with { Id = request.Id });
                 break;
 
             case "vpnStop":

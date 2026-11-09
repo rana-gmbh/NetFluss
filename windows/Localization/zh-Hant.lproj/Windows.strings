@@ -261,3 +261,8 @@
 "No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "無法取得 Wi-Fi 網路名稱。請連線 Wi-Fi 網路，或在 Wi-Fi 頁面允許位置存取——否則 Windows 不會提供網路名稱。";
 "Install the privileged helper to let NetFluss change DNS without asking each time." = "安裝 NetFluss 輔助工具（一般 → 系統存取），讓 NetFluss 無需每次詢問即可變更 DNS。";
 "Leave empty to restore the original name." = "留空以還原原始名稱。";
+
+/* 2.7.2 reliability: bounded commands, WireGuard config refusal */
+"The command did not finish in time." = "命令未能及時完成。";
+"This WireGuard config was refused because it contains a NUL byte. Fix it and re-import." = "此 WireGuard 設定已被拒絕，因為其中包含 NUL 位元組。請修正後重新匯入。";
+"This WireGuard config was refused because line %@ (“%@”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import." = "此 WireGuard 設定已被拒絕，因為第 %@ 行（「%@」）不是 NetFluss 會以管理員權限執行的設定。請刪除該行後重新匯入。";

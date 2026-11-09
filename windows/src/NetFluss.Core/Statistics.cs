@@ -209,6 +209,12 @@ public sealed class StatisticsStore
     private const int HourlyRetentionHours = 72;
     private const int DailyRetentionDays = 400;
 
+    /// <summary>
+    /// How old the safety copy may get. Daily rather than on every save: the archive is
+    /// rewritten every few minutes, and a copy that young would only ever hold the same damage.
+    /// </summary>
+    private static readonly TimeSpan BackupInterval = TimeSpan.FromHours(24);
+
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -222,6 +228,12 @@ public sealed class StatisticsStore
     private bool _dirty;
     private DateTime? _lastFlush;
     private DateTime? _lastPrune;
+
+    /// <summary>
+    /// Set when an unreadable archive could not be moved aside: saving would then overwrite
+    /// the only copy of the user's history, so nothing is written this session.
+    /// </summary>
+    private bool _saveBlocked;
 
     public StatisticsStore(string path)
     {
@@ -353,7 +365,7 @@ public sealed class StatisticsStore
         string json;
         lock (_gate)
         {
-            if (!_dirty || _path is null)
+            if (!_dirty || _path is null || _saveBlocked)
             {
                 return;
             }
@@ -371,6 +383,7 @@ public sealed class StatisticsStore
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            RefreshBackupIfNeeded(_path, now);
             var temporary = _path + ".tmp";
             File.WriteAllText(temporary, json);
             File.Move(temporary, _path, overwrite: true);
@@ -393,6 +406,9 @@ public sealed class StatisticsStore
             _archive = new StatisticsArchive();
             _loaded = true;
             _dirty = true;
+
+            // Asked for explicitly, so an unreadable file may now be written over.
+            _saveBlocked = false;
         }
     }
 
@@ -773,32 +789,101 @@ public sealed class StatisticsStore
             return;
         }
 
+        if (ReadArchive(_path) is { } archive)
+        {
+            _archive = Migrate(archive);
+            return;
+        }
+
+        // A file that will not load is not the same as no file. Starting empty and saving
+        // over it would turn a damaged archive — or one written by a newer version — into
+        // permanently lost history, so it is moved aside and the daily copy takes its place
+        // (macOS 2.7.2).
+        if (!MoveAside(_path))
+        {
+            _saveBlocked = true;
+            return;
+        }
+
+        if (ReadArchive(BackupPath(_path)) is { } backup)
+        {
+            _archive = Migrate(backup);
+            _dirty = true;
+        }
+    }
+
+    private StatisticsArchive Migrate(StatisticsArchive archive)
+    {
+        // Same rule as macOS: app history recorded under an older attribution scheme is
+        // dropped rather than mixed with new, because the two disagree about names.
+        if (archive.AppTrafficSchemaVersion < StatisticsArchive.CurrentAppTrafficSchemaVersion)
+        {
+            archive.AppMinute.Clear();
+            archive.AppHourly.Clear();
+            archive.AppDaily.Clear();
+            archive.LastAppSampleAt = null;
+            archive.AppTrafficSchemaVersion = StatisticsArchive.CurrentAppTrafficSchemaVersion;
+            _dirty = true;
+        }
+
+        return archive;
+    }
+
+    private static StatisticsArchive? ReadArchive(string path)
+    {
         try
         {
-            var archive = JsonSerializer.Deserialize<StatisticsArchive>(File.ReadAllText(_path), Json);
-            if (archive is null)
-            {
-                return;
-            }
-
-            // Same rule as macOS: app history recorded under an older attribution scheme is
-            // dropped rather than mixed with new, because the two disagree about names.
-            if (archive.AppTrafficSchemaVersion < StatisticsArchive.CurrentAppTrafficSchemaVersion)
-            {
-                archive.AppMinute.Clear();
-                archive.AppHourly.Clear();
-                archive.AppDaily.Clear();
-                archive.LastAppSampleAt = null;
-                archive.AppTrafficSchemaVersion = StatisticsArchive.CurrentAppTrafficSchemaVersion;
-                _dirty = true;
-            }
-
-            _archive = archive;
+            return File.Exists(path) ? JsonSerializer.Deserialize<StatisticsArchive>(File.ReadAllText(path), Json) : null;
         }
-        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
+        catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            // A damaged history must not stop the app; start a fresh one. The bad file is
-            // left in place until the next flush replaces it.
+            return null;
+        }
+    }
+
+    /// <summary>"statistics.json" → "statistics.backup.json", next to it.</summary>
+    internal static string BackupPath(string path)
+        => Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path) + ".backup.json");
+
+    /// <summary>Keeps an unreadable archive for inspection or recovery, next to the original.</summary>
+    private static bool MoveAside(string path)
+    {
+        try
+        {
+            var name = $"{Path.GetFileNameWithoutExtension(path)}.unreadable-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}.json";
+            File.Move(path, Path.Combine(Path.GetDirectoryName(path)!, name), overwrite: false);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Copies the current archive to the backup when the backup is a day old or missing.</summary>
+    private static void RefreshBackupIfNeeded(string path, DateTime now)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        var backup = BackupPath(path);
+        if (File.Exists(backup) && now - File.GetLastWriteTime(backup) < BackupInterval)
+        {
+            return;
+        }
+
+        try
+        {
+            File.Copy(path, backup, overwrite: true);
+
+            // File.Copy keeps the source's timestamp; the backup's age is when it was taken.
+            File.SetLastWriteTime(backup, now);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // A missed backup is retried at the next save.
         }
     }
 

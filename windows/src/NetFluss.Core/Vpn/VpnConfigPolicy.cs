@@ -1,7 +1,6 @@
 // Copyright (C) 2026 Rana GmbH — GPLv3. See LICENSE at the repository root.
 
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace NetFluss.Core.Vpn;
 
@@ -22,6 +21,20 @@ namespace NetFluss.Core.Vpn;
 /// and <c>&lt;connection&gt;</c> blocks — which hold directives — are checked like the rest.
 /// Anything this parser and OpenVPN might read differently is refused.</para>
 /// </summary>
+/// <summary>A WireGuard config line NetFluss will not run: 1-based, with the key it found (0 for the whole file).</summary>
+public sealed record WireGuardRefusal(int Line, string Key)
+{
+    /// <summary>For the user: which line, and what to do about it.</summary>
+    public string Describe() => Line == 0
+        ? Localization.L("This WireGuard config was refused because it contains a NUL byte. Fix it and re-import.")
+        : Localization.L("This WireGuard config was refused because line {0} (“{1}”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import.", Line, Key);
+
+    /// <summary>For the helper's reply and its log, which stay in English.</summary>
+    public string DescribeInvariant() => Line == 0
+        ? "This WireGuard config was refused because it contains a NUL byte. Fix it and re-import."
+        : $"This WireGuard config was refused because line {Line} ('{Key}') is not a setting NetFluss runs with administrator rights. Remove that line and re-import.";
+}
+
 public static partial class VpnConfigPolicy
 {
     // Declared before Allowed: static fields initialize in order, and Allowed is built from this.
@@ -268,20 +281,64 @@ public static partial class VpnConfigPolicy
         return tokens;
     }
 
-    /// <summary>
-    /// A WireGuard config with its script hooks removed. WireGuard for Windows ignores them
-    /// unless an administrator has turned on DangerousScriptExecution — and a machine where
-    /// that is on is exactly where a profile must not be allowed to bring its own.
-    /// </summary>
-    public static string StripWireGuardScripts(string text)
+    /// <summary>The keys a WireGuard config may carry — the macOS 2.7 allowlist.</summary>
+    private static readonly HashSet<string> WireGuardKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n')
-            .Where(line => !ScriptLine().IsMatch(line));
-        return string.Join("\r\n", lines);
-    }
+        "address", "allowedips", "dns", "endpoint", "fwmark", "listenport", "mtu",
+        "persistentkeepalive", "presharedkey", "privatekey", "publickey", "saveconfig", "table",
+    };
 
-    [GeneratedRegex(@"^\s*(PreUp|PostUp|PreDown|PostDown)\s*=", RegexOptions.IgnoreCase)]
-    private static partial Regex ScriptLine();
+    private static readonly HashSet<string> WireGuardSections = new(StringComparer.OrdinalIgnoreCase) { "[interface]", "[peer]" };
+
+    /// <summary>
+    /// Why a WireGuard config may not run, naming the line, or null when it may.
+    ///
+    /// <para><c>PreUp</c>, <c>PostUp</c>, <c>PreDown</c> and <c>PostDown</c> run commands.
+    /// WireGuard for Windows ignores them unless an administrator turned on
+    /// DangerousScriptExecution — and a machine where that is on is exactly where a profile
+    /// must not bring its own. They used to be stripped silently; macOS 2.7 refuses the config
+    /// and says which line to remove, so the user knows the tunnel would not have run what the
+    /// config asked for. An allowlist, as on macOS, so a key nobody thought of is refused
+    /// rather than passed.</para>
+    /// </summary>
+    public static WireGuardRefusal? UnsafeWireGuardLine(string text)
+    {
+        if (text.Contains('\0', StringComparison.Ordinal))
+        {
+            return new WireGuardRefusal(0, "NUL");
+        }
+
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var hash = line.IndexOf('#', StringComparison.Ordinal);
+            var content = (hash >= 0 ? line[..hash] : line).Trim().TrimStart('﻿');
+            if (content.Length == 0)
+            {
+                continue;
+            }
+
+            if (content.StartsWith('['))
+            {
+                if (!WireGuardSections.Contains(content))
+                {
+                    return new WireGuardRefusal(i + 1, content);
+                }
+
+                continue;
+            }
+
+            var equals = content.IndexOf('=', StringComparison.Ordinal);
+            var key = (equals < 0 ? content : content[..equals]).Trim();
+            if (equals < 0 || !WireGuardKeys.Contains(key))
+            {
+                return new WireGuardRefusal(i + 1, key);
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// A tunnel name WireGuard for Windows accepts — it names the service and the adapter

@@ -97,7 +97,11 @@ internal static class AdapterReconnector
                 return Localization.L("Could not start the elevated helper.");
             }
 
-            await process.WaitForExitAsync();
+            if (!await ProcessWait.ForExitAsync(process, ProcessWait.Command))
+            {
+                return ProcessWait.TimedOutMessage;
+            }
+
             return process.ExitCode == 0 ? null : Localization.L("Windows did not restart {0}.", name);
         }
         catch (Win32Exception e) when (e.NativeErrorCode == 1223)

@@ -170,19 +170,94 @@ public class StatisticsStoreTests
         }
     }
 
+    private static string TempFolder()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"netfluss-stats-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        return folder;
+    }
+
     [Fact]
     public void CorruptArchive_StartsFresh_RatherThanThrowing()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"netfluss-stats-{Guid.NewGuid():N}.json");
+        var folder = TempFolder();
         try
         {
+            var path = Path.Combine(folder, "statistics.json");
             File.WriteAllText(path, "{ this is not json");
             var store = new StatisticsStore(path);
             Assert.False(store.Report(StatisticsRange.Last24Hours, Noon, NoNames, NoHidden, false).HasAdapterData);
         }
         finally
         {
-            File.Delete(path);
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// macOS 2.7.2: an unreadable archive is kept aside, not saved over, and yesterday's copy
+    /// takes its place — a damaged file must not become permanently lost history.
+    /// </summary>
+    [Fact]
+    public void CorruptArchive_IsKeptAside_AndTheBackupRestored()
+    {
+        var folder = TempFolder();
+        try
+        {
+            var path = Path.Combine(folder, "statistics.json");
+            var store = new StatisticsStore(path);
+            store.RecordAdapterDeltas([new AdapterDelta("{eth}", "Ethernet", false, 500, 50)], Noon);
+            store.Flush(force: true, Noon);
+
+            // The second save takes the daily backup of what the first one wrote.
+            store.RecordAdapterDeltas([new AdapterDelta("{eth}", "Ethernet", false, 1, 1)], Noon);
+            store.Flush(force: true, Noon);
+            Assert.True(File.Exists(StatisticsStore.BackupPath(path)));
+
+            File.WriteAllText(path, "{ damaged");
+            var restored = new StatisticsStore(path);
+            var report = restored.Report(StatisticsRange.Last24Hours, Noon, NoNames, NoHidden, false);
+
+            Assert.Equal(500UL, report.TotalDownloadBytes);
+            var aside = Assert.Single(Directory.GetFiles(folder, "statistics.unreadable-*.json"));
+            Assert.Equal("{ damaged", File.ReadAllText(aside));
+
+            // Restored history is written back under the original name.
+            restored.Flush(force: true, Noon);
+            Assert.Contains("\"adapterDaily\"", File.ReadAllText(path));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>A copy taken minutes ago would only ever hold the same damage, so it is refreshed daily.</summary>
+    [Fact]
+    public void Backup_IsRefreshedOncePerDay()
+    {
+        var folder = TempFolder();
+        try
+        {
+            var path = Path.Combine(folder, "statistics.json");
+            var store = new StatisticsStore(path);
+            store.RecordAdapterDeltas([new AdapterDelta("{eth}", "Ethernet", false, 100, 0)], Noon);
+            store.Flush(force: true, Noon);
+            store.RecordAdapterDeltas([new AdapterDelta("{eth}", "Ethernet", false, 100, 0)], Noon);
+            store.Flush(force: true, Noon);
+            var first = File.ReadAllText(StatisticsStore.BackupPath(path));
+
+            store.RecordAdapterDeltas([new AdapterDelta("{eth}", "Ethernet", false, 100, 0)], Noon);
+            store.Flush(force: true, Noon.AddHours(1));
+            Assert.Equal(first, File.ReadAllText(StatisticsStore.BackupPath(path)));
+
+            store.RecordAdapterDeltas([new AdapterDelta("{eth}", "Ethernet", false, 100, 0)], Noon);
+            store.Flush(force: true, Noon.AddDays(1).AddMinutes(1));
+            Assert.NotEqual(first, File.ReadAllText(StatisticsStore.BackupPath(path)));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
         }
     }
 

@@ -132,13 +132,41 @@ public sealed class VpnTests : IDisposable
         Assert.Equal(["10.2.0.1", "1.1.1.1"], VpnConfigImporter.WireGuardDns(WireGuard));
     }
 
+    /// <summary>
+    /// Script hooks are refused, naming the line — macOS 2.7. They used to be stripped
+    /// silently, which ran a tunnel that was not the one the config described.
+    /// </summary>
     [Fact]
-    public void WireGuardScriptsAreStripped()
+    public void WireGuardScriptsAreRefusedByLine()
     {
-        var staged = VpnConfigPolicy.StripWireGuardScripts(WireGuard);
-        Assert.DoesNotContain("PostUp", staged, StringComparison.Ordinal);
-        Assert.Contains("PrivateKey = aaaa", staged, StringComparison.Ordinal);
+        var refusal = VpnConfigPolicy.UnsafeWireGuardLine(WireGuard);
+        Assert.Equal(new WireGuardRefusal(5, "PostUp"), refusal);
+        Assert.Contains("5", refusal!.Describe(), StringComparison.Ordinal);
+        Assert.Contains("PostUp", refusal.DescribeInvariant(), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void WireGuardScriptsAreWarnedAboutAtImport()
+    {
+        var result = VpnConfigImporter.ImportWireGuard(Write("Hooked.conf", WireGuard));
+        Assert.Contains(result.Warnings, warning => warning.Contains("PostUp", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("[Interface]\nPrivateKey = a\n# PostUp = comment only\nAddress = 10.0.0.2/32 # trailing\n\n[Peer]\nPublicKey = b\nAllowedIPs = 0.0.0.0/0\nEndpoint = 1.2.3.4:51820\nPersistentKeepalive = 25")]
+    [InlineData("﻿[Interface]\r\nPrivateKey = a\r\nDNS = 1.1.1.1\r\nMTU = 1420\r\n[Peer]\r\nPublicKey = b\r\nPresharedKey = c\r\nAllowedIPs = ::/0")]
+    public void WireGuardPlainConfigsPass(string config) => Assert.Null(VpnConfigPolicy.UnsafeWireGuardLine(config));
+
+    [Theory]
+    [InlineData("[Interface]\npreup = x", 2, "preup")]
+    [InlineData("[Interface]\n  PreDown=x", 2, "PreDown")]
+    [InlineData("[Interface]\nPrivateKey = a\n[Script]\n", 3, "[Script]")]
+    [InlineData("[Interface]\nPrivateKey a", 2, "PrivateKey a")]
+    public void WireGuardUnknownKeysAreRefused(string config, int line, string key)
+        => Assert.Equal(new WireGuardRefusal(line, key), VpnConfigPolicy.UnsafeWireGuardLine(config));
+
+    [Fact]
+    public void WireGuardNulIsRefused() => Assert.Equal(0, VpnConfigPolicy.UnsafeWireGuardLine("[Interface]\nPrivateKey = a\0")!.Line);
 
     [Theory]
     [InlineData("My VPN (Zürich)", "My-VPN--Z-rich")]

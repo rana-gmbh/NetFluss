@@ -62,7 +62,18 @@ public static class VpnConfigImporter
             };
     }
 
-    public static VpnImportResult ImportWireGuard(string path) => Import(path, "conf", collectSidecars: false, ParseWireGuard, _ => []);
+    public static VpnImportResult ImportWireGuard(string path)
+    {
+        var result = Import(path, "conf", collectSidecars: false, ParseWireGuard, _ => []);
+
+        // Said at import, naming the line, rather than discovered from a failed connection.
+        var refused = result.Files
+            .Where(f => f.Name.EndsWith(".conf", StringComparison.OrdinalIgnoreCase))
+            .Select(f => VpnConfigPolicy.UnsafeWireGuardLine(Decode(f.Data)))
+            .FirstOrDefault(r => r is not null);
+
+        return refused is null ? result : result with { Warnings = [.. result.Warnings, refused.Describe()] };
+    }
 
     private static VpnImportResult Import(string path, string extension, bool collectSidecars, Func<string, Parsed> parse, Func<string, IEnumerable<string>> unsupported)
     {

@@ -261,3 +261,8 @@
 "No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube den Standortzugriff auf der Seite WLAN — ohne ihn gibt Windows den Netzwerknamen nicht preis.";
 "Install the privileged helper to let NetFluss change DNS without asking each time." = "Installiere den NetFluss-Helfer (Allgemein → Systemzugriff), damit NetFluss DNS ändern kann, ohne jedes Mal zu fragen.";
 "Leave empty to restore the original name." = "Leer lassen, um den ursprünglichen Namen wiederherzustellen.";
+
+/* 2.7.2 reliability: bounded commands, WireGuard config refusal */
+"The command did not finish in time." = "Der Befehl wurde nicht rechtzeitig fertig.";
+"This WireGuard config was refused because it contains a NUL byte. Fix it and re-import." = "Diese WireGuard-Konfiguration wurde abgelehnt, weil sie ein NUL-Byte enthält. Korrigiere sie und importiere sie erneut.";
+"This WireGuard config was refused because line %@ (“%@”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import." = "Diese WireGuard-Konfiguration wurde abgelehnt, weil Zeile %@ („%@“) keine Einstellung ist, die NetFluss mit Administratorrechten ausführt. Entferne diese Zeile und importiere die Konfiguration erneut.";

@@ -31,6 +31,9 @@ internal sealed class VpnTunnels : IDisposable
 
     private readonly ConcurrentDictionary<string, Tunnel> _tunnels = new();
 
+    /// <summary>Which client connection started each live tunnel.</summary>
+    private readonly ConcurrentDictionary<string, object> _owners = new();
+
     internal Action<string>? Log { get; set; }
 
     /// <summary>
@@ -44,7 +47,76 @@ internal sealed class VpnTunnels : IDisposable
     /// <summary>How long a finished tunnel's log stays readable before its folder (and keys) go.</summary>
     private static readonly TimeSpan LogGrace = TimeSpan.FromMinutes(2);
 
-    internal async Task<HelperMessage> StartAsync(HelperRequest request)
+    /// <param name="owner">
+    /// The client connection asking. Its tunnels stop when it goes away — the app quitting,
+    /// crashing or being ended with the session — so no tunnel outlives the app that shows it
+    /// (macOS 2.7.2: "a tunnel left behind by a crash is cleaned up").
+    /// </param>
+    internal async Task<HelperMessage> StartAsync(HelperRequest request, object? owner = null)
+    {
+        var reply = await StartCoreAsync(request);
+        if (owner is not null && reply is { Ok: true, Handle: { } handle })
+        {
+            _owners[handle] = owner;
+        }
+
+        return reply;
+    }
+
+    /// <summary>Stops every tunnel <paramref name="owner"/> started and has not stopped.</summary>
+    internal async Task StopOwnedByAsync(object owner)
+    {
+        foreach (var handle in _owners.Where(pair => ReferenceEquals(pair.Value, owner)).Select(pair => pair.Key).ToList())
+        {
+            Log?.Invoke($"stopping {handle}: its client went away");
+            await StopAsync(handle);
+        }
+    }
+
+    /// <summary>
+    /// Removes NetFluss tunnels a previous run left behind. WireGuard tunnel services start
+    /// with Windows, so one orphaned by a crash would otherwise come back on every boot with
+    /// nothing showing it; and staged folders hold keys. At helper start no client can own
+    /// either yet.
+    /// </summary>
+    internal async Task CleanUpLeftoversAsync()
+    {
+        try
+        {
+            using var services = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services");
+            var leftovers = (services?.GetSubKeyNames() ?? [])
+                .Where(name => name.StartsWith("WireGuardTunnel$", StringComparison.OrdinalIgnoreCase))
+                .Select(name => name["WireGuardTunnel$".Length..])
+                .Where(name => OwnTunnelName("wg:" + name) is not null)
+                .ToList();
+
+            if (leftovers.Count > 0 && WireGuardPath() is { } wireguard)
+            {
+                foreach (var name in leftovers)
+                {
+                    Log?.Invoke($"removing leftover tunnel {name}");
+                    await RunAsync(wireguard, "/uninstalltunnelservice", name);
+                }
+            }
+
+            if (Directory.Exists(StagingRoot) && !new DirectoryInfo(StagingRoot).Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                foreach (var folder in Directory.GetDirectories(StagingRoot))
+                {
+                    if (!_tunnels.Values.Any(t => string.Equals(t.Directory, folder, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        Cleanup(folder);
+                    }
+                }
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            Log?.Invoke("leftover cleanup failed: " + e.Message);
+        }
+    }
+
+    private async Task<HelperMessage> StartCoreAsync(HelperRequest request)
     {
         var files = request.Files ?? [];
         if (files.Count == 0 || request.Config is null || files.Sum(f => (long)f.Data.Length) > MaxTotalBytes ||
@@ -228,8 +300,14 @@ internal sealed class VpnTunnels : IDisposable
 
         // The tunnel is named after the file, so the file is named after the tunnel.
         var text = Encoding.UTF8.GetString(files.First(f => f.Name == config).Data).TrimStart('﻿');
+        if (VpnConfigPolicy.UnsafeWireGuardLine(text) is { } refusal)
+        {
+            Cleanup(directory);
+            return Failure(refusal.DescribeInvariant());
+        }
+
         var configPath = Path.Combine(directory, name + ".conf");
-        File.WriteAllText(configPath, VpnConfigPolicy.StripWireGuardScripts(text), new UTF8Encoding(false));
+        File.WriteAllText(configPath, text, new UTF8Encoding(false));
 
         // A tunnel of the same name left over from a crash would make the install fail.
         if (_tunnels.Values.Any(t => t.WireGuardName == name) || ServiceExists("WireGuardTunnel$" + name))
@@ -309,6 +387,8 @@ internal sealed class VpnTunnels : IDisposable
             return Failure("No such tunnel.");
         }
 
+        _owners.TryRemove(handle, out _);
+
         if (handle.StartsWith("wg:", StringComparison.Ordinal))
         {
             // Also stops a tunnel from a previous run of the helper, which this one never saw —
@@ -357,6 +437,7 @@ internal sealed class VpnTunnels : IDisposable
     /// </summary>
     private void Retire(string handle, Tunnel tunnel)
     {
+        _owners.TryRemove(handle, out _);
         if (!_tunnels.TryRemove(handle, out _) && _tunnels.ContainsKey(handle + ":ended"))
         {
             return;

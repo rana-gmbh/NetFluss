@@ -2812,4 +2812,13 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Leave empty to restore the original name." xml:space="preserve">
     <value>Leer lassen, um den ursprünglichen Namen wiederherzustellen.</value>
   </data>
+  <data name="The command did not finish in time." xml:space="preserve">
+    <value>Der Befehl wurde nicht rechtzeitig fertig.</value>
+  </data>
+  <data name="This WireGuard config was refused because it contains a NUL byte. Fix it and re-import." xml:space="preserve">
+    <value>Diese WireGuard-Konfiguration wurde abgelehnt, weil sie ein NUL-Byte enthält. Korrigiere sie und importiere sie erneut.</value>
+  </data>
+  <data name="This WireGuard config was refused because line {0} (“{1}”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import." xml:space="preserve">
+    <value>Diese WireGuard-Konfiguration wurde abgelehnt, weil Zeile {0} („{1}“) keine Einstellung ist, die NetFluss mit Administratorrechten ausführt. Entferne diese Zeile und importiere die Konfiguration erneut.</value>
+  </data>
 </root>

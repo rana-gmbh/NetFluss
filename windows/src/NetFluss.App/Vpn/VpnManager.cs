@@ -33,6 +33,7 @@ internal sealed class VpnManager : IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _liveness;
     private readonly DispatcherTimer _reconnect;
+    private readonly DispatcherTimer _systemWatch;
     private List<VpnProfile> _profiles;
     private OpenVpnManagementClient? _openVpn;
     private string? _tunnelHandle;
@@ -40,6 +41,20 @@ internal sealed class VpnManager : IDisposable
     private string? _wireGuardService;
     private int _reconnectAttempts;
     private int _generation;
+
+    /// <summary>
+    /// The system VPN now showing was connected outside NetFluss — in Windows Settings or the
+    /// network flyout. Quitting NetFluss leaves that one alone, as on macOS.
+    /// </summary>
+    private bool _connectedElsewhere;
+
+    /// <summary>
+    /// After NetFluss itself disconnects or fails, a moment in which a line still going down
+    /// is not mistaken for one somebody else brought up.
+    /// </summary>
+    private DateTime _systemWatchQuietUntil;
+
+    private bool _systemWatchInFlight;
 
     internal VpnManager(HelperClient helper, PrivilegedActions privileged, SettingsStore settings, NetworkMonitorService monitor, Dispatcher dispatcher)
     {
@@ -55,6 +70,12 @@ internal sealed class VpnManager : IDisposable
         _liveness.Tick += (_, _) => CheckLiveness();
         _reconnect = new DispatcherTimer(DispatcherPriority.Normal, dispatcher);
         _reconnect.Tick += (_, _) => Reconnect();
+
+        // System VPNs are followed live (macOS 2.7.2): one connected or disconnected in
+        // Windows Settings shows up here within a few seconds, not only when NetFluss dialled it.
+        _systemWatch = new DispatcherTimer(DispatcherPriority.Background, dispatcher) { Interval = LivenessInterval };
+        _systemWatch.Tick += (_, _) => WatchSystemVpns();
+        _systemWatch.Start();
     }
 
     /// <summary>Raised on the UI thread whenever the profiles or the status change.</summary>
@@ -638,6 +659,8 @@ internal sealed class VpnManager : IDisposable
         _liveness.Stop();
         _reconnectAttempts = 0;
         _generation++;
+        _connectedElsewhere = false;
+        _systemWatchQuietUntil = DateTime.UtcNow + TimeSpan.FromSeconds(10);
         SetStatus(Status with { State = VpnState.Disconnecting });
 
         await StopTunnelAsync();
@@ -713,8 +736,81 @@ internal sealed class VpnManager : IDisposable
 
         if (!alive)
         {
+            if (_nativeEntry is { } dropped && IsSystemProfile(Status.ProfileId))
+            {
+                // Disconnected in Windows Settings, or dropped: either way Windows owns this
+                // connection, so NetFluss shows it as off rather than dialling it again.
+                VpnDiagnosticsLog.Log($"System VPN \"{dropped}\" disconnected");
+                _nativeEntry = null;
+                _connectedElsewhere = false;
+                _liveness.Stop();
+                SetStatus(VpnStatus.Idle with { ProfileId = Status.ProfileId });
+                RefreshPublicAddress();
+                return;
+            }
+
             VpnDiagnosticsLog.Log("Tunnel went away");
             UnexpectedStop();
+        }
+    }
+
+    /// <summary>A profile that points at a Windows VPN connection NetFluss did not create.</summary>
+    private bool IsSystemProfile(Guid? id)
+        => id is { } profileId && Find(profileId) is { NativeEntryName: not null, OwnsNativeEntry: false };
+
+    /// <summary>
+    /// Shows a system VPN connected outside NetFluss as connected here. Only while NetFluss
+    /// itself is idle: a connection of its own always wins, and is never replaced by this.
+    /// </summary>
+    private async void WatchSystemVpns()
+    {
+        if (_systemWatchInFlight || Status.State is not (VpnState.Idle or VpnState.Failed) || DateTime.UtcNow < _systemWatchQuietUntil)
+        {
+            return;
+        }
+
+        var watched = _profiles.Where(p => p is { NativeEntryName: not null, OwnsNativeEntry: false }).ToList();
+        if (watched.Count == 0)
+        {
+            return;
+        }
+
+        _systemWatchInFlight = true;
+        try
+        {
+            var live = await Task.Run(() => RasVpn.Connections().Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase));
+            if (Status.State is not (VpnState.Idle or VpnState.Failed) || DateTime.UtcNow < _systemWatchQuietUntil)
+            {
+                return;
+            }
+
+            if (watched.FirstOrDefault(p => live.Contains(p.NativeEntryName!)) is not { } profile
+                || !await Task.Run(() => RasVpn.IsConnected(profile.NativeEntryName!)))
+            {
+                return;
+            }
+
+            var entry = profile.NativeEntryName!;
+            VpnDiagnosticsLog.Log($"System VPN \"{entry}\" connected outside NetFluss");
+            _nativeEntry = entry;
+            _connectedElsewhere = true;
+            SetStatus(new VpnStatus
+            {
+                State = VpnState.Connected,
+                ProfileId = profile.Id,
+                ConnectedSince = DateTimeOffset.Now,
+                AssignedIp = AdapterAddress(entry),
+            });
+            _liveness.Start();
+            RefreshPublicAddress();
+        }
+        catch (Exception e)
+        {
+            CrashLog.Write("system vpn watch", e);
+        }
+        finally
+        {
+            _systemWatchInFlight = false;
         }
     }
 
@@ -778,6 +874,7 @@ internal sealed class VpnManager : IDisposable
     private void Fail(string message)
     {
         VpnDiagnosticsLog.Log("VPN failed: " + message);
+        _systemWatchQuietUntil = DateTime.UtcNow + TimeSpan.FromSeconds(10);
         _liveness.Stop();
         SetStatus(Status with { State = VpnState.Failed, Error = message });
     }
@@ -839,10 +936,23 @@ internal sealed class VpnManager : IDisposable
     }
 
     /// <summary>Called on exit: a tunnel NetFluss started must not outlive it unowned.</summary>
-    public void Dispose()
+    public void Dispose() => StopNow();
+
+    /// <summary>
+    /// Takes the tunnel down before the app goes — on quit, update and sign-out — waiting at
+    /// most five seconds, which is about what Windows gives a session-ending app.
+    /// </summary>
+    internal void StopNow()
     {
         _reconnect.Stop();
         _liveness.Stop();
+        _systemWatch.Stop();
+
+        // Connected in Windows Settings, not here: not NetFluss's to take down on the way out.
+        if (_connectedElsewhere)
+        {
+            _nativeEntry = null;
+        }
         if (_tunnelHandle is not null || _nativeEntry is not null || _openVpn is not null)
         {
             // Off the UI thread: the stop awaits helper replies that would otherwise wait on it.

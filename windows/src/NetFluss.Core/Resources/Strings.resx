@@ -2812,4 +2812,13 @@ No network traffic is sent — only local counters from your machine are recorde
   <data name="Leave empty to restore the original name." xml:space="preserve">
     <value>Leave empty to restore the original name.</value>
   </data>
+  <data name="The command did not finish in time." xml:space="preserve">
+    <value>The command did not finish in time.</value>
+  </data>
+  <data name="This WireGuard config was refused because it contains a NUL byte. Fix it and re-import." xml:space="preserve">
+    <value>This WireGuard config was refused because it contains a NUL byte. Fix it and re-import.</value>
+  </data>
+  <data name="This WireGuard config was refused because line {0} (“{1}”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import." xml:space="preserve">
+    <value>This WireGuard config was refused because line {0} (“{1}”) is not a setting NetFluss runs with administrator rights. Remove that line and re-import.</value>
+  </data>
 </root>

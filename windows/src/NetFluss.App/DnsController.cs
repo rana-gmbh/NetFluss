@@ -195,7 +195,10 @@ internal sealed class DnsController : IDnsApplier
                 return DnsApplyResult.Fail(Localization.L("Could not start the elevated helper."));
             }
 
-            await process.WaitForExitAsync();
+            if (!await ProcessWait.ForExitAsync(process, ProcessWait.Command))
+            {
+                return DnsApplyResult.Fail(ProcessWait.TimedOutMessage);
+            }
 
             return process.ExitCode == 0
                 ? DnsApplyResult.Ok(servers.Count == 0

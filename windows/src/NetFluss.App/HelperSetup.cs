@@ -53,7 +53,11 @@ internal static class HelperSetup
                 return Localization.L("Could not start the elevated helper.");
             }
 
-            await process.WaitForExitAsync();
+            if (!await ProcessWait.ForExitAsync(process, ProcessWait.Install))
+            {
+                return ProcessWait.TimedOutMessage;
+            }
+
             return process.ExitCode == 0
                 ? null
                 : Localization.L("The helper could not be installed (error {0}).", process.ExitCode);
