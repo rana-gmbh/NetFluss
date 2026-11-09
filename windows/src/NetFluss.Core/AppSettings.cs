@@ -133,6 +133,8 @@ public sealed class AppSettings : INotifyPropertyChanged
     private double _adapterGraceSeconds = 3;
     private bool _collectStatistics;
     private bool _collectAppStatistics = true;
+    private bool _collectProxyNodeStatistics;
+    private string _clashApiHost = string.Empty;
     private bool _automaticUpdateChecks = true;
     private string _speedTestProvider = "mlab";
     private bool _speedTestMLabConsent;
@@ -1025,6 +1027,23 @@ public sealed class AppSettings : INotifyPropertyChanged
     {
         get => _collectAppStatistics;
         set => Set(ref _collectAppStatistics, value);
+    }
+
+    /// <summary>
+    /// Record how much each outbound proxy node carried, read from the Clash API that sing-box,
+    /// mihomo, Clash Verge and others expose (macOS 2.7). Off by default: it polls a local port.
+    /// </summary>
+    public bool CollectProxyNodeStatistics
+    {
+        get => _collectProxyNodeStatistics;
+        set => Set(ref _collectProxyNodeStatistics, value);
+    }
+
+    /// <summary>The controller's host:port; empty means 127.0.0.1:9090. The secret is kept in Credential Manager.</summary>
+    public string ClashApiHost
+    {
+        get => _clashApiHost;
+        set => Set(ref _clashApiHost, (value ?? string.Empty).Trim());
     }
 
     // ===================================== Updates =====================================

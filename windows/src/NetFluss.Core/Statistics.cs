@@ -69,6 +69,18 @@ public sealed class StatisticsArchive
     public Dictionary<string, Dictionary<string, TrafficAmounts>> AppHourly { get; set; } = [];
 
     public Dictionary<string, Dictionary<string, TrafficAmounts>> AppDaily { get; set; } = [];
+
+    /// <summary>
+    /// Per-proxy-node traffic from the Clash API (macOS 2.7). Absent from archives written
+    /// before, which is why these default to empty rather than failing the load.
+    /// </summary>
+    public DateTimeOffset? LastNodeSampleAt { get; set; }
+
+    public Dictionary<string, Dictionary<string, TrafficAmounts>> NodeMinute { get; set; } = [];
+
+    public Dictionary<string, Dictionary<string, TrafficAmounts>> NodeHourly { get; set; } = [];
+
+    public Dictionary<string, Dictionary<string, TrafficAmounts>> NodeDaily { get; set; } = [];
 }
 
 public readonly record struct AdapterDelta(string Id, string DisplayName, bool IsTunnel, ulong DownloadBytes, ulong UploadBytes);
@@ -102,6 +114,15 @@ public sealed record AdapterRow(string Id, string Name, ulong DownloadBytes, ulo
 
 public sealed record AppRow(string Name, ulong Bytes);
 
+/// <summary>
+/// A proxy node's totals for the range: sent and received side by side, because a quota
+/// reader wants both, not two separate top-ten lists.
+/// </summary>
+public sealed record NodeRow(string Name, ulong DownloadBytes, ulong UploadBytes)
+{
+    public ulong TotalBytes => DownloadBytes + UploadBytes;
+}
+
 public sealed record StatisticsReport
 {
     public required string Title { get; init; }
@@ -131,6 +152,9 @@ public sealed record StatisticsReport
     public IReadOnlyList<AppRow> TopDownloadApps { get; init; } = [];
 
     public IReadOnlyList<AppRow> TopUploadApps { get; init; } = [];
+
+    /// <summary>Every node that moved anything, biggest first — not capped, so it adds up.</summary>
+    public IReadOnlyList<NodeRow> Nodes { get; init; } = [];
 
     public bool HasAdapterData => TotalDownloadBytes > 0 || TotalUploadBytes > 0 || Adapters.Count > 0;
 
@@ -288,6 +312,41 @@ public sealed class StatisticsStore
         }
     }
 
+    /// <summary>Per-proxy-node traffic from the Clash API.</summary>
+    public void RecordNodeDeltas(IEnumerable<NodeDelta> deltas, DateTime now)
+    {
+        lock (_gate)
+        {
+            EnsureLoaded();
+            var any = false;
+            var minute = MinuteKey(now);
+            var hour = HourKey(now);
+            var day = DayKey(now);
+
+            foreach (var delta in deltas)
+            {
+                if (delta.DownloadBytes == 0 && delta.UploadBytes == 0)
+                {
+                    continue;
+                }
+
+                any = true;
+                Accumulate(_archive.NodeMinute, minute, delta.Name, delta.DownloadBytes, delta.UploadBytes);
+                Accumulate(_archive.NodeHourly, hour, delta.Name, delta.DownloadBytes, delta.UploadBytes);
+                Accumulate(_archive.NodeDaily, day, delta.Name, delta.DownloadBytes, delta.UploadBytes);
+            }
+
+            if (!any)
+            {
+                return;
+            }
+
+            _archive.LastNodeSampleAt = new DateTimeOffset(now);
+            _dirty = true;
+            Prune(now);
+        }
+    }
+
     /// <summary>Writes the archive if it changed and the flush interval passed (or if forced).</summary>
     public void Flush(bool force, DateTime now)
     {
@@ -348,17 +407,17 @@ public sealed class StatisticsStore
         lock (_gate)
         {
             EnsureLoaded();
-            var (source, appSource, keys, granularity, start) = range switch
+            var (source, appSource, nodeSource, keys, granularity, start) = range switch
             {
-                StatisticsRange.LastHour => (_archive.AdapterMinute, _archive.AppMinute, MinuteKeysEndingAt(now, 60), TimelineGranularity.Minute, now.AddMinutes(-59)),
-                StatisticsRange.Last24Hours => (_archive.AdapterHourly, _archive.AppHourly, HourKeysEndingAt(now, 24), TimelineGranularity.Hour, now.AddHours(-23)),
-                StatisticsRange.Last7Days => (_archive.AdapterDaily, _archive.AppDaily, DayKeysEndingAt(now, 7), TimelineGranularity.Day, now.AddDays(-6)),
-                StatisticsRange.Last30Days => (_archive.AdapterDaily, _archive.AppDaily, DayKeysEndingAt(now, 30), TimelineGranularity.Day, now.AddDays(-29)),
-                _ => (_archive.AdapterDaily, _archive.AppDaily, DayKeysEndingAt(now, 365), TimelineGranularity.Month, now.AddDays(-364)),
+                StatisticsRange.LastHour => (_archive.AdapterMinute, _archive.AppMinute, _archive.NodeMinute, MinuteKeysEndingAt(now, 60), TimelineGranularity.Minute, now.AddMinutes(-59)),
+                StatisticsRange.Last24Hours => (_archive.AdapterHourly, _archive.AppHourly, _archive.NodeHourly, HourKeysEndingAt(now, 24), TimelineGranularity.Hour, now.AddHours(-23)),
+                StatisticsRange.Last7Days => (_archive.AdapterDaily, _archive.AppDaily, _archive.NodeDaily, DayKeysEndingAt(now, 7), TimelineGranularity.Day, now.AddDays(-6)),
+                StatisticsRange.Last30Days => (_archive.AdapterDaily, _archive.AppDaily, _archive.NodeDaily, DayKeysEndingAt(now, 30), TimelineGranularity.Day, now.AddDays(-29)),
+                _ => (_archive.AdapterDaily, _archive.AppDaily, _archive.NodeDaily, DayKeysEndingAt(now, 365), TimelineGranularity.Month, now.AddDays(-364)),
             };
 
             return MakeReport(range.TitleKey(), StatisticsRanges.BucketTitleKey(granularity), granularity, start, now,
-                source, appSource, keys, customNames, hiddenApps, excludeTunnels, appTotalsOverride);
+                source, appSource, nodeSource, keys, customNames, hiddenApps, excludeTunnels, appTotalsOverride);
         }
     }
 
@@ -381,26 +440,27 @@ public sealed class StatisticsStore
 
             Dictionary<string, Dictionary<string, TrafficAmounts>> source;
             Dictionary<string, Dictionary<string, TrafficAmounts>> appSource;
+            Dictionary<string, Dictionary<string, TrafficAmounts>> nodeSource;
             List<string> keys;
             TimelineGranularity granularity;
 
             if (span <= TimeSpan.FromHours(3) && start >= now.AddMinutes(-MinuteRetentionMinutes))
             {
-                (source, appSource, keys, granularity) = (_archive.AdapterMinute, _archive.AppMinute, MinuteKeys(start, end), TimelineGranularity.Minute);
+                (source, appSource, nodeSource, keys, granularity) = (_archive.AdapterMinute, _archive.AppMinute, _archive.NodeMinute, MinuteKeys(start, end), TimelineGranularity.Minute);
             }
             else if (span <= TimeSpan.FromHours(72) && start >= now.AddHours(-HourlyRetentionHours))
             {
-                (source, appSource, keys, granularity) = (_archive.AdapterHourly, _archive.AppHourly, HourKeys(start, end), TimelineGranularity.Hour);
+                (source, appSource, nodeSource, keys, granularity) = (_archive.AdapterHourly, _archive.AppHourly, _archive.NodeHourly, HourKeys(start, end), TimelineGranularity.Hour);
             }
             else
             {
-                (source, appSource, keys, granularity) = (_archive.AdapterDaily, _archive.AppDaily, DayKeys(start, end),
+                (source, appSource, nodeSource, keys, granularity) = (_archive.AdapterDaily, _archive.AppDaily, _archive.NodeDaily, DayKeys(start, end),
                     span > TimeSpan.FromDays(90) ? TimelineGranularity.Month : TimelineGranularity.Day);
             }
 
             var title = string.Create(CultureInfo.CurrentCulture, $"{start:d} – {end:d}");
             return MakeReport(title, StatisticsRanges.BucketTitleKey(granularity), granularity, start, end,
-                source, appSource, keys, customNames, hiddenApps, excludeTunnels, appTotalsOverride);
+                source, appSource, nodeSource, keys, customNames, hiddenApps, excludeTunnels, appTotalsOverride);
         }
     }
 
@@ -442,6 +502,7 @@ public sealed class StatisticsStore
         DateTime end,
         Dictionary<string, Dictionary<string, TrafficAmounts>> adapterSource,
         Dictionary<string, Dictionary<string, TrafficAmounts>> appSource,
+        Dictionary<string, Dictionary<string, TrafficAmounts>> nodeSource,
         IReadOnlyList<string> keys,
         IReadOnlyDictionary<string, string> customNames,
         ISet<string> hiddenApps,
@@ -474,6 +535,7 @@ public sealed class StatisticsStore
             Adapters = TopAdapters(adapterTotals, customNames),
             TopDownloadApps = AppRows(appTotals, hiddenApps, a => a.DownloadBytes),
             TopUploadApps = AppRows(appTotals, hiddenApps, a => a.UploadBytes),
+            Nodes = NodeRows(Aggregate(nodeSource, keys)),
         };
     }
 
@@ -611,6 +673,20 @@ public sealed class StatisticsStore
                 .Take(10),
         ];
 
+    /// <summary>
+    /// Every node that moved anything, biggest first. Unlike apps this is not capped at ten:
+    /// it exists to reconcile a quota, and a truncated list would not add up to the total.
+    /// </summary>
+    private static IReadOnlyList<NodeRow> NodeRows(Dictionary<string, TrafficAmounts> totals)
+        =>
+        [
+            .. totals
+                .Where(p => p.Value.TotalBytes > 0)
+                .Select(p => new NodeRow(p.Key, p.Value.DownloadBytes, p.Value.UploadBytes))
+                .OrderByDescending(r => r.TotalBytes)
+                .ThenBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase),
+        ];
+
     private string ResolveName(string id, IReadOnlyDictionary<string, string> customNames)
         => customNames.TryGetValue(id, out var custom) && !string.IsNullOrWhiteSpace(custom)
             ? custom
@@ -671,6 +747,9 @@ public sealed class StatisticsStore
         RemoveBefore(_archive.AppHourly, now.AddHours(-HourlyRetentionHours));
         RemoveBefore(_archive.AdapterDaily, now.AddDays(-DailyRetentionDays));
         RemoveBefore(_archive.AppDaily, now.AddDays(-DailyRetentionDays));
+        RemoveBefore(_archive.NodeMinute, now.AddMinutes(-MinuteRetentionMinutes));
+        RemoveBefore(_archive.NodeHourly, now.AddHours(-HourlyRetentionHours));
+        RemoveBefore(_archive.NodeDaily, now.AddDays(-DailyRetentionDays));
     }
 
     private static void RemoveBefore(Dictionary<string, Dictionary<string, TrafficAmounts>> storage, DateTime cutoff)

@@ -1,6 +1,8 @@
 // Copyright (C) 2026 Rana GmbH — GPLv3. See LICENSE at the repository root.
 
+using System.Net.Http;
 using NetFluss.Core;
+using NetFluss.Native;
 
 namespace NetFluss.App;
 
@@ -22,6 +24,32 @@ internal sealed class StatisticsService : IDisposable
     private StatisticsStore? _demo;
     private DateTime _lastFlushCheck = DateTime.MinValue;
 
+    // ---- Proxy nodes (Clash API) ----
+    // Short cadence: a connection that opens and closes between two polls can only be booked
+    // as Unattributed, never against the node that carried it. A loopback GET, not a process.
+    private static readonly TimeSpan NodeInterval = TimeSpan.FromSeconds(3);
+    private const string SecretService = "clash-api";
+    private const string SecretAccount = "secret";
+
+    // No proxy: the controller is usually on loopback, and the system proxy is quite possibly
+    // the very client being asked — routing the request through it would be circular.
+    private static readonly HttpClient ClashClient = new(new SocketsHttpHandler
+    {
+        UseProxy = false,
+        ConnectTimeout = TimeSpan.FromSeconds(3),
+        AllowAutoRedirect = false,
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(6),
+    };
+
+    private readonly ClashNodeAccumulator _nodes = new();
+    private DateTime _lastNodePoll = DateTime.MinValue;
+    private bool _nodeInFlight;
+    private string? _nodeHost;
+    private string? _cachedSecret;
+    private string? _proxyNodeError;
+
     internal StatisticsService(SettingsStore settings, NetworkMonitorService monitor)
     {
         _settings = settings;
@@ -34,6 +62,57 @@ internal sealed class StatisticsService : IDisposable
 
     /// <summary>Raised after each tick that recorded something, for the live Data Usage block.</summary>
     internal event EventHandler? Recorded;
+
+    /// <summary>Raised when <see cref="ProxyNodeError"/> changes.</summary>
+    internal event EventHandler? ProxyNodeErrorChanged;
+
+    /// <summary>Why the last Clash API poll failed, or null while it works.</summary>
+    internal string? ProxyNodeError
+    {
+        get => _proxyNodeError;
+        private set
+        {
+            if (_proxyNodeError != value)
+            {
+                _proxyNodeError = value;
+                ProxyNodeErrorChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>Whether a controller secret is saved.</summary>
+    internal static bool HasProxySecret => !string.IsNullOrEmpty(LoadProxySecret());
+
+    /// <summary>Saves the controller secret in Credential Manager, or removes it when blank.</summary>
+    internal void SaveProxySecret(string? secret)
+    {
+        if (string.IsNullOrEmpty(secret))
+        {
+            CredentialStore.Delete(SecretService, SecretAccount);
+        }
+        else
+        {
+            CredentialStore.Save(SecretService, SecretAccount, string.Empty, secret);
+        }
+
+        _cachedSecret = null;
+    }
+
+    /// <summary>The Preferences "Test connection" button: one fetch, described.</summary>
+    internal static async Task<(bool Ok, string Message)> TestProxyControllerAsync(string host)
+    {
+        try
+        {
+            var snapshot = await ClashApi.FetchAsync(ClashClient, ClashApi.EffectiveHost(host), LoadProxySecret());
+            return (true, Localization.L("Connected — {0} open connections.", snapshot.Connections.Count));
+        }
+        catch (ClashApiException e)
+        {
+            return (false, e.Describe());
+        }
+    }
+
+    private static string LoadProxySecret() => CredentialStore.Load(SecretService, SecretAccount)?.Second ?? string.Empty;
 
     /// <summary>
     /// Whether the sample-data preview can be offered: the Mac's NETFLUSS_SAMPLE_STATISTICS
@@ -115,6 +194,8 @@ internal sealed class StatisticsService : IDisposable
     /// </summary>
     private void Ingest()
     {
+        SampleNodesIfDue();
+
         var sample = _monitor.LastSample;
         var collecting = _settings.Settings.CollectStatistics;
         var deltas = new List<AdapterDelta>();
@@ -157,6 +238,91 @@ internal sealed class StatisticsService : IDisposable
         }
 
         Recorded?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Polls the Clash API on its own cadence. Every failure drops the carried state, so the
+    /// next success re-baselines instead of billing the whole gap to whichever connections
+    /// survived it.
+    /// </summary>
+    private void SampleNodesIfDue()
+    {
+        var settings = _settings.Settings;
+        var host = ClashApi.EffectiveHost(settings.ClashApiHost);
+
+        // A changed address invalidates the carried connections: ids from the old instance
+        // would read as brand new and their whole counters be billed at once.
+        if (_nodeHost != host)
+        {
+            _nodeHost = host;
+            _nodes.Reset();
+            _cachedSecret = null;
+        }
+
+        if (!settings.CollectStatistics || !settings.CollectProxyNodeStatistics)
+        {
+            if (_lastNodePoll != DateTime.MinValue)
+            {
+                _lastNodePoll = DateTime.MinValue;
+                _nodes.Reset();
+                _cachedSecret = null;
+                ProxyNodeError = null;
+            }
+
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        if (_nodeInFlight || now - _lastNodePoll < NodeInterval)
+        {
+            return;
+        }
+
+        _lastNodePoll = now;
+        _nodeInFlight = true;
+        var secret = _cachedSecret ??= LoadProxySecret();
+        _ = PollNodesAsync(host, secret);
+    }
+
+    private async Task PollNodesAsync(string host, string secret)
+    {
+        try
+        {
+            var snapshot = await ClashApi.FetchAsync(ClashClient, host, secret);
+            if (host != _nodeHost || !_settings.Settings.CollectProxyNodeStatistics)
+            {
+                return;
+            }
+
+            ProxyNodeError = null;
+            var deltas = _nodes.Consume(snapshot);
+            if (deltas.Count > 0)
+            {
+                var at = DateTime.Now;
+                await Task.Run(() => _store.RecordNodeDeltas(deltas, at));
+            }
+        }
+        catch (ClashApiException e)
+        {
+            _nodes.Reset();
+
+            // A rejected secret is the one failure fixed while this runs: re-read it next time.
+            if (e.Failure == ClashFailure.AuthFailed)
+            {
+                _cachedSecret = null;
+            }
+
+            ProxyNodeError = e.Describe();
+        }
+        catch (Exception e)
+        {
+            _nodes.Reset();
+            CrashLog.Write("proxy nodes", e);
+        }
+        finally
+        {
+            _nodeInFlight = false;
+        }
     }
 
     public void Dispose() => Flush();

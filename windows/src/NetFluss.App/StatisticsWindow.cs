@@ -264,7 +264,79 @@ internal sealed class StatisticsWindow : Window
         lower.Children.Add(apps.At(2));
 
         _content.Children.Add(lower);
+
+        if (settings.CollectProxyNodeStatistics || report.Nodes.Count > 0)
+        {
+            _content.Children.Add(NodesCard(report).Margin(0, 18, 0, 0));
+        }
     }
+
+    /// <summary>
+    /// Per-proxy-node usage from the Clash API (macOS 2.7). Deliberately not a top ten: it
+    /// exists so a metered subscription can be reconciled, and a truncated list would not add up.
+    /// </summary>
+    private FrameworkElement NodesCard(StatisticsReport report)
+    {
+        var body = new StackPanel();
+        body.Children.Add(Ui.Label(Localization.L("Proxy nodes"), 22, Ui.Text, FontWeights.Bold));
+        body.Children.Add(Ui.Wrapping(Localization.L("Traffic per outbound node for the selected range, read from the proxy controller."), 13).Margin(0, 4, 0, 12));
+
+        if (_statistics.ProxyNodeError is { } error && !_statistics.IsShowingDemo)
+        {
+            body.Children.Add(Ui.Row(
+                Ui.Icon(Glyph.Warning, 12, Ui.Secondary).Margin(0, 0, 8, 0),
+                Ui.Label(error, 12, Ui.Secondary)).Margin(0, 0, 0, 10));
+        }
+
+        if (report.Nodes.Count == 0)
+        {
+            body.Children.Add(Ui.Label(Localization.L("No node traffic recorded yet."), 13, Ui.Secondary));
+            return Card(body);
+        }
+
+        var peak = Math.Max(1, report.Nodes.Max(n => n.TotalBytes));
+        foreach (var row in report.Nodes)
+        {
+            var name = Ui.Label(NodeName(row.Name), 15, Ui.Text, FontWeights.SemiBold);
+            var totalText = Ui.Number(Bytes(row.TotalBytes), 13, Ui.Secondary, FontWeights.SemiBold);
+            var line = Ui.Columns(Ui.Star, Ui.Auto);
+            line.Children.Add(name.At(0));
+            line.Children.Add(totalText.At(1));
+
+            var split = Ui.Row(
+                Ui.Icon(Glyph.Down, 10, Ui.Download).Margin(0, 0, 4, 0),
+                Ui.Number(Bytes(row.DownloadBytes), 12, Ui.Download),
+                Ui.Icon(Glyph.Up, 10, Ui.Upload).Margin(12, 0, 4, 0),
+                Ui.Number(Bytes(row.UploadBytes), 12, Ui.Upload));
+            split.Margin = new Thickness(0, 4, 0, 6);
+
+            var (track, fill) = Ui.Bar(Ui.Download);
+            track.Height = 8;
+            ((Border)track.Children[0]).CornerRadius = new CornerRadius(4);
+            fill.CornerRadius = new CornerRadius(4);
+            var fraction = row.TotalBytes / (double)peak;
+            track.SizeChanged += (_, _) => fill.Width = Math.Max(8, track.ActualWidth * fraction);
+
+            body.Children.Add(Ui.Column(line, split, track).Margin(0, 4, 0, 10));
+        }
+
+        if (report.Nodes.Any(n => n.Name == ClashNodeAccumulator.UnattributedKey))
+        {
+            body.Children.Add(Ui.Wrapping(
+                Localization.L("Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS."),
+                11).Margin(0, 2, 0, 0));
+        }
+
+        return Card(body);
+    }
+
+    /// <summary>The accumulator's bucket keys are storage keys, not display strings.</summary>
+    private static string NodeName(string name) => name switch
+    {
+        ClashNodeAccumulator.UnattributedKey => Localization.L("Unattributed"),
+        ClashApi.UnknownNodeKey => Localization.L("Unknown node"),
+        _ => name,
+    };
 
     private FrameworkElement SummaryCard(StatisticsReport report)
     {
