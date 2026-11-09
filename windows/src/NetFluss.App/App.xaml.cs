@@ -32,6 +32,8 @@ public partial class NetFlussApplication : Application
     private TrafficService? _traffic;
     private WifiService? _wifi;
     private DnsSwitcher? _dns;
+    private LinkHealthService? _link;
+    private DateTime _lastDnsRead = DateTime.MinValue;
     private PrivilegedActions? _privileged;
     private StatisticsService? _statistics;
     private RouterService? _routers;
@@ -122,6 +124,7 @@ public partial class NetFlussApplication : Application
         _wifi = new WifiService(_store);
         _privileged = new PrivilegedActions(_helper);
         _dns = new DnsSwitcher(_store, _monitor, _privileged);
+        _link = new LinkHealthService(_monitor, _store) { IsWanted = () => _store.Settings.LinkIndicator };
         _statistics = new StatisticsService(_store, _monitor);
         _routers = new RouterService(_monitor, _store);
         _vpn = new Vpn.VpnManager(_helper, _privileged, _store, _monitor, Dispatcher);
@@ -175,6 +178,23 @@ public partial class NetFlussApplication : Application
         // after a restart: traffic while NetFluss was not running cannot be counted.
         _timer.Restore(_store.Settings.TrafficTimerSession);
         _monitor.Ticked += (_, _) => _timer.Ingest(_monitor.LastSample, _store.Settings.ExcludeTunnelAdapters);
+
+        // The link indicator and the resolver name follow their own sources, not the rates.
+        _link.Changed += (_, _) =>
+        {
+            if (!_exiting)
+            {
+                PushAccessories();
+            }
+        };
+        _dns.Changed += (_, _) =>
+        {
+            if (!_exiting)
+            {
+                PushAccessories();
+            }
+        };
+        _monitor.Ticked += (_, _) => RefreshDnsIfWanted();
         var lastTimerState = _timer.State;
         _timer.Changed += (_, _) =>
         {
@@ -629,20 +649,59 @@ public partial class NetFlussApplication : Application
         var settings = _store.Settings;
         var vpn = _monitor.Addresses.IsVpnActive;
         var country = _monitor.PublicAddress?.CountryCode;
+        var link = settings.LinkIndicator ? _link?.Status : null;
+        var resolver = ResolverName();
 
         if (_overlay is not null)
         {
             var taskbarIdle = SystemTheme.IsShellLight() ? ThemeColor.FromHex("5D5D5D") : ThemeColor.FromHex("C5C5C5");
-            _overlay.SetAccessories(MeterAccessories.From(settings, vpn, country, taskbarIdle), settings.ReadoutFontSize);
+            _overlay.SetAccessories(MeterAccessories.From(settings, vpn, country, taskbarIdle, link, resolver), settings.ReadoutFontSize);
         }
 
         if (_widget is not null)
         {
             var surface = settings.Theme.Surface(SystemTheme.IsAppLight());
-            _widget.SetAccessories(MeterAccessories.From(settings, vpn, country, surface.TextSecondary));
+            _widget.SetAccessories(MeterAccessories.From(settings, vpn, country, surface.TextSecondary, link, resolver));
         }
 
         _tray?.SetVpnStatus(settings.VpnIndicator != "off" ? (vpn, country) : null);
+    }
+
+    /// <summary>
+    /// The active DNS profile's name for the meter, or null when the label is off or the
+    /// profile is System Default — the label only speaks when something has been overridden.
+    /// </summary>
+    private string? ResolverName()
+    {
+        if (_store is null || !_store.Settings.ShowResolver || _dns?.ActivePresetId is not { } id || id == "system")
+        {
+            return null;
+        }
+
+        return _store.Settings.AllDnsPresets().FirstOrDefault(preset => preset.Id == id) is { } active
+            ? _store.Settings.DnsPresetDisplayName(active)
+            : null;
+    }
+
+    /// <summary>
+    /// Keeps the active DNS profile current while something shows it. The read is a registry
+    /// lookup, not a process, so a few seconds' cadence costs nothing — and it catches a
+    /// change made in Windows Settings, which raises no event NetFluss could hear.
+    /// </summary>
+    private void RefreshDnsIfWanted()
+    {
+        if (_store is null || _dns is null || _exiting || !_store.Settings.NeedsActiveDns)
+        {
+            return;
+        }
+
+        if (DateTime.UtcNow - _lastDnsRead < TimeSpan.FromSeconds(5))
+        {
+            return;
+        }
+
+        _lastDnsRead = DateTime.UtcNow;
+        _dns.Refresh();
     }
 
     private void PushTotals()
@@ -1108,6 +1167,7 @@ public partial class NetFlussApplication : Application
         _overlay?.Close();
         _widget?.CloseForGood();
         _tray?.Dispose();
+        _link?.Dispose();
         _traffic?.Dispose();
         _statistics?.Dispose();
         _routers?.Dispose();

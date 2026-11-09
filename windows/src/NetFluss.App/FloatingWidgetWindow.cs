@@ -133,6 +133,7 @@ internal sealed class FloatingWidgetWindow : Window
     internal void ApplySettings(AppSettings settings, ThemeColor download, ThemeColor upload, SurfacePalette surface)
     {
         _readout.Layout = settings.ReadoutStyle;
+        _readout.Alignment = settings.RateAlignment;
         _readout.ApplyAppearance(settings.ReadoutFontSize + 3, download, upload, download);
 
         // Its own backdrop, unlike the overlay: this floats over arbitrary wallpaper and

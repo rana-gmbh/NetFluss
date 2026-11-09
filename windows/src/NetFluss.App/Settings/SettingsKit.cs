@@ -235,6 +235,7 @@ internal static class Kit
 
         yield return new Choice("blue", L("Blue"));
         yield return new Choice("green", L("Green"));
+        yield return new Choice("red", L("Red"));
         yield return new Choice("teal", L("Teal"));
         yield return new Choice("purple", L("Purple"));
         yield return new Choice("orange", L("Orange"));

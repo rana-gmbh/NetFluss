@@ -203,6 +203,7 @@ public static class AccentPalette
     {
         ["green"] = ThemeColor.FromHex("2ea043"),
         ["blue"] = ThemeColor.FromHex("0078d4"),
+        ["red"] = ThemeColor.FromHex("e81123"),
         ["orange"] = ThemeColor.FromHex("f7630c"),
         ["yellow"] = ThemeColor.FromHex("fce100"),
         ["teal"] = ThemeColor.FromHex("00b7c3"),

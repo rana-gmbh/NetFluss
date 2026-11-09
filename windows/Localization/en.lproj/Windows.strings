@@ -250,3 +250,12 @@
 "Privacy Policy" = "Privacy Policy";
 "Look up public IP addresses and countries" = "Look up public IP addresses and countries";
 "Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." = "Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty.";
+
+/* 2.7 link indicator and resolver label */
+"A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. It follows whichever connection carries your traffic." = "A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. It follows whichever connection carries your traffic.";
+"Appears only while the resolver is not the system default, so the taskbar stays quiet on a network you have not overridden." = "Appears only while the resolver is not the system default, so the taskbar stays quiet on a network you have not overridden.";
+"Leave empty to use Windows' own check. An address of your own is asked directly; a redirect counts as a login page." = "Leave empty to use Windows' own check. An address of your own is asked directly; a redirect counts as a login page.";
+"Red" = "Red";
+"Show active resolver on the taskbar" = "Show active resolver on the taskbar";
+"URL to check (empty uses Windows' own check)" = "URL to check (empty uses Windows' own check)";
+"Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows' own internet check — the one behind the taskbar's network icon — so it notices a hotel login page or a dead upstream without making a request of its own." = "Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows' own internet check — the one behind the taskbar's network icon — so it notices a hotel login page or a dead upstream without making a request of its own.";

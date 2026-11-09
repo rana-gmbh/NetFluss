@@ -39,6 +39,8 @@ internal static class VpnPage
         {
             "dot" => Kit.L("Dot"),
             "shield" => Kit.L("Shield"),
+            "globe" => Kit.L("Globe"),
+            "bars" => Kit.L("Bars"),
             _ => Kit.L("Off"),
         };
         ShowIndicatorState();

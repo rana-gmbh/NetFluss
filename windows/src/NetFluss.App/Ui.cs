@@ -24,6 +24,8 @@ internal static class Glyph
     internal const string Laptop = "";
     internal const string Router = "";
     internal const string Shield = "";
+    /// <summary>Windows' own VPN glyph, as its quick settings draw it.</summary>
+    internal const string Vpn = "";
     internal const string Lock = "";
     internal const string Copy = "";
     internal const string Edit = "";

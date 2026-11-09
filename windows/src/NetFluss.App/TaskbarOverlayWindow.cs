@@ -45,6 +45,9 @@ internal sealed class TaskbarOverlayWindow : Window
     private int _baseWidth = 150;
     private int _accessoryWidth;
 
+    /// <summary>Breathing room either side of the rates, so they do not touch a neighbouring taskbar button.</summary>
+    private const int EdgePadding = 8;
+
     internal TaskbarOverlayWindow(NetworkMonitorService monitor)
     {
         _monitor = monitor;
@@ -125,18 +128,19 @@ internal sealed class TaskbarOverlayWindow : Window
     internal void ApplySettings(AppSettings settings, ThemeColor download, ThemeColor upload)
     {
         _readout.Layout = settings.ReadoutStyle;
+        _readout.Alignment = settings.RateAlignment;
         _readout.ApplyAppearance(settings.ReadoutFontSize, download, upload, download);
 
         // Width follows the style and the type size: "↓ 999 MB/s ↑ 999 MB/s" needs room the
         // stacked layout does not, and a fixed width would either clip or waste taskbar.
-        _baseWidth = settings.ReadoutStyle switch
-        {
-            ReadoutStyle.Total => (int)(settings.ReadoutFontSize * 8),
-            ReadoutStyle.Dashboard => (int)(settings.ReadoutFontSize * 19),
-            ReadoutStyle.DashboardBasic => (int)(settings.ReadoutFontSize * 12),
-            ReadoutStyle.Stacked => (int)(settings.ReadoutFontSize * 9),
-            _ => (int)(settings.ReadoutFontSize * 17),
-        };
+        // The text styles are measured at their widest; only the Dashboards still estimate.
+        _baseWidth = double.IsNaN(_readout.RatesWidth)
+            ? settings.ReadoutStyle switch
+            {
+                ReadoutStyle.Dashboard => (int)(settings.ReadoutFontSize * 19),
+                _ => (int)(settings.ReadoutFontSize * 12),
+            }
+            : (int)Math.Ceiling(_readout.RatesWidth) + EdgePadding;
         _desiredWidth = _baseWidth + _accessoryWidth;
 
         Update(_monitor.Totals, settings.UseBits);
@@ -145,11 +149,12 @@ internal sealed class TaskbarOverlayWindow : Window
 
     internal void Update(RateTotals totals, bool useBits, DashboardMetrics? dashboard = null) => _readout.Update(totals, useBits, dashboard);
 
-    /// <summary>Shows or clears the VPN mark and country, widening the overlay to fit them.</summary>
+    /// <summary>Shows or clears the marks after the rates, widening the overlay to fit them.</summary>
     internal void SetAccessories(MeterAccessories? accessories, double fontSize)
     {
         _readout.SetAccessories(accessories);
-        _accessoryWidth = (int)Math.Ceiling(MeterReadout.AccessoryWidth(accessories, fontSize));
+        _ = fontSize;
+        _accessoryWidth = (int)Math.Ceiling(_readout.AccessoriesWidth);
         var width = _baseWidth + _accessoryWidth;
         if (width != _desiredWidth)
         {

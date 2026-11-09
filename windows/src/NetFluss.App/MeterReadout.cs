@@ -56,6 +56,18 @@ internal sealed class MeterReadout : UserControl
 
     private double _fontSize = 11;
 
+    /// <summary>"left", "center" or "right" — see <see cref="AppSettings.RateAlignment"/>.</summary>
+    private string _alignment = "center";
+
+    /// <summary>
+    /// The widest rate a slot ever has to hold. Consolas is monospaced, so the longest string
+    /// sets the width; "99.9 MB/s" is the longest the formatter produces.
+    /// </summary>
+    private static readonly string[] RateSamples = ["99.9 MB/s", "9.99 GB/s", "99.9 Mb/s", "999 KB/s"];
+
+    /// <summary>The widest compact Dashboard figure.</summary>
+    private static readonly string[] CompactSamples = ["99.9", "9.99", "999"];
+
     internal MeterReadout()
     {
         Focusable = false;
@@ -86,10 +98,37 @@ internal sealed class MeterReadout : UserControl
 
         Content = outer;
         BuildLayout();
+
+        // The rates are drawn, not text a screen reader would otherwise find: name the meter,
+        // and keep the readings in ItemStatus, which Narrator reads alongside the name.
+        System.Windows.Automation.AutomationProperties.SetName(this, "NetFluss");
     }
 
     /// <summary>
-    /// Shows the VPN mark and the exit country after the rates, or clears them.
+    /// How the rates sit in their column (macOS 2.7.1). Centred re-centres on every width
+    /// change, so the arrows slide whenever "0.00 B/s" becomes "1.02 KB/s"; Left and Right
+    /// give each number a fixed-width slot so the arrows stay put, and Right also lines the
+    /// numbers up so the units stay put too.
+    /// </summary>
+    internal string Alignment
+    {
+        get => _alignment;
+        set
+        {
+            var normalized = value is "left" or "right" ? value : "center";
+            if (_alignment == normalized)
+            {
+                return;
+            }
+
+            _alignment = normalized;
+            BuildLayout();
+        }
+    }
+
+    /// <summary>
+    /// Shows the marks after the rates, in the macOS 2.7 order — link, VPN, country, resolver —
+    /// or clears them.
     ///
     /// <para>The country is shown as its ISO code in a small badge where macOS draws the flag
     /// emoji: Windows' emoji font has no flags and would render two boxed letters.</para>
@@ -97,94 +136,275 @@ internal sealed class MeterReadout : UserControl
     internal void SetAccessories(MeterAccessories? accessories)
     {
         _accessories.Children.Clear();
+        _accessorySummary = string.Empty;
         if (accessories is null)
         {
             _accessories.Visibility = Visibility.Collapsed;
+            AccessoriesWidth = 0;
+            UpdateAutomationStatus();
             return;
         }
 
-        if (accessories.VpnKind is "dot" or "shield")
+        var summary = new List<string>();
+        var size = accessories.MarkSize;
+
+        void Add(FrameworkElement element)
         {
-            var brush = Freeze(accessories.VpnActive ? accessories.ActiveColor : accessories.IdleColor);
-            FrameworkElement mark;
+            element.VerticalAlignment = VerticalAlignment.Center;
+            element.Margin = new Thickness(_accessories.Children.Count > 0 ? 5 : 0, 0, 0, 0);
+            _accessories.Children.Add(element);
+        }
 
-            if (accessories.VpnKind == "dot")
+        if (accessories.Link is { } link)
+        {
+            var state = Localization.L(link.Health switch
             {
-                var diameter = Math.Max(5, Math.Round(_fontSize * 0.6));
-                mark = new System.Windows.Shapes.Ellipse
-                {
-                    Width = diameter,
-                    Height = diameter,
-                    Fill = accessories.VpnActive ? brush : Brushes.Transparent,
-                    Stroke = accessories.VpnActive ? null : brush,
-                    StrokeThickness = 1.5,
-                };
-            }
-            else
-            {
-                mark = new TextBlock
-                {
-                    Text = accessories.VpnActive ? "" : "",
-                    FontFamily = Ui.IconFont,
-                    FontSize = _fontSize + 1,
-                    Foreground = brush,
-                };
-            }
+                LinkHealth.Online => "Online",
+                LinkHealth.Limited => "Limited connection",
+                _ => "Offline",
+            });
 
-            mark.VerticalAlignment = VerticalAlignment.Center;
-            mark.ToolTip = Localization.L(accessories.VpnActive ? "VPN connected" : "No VPN connected");
-            _accessories.Children.Add(mark);
+            // The state in words as well as colour, for anyone who cannot tell the three apart.
+            var name = link.Ssid ?? link.InterfaceName;
+            var tooltip = string.IsNullOrEmpty(name) ? state : $"{name}: {state}";
+            var mark = LinkMark(link, accessories.LinkColor, size);
+            mark.ToolTip = tooltip;
+            Add(mark);
+            summary.Add(tooltip);
+        }
+
+        if (accessories.VpnKind is { } kind)
+        {
+            var mark = VpnMark(kind, accessories.VpnActive, accessories.VpnColor, size);
+            var state = Localization.L(accessories.VpnActive ? "VPN connected" : "No VPN connected");
+            mark.ToolTip = state;
+            Add(mark);
+            summary.Add(state);
         }
 
         if (!string.IsNullOrEmpty(accessories.Country))
         {
-            var text = new TextBlock
+            Add(new Border
             {
-                Text = accessories.Country,
-                FontSize = Math.Max(8, _fontSize - 2),
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Freeze(accessories.IdleColor),
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-
-            var badge = new Border
-            {
-                Child = text,
+                Child = new TextBlock
+                {
+                    Text = accessories.Country,
+                    FontSize = Math.Max(8, Math.Round(size * 0.7)),
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = Freeze(accessories.IdleColor),
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
                 CornerRadius = new CornerRadius(3),
                 Padding = new Thickness(3, 0, 3, 0),
                 BorderThickness = new Thickness(1),
                 BorderBrush = Freeze(accessories.IdleColor, 0x66),
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(_accessories.Children.Count > 0 ? 4 : 0, 0, 0, 0),
-            };
+            });
+            summary.Add(accessories.Country);
+        }
 
-            _accessories.Children.Add(badge);
+        if (!string.IsNullOrEmpty(accessories.Resolver))
+        {
+            Add(new TextBlock
+            {
+                Text = accessories.Resolver,
+                FontSize = Math.Max(9, size - 4),
+                FontWeight = FontWeights.Medium,
+                Foreground = Freeze(accessories.ResolverColor),
+                ToolTip = "DNS: " + accessories.Resolver,
+            });
+            summary.Add("DNS " + accessories.Resolver);
         }
 
         _accessories.Visibility = _accessories.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        // Measured, not estimated: four mark styles, a code badge and a free-length resolver
+        // name make any formula wrong for somebody, and a host sized too small clips the end.
+        _accessories.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        AccessoriesWidth = _accessories.DesiredSize.Width + _accessories.Margin.Left;
+        _accessorySummary = string.Join(", ", summary);
+        UpdateAutomationStatus();
     }
 
-    /// <summary>Extra width the accessories need, in DIPs, so the hosts can size around them.</summary>
-    internal static double AccessoryWidth(MeterAccessories? accessories, double fontSize)
+    /// <summary>Width the accessories currently need, in DIPs, so the hosts can size around them.</summary>
+    internal double AccessoriesWidth { get; private set; }
+
+    private string _accessorySummary = string.Empty;
+    private string _rateSummary = string.Empty;
+
+    private void UpdateAutomationStatus()
+        => System.Windows.Automation.AutomationProperties.SetItemStatus(
+            this,
+            string.IsNullOrEmpty(_accessorySummary) ? _rateSummary : $"{_rateSummary}. {_accessorySummary}");
+
+    /// <summary>
+    /// The Wi-Fi, cable or network glyph in the state's colour. Limited carries an "!" badge
+    /// and offline a slash, so the state is in the shape too and never in colour alone.
+    /// </summary>
+    private static FrameworkElement LinkMark(LinkStatus link, ThemeColor color, double size)
     {
-        if (accessories is null)
+        var brush = Freeze(color);
+        var grid = new Grid { Width = size + 2, Height = size + 2 };
+        grid.Children.Add(new TextBlock
         {
-            return 0;
+            Text = link.Medium switch
+            {
+                LinkMedium.WiFi => Glyph.Wifi,
+                LinkMedium.Ethernet => Glyph.Ethernet,
+                _ => Glyph.Network,
+            },
+            FontFamily = Ui.IconFont,
+            FontSize = size,
+            Foreground = brush,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+
+        if (link.Health == LinkHealth.Limited)
+        {
+            grid.Children.Add(new TextBlock
+            {
+                Text = "!",
+                FontSize = Math.Max(7, size * 0.62),
+                FontWeight = FontWeights.Black,
+                Foreground = brush,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(0, 0, -size * 0.18, -size * 0.12),
+            });
+        }
+        else if (link.Health == LinkHealth.Offline)
+        {
+            grid.Children.Add(Slash(brush, size + 2));
         }
 
-        var width = 0.0;
-        if (accessories.VpnKind is "dot" or "shield")
-        {
-            width += 6 + fontSize + 2;
-        }
-
-        if (!string.IsNullOrEmpty(accessories.Country))
-        {
-            width += 6 + (fontSize * 1.8);
-        }
-
-        return width;
+        return grid;
     }
+
+    /// <summary>
+    /// The four VPN styles, sized independently of the rates. The chosen colour applies in both
+    /// states, dimmed to 45 % while the tunnel is down — the hollow dot, outline shield, slashed
+    /// globe and part-cut bars already say "off", and a swatch that only showed with a tunnel up
+    /// looked broken to anyone configuring it without one.
+    /// </summary>
+    private static FrameworkElement VpnMark(string kind, bool active, ThemeColor color, double size)
+    {
+        var brush = Freeze(color, active ? (byte)0xFF : (byte)0x73);
+
+        switch (kind)
+        {
+            case "dot":
+                var diameter = Math.Max(5, Math.Round(size * 0.6));
+                return new System.Windows.Shapes.Ellipse
+                {
+                    Width = diameter,
+                    Height = diameter,
+                    Fill = active ? brush : Brushes.Transparent,
+                    Stroke = active ? null : brush,
+                    StrokeThickness = 1.5,
+                };
+
+            case "globe":
+                var globe = new Grid { Width = size + 3, Height = size + 2 };
+                globe.Children.Add(new TextBlock
+                {
+                    Text = Glyph.Globe,
+                    FontFamily = Ui.IconFont,
+                    FontSize = size,
+                    Foreground = brush,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+
+                if (active)
+                {
+                    // A shield badge in the corner: macOS's network.badge.shield.half.filled.
+                    globe.Children.Add(new TextBlock
+                    {
+                        Text = Glyph.Shield,
+                        FontFamily = Ui.IconFont,
+                        FontSize = Math.Max(6, size * 0.55),
+                        FontWeight = FontWeights.Bold,
+                        Foreground = brush,
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        VerticalAlignment = VerticalAlignment.Bottom,
+                    });
+                }
+                else
+                {
+                    globe.Children.Add(Slash(brush, size + 2));
+                }
+
+                return globe;
+
+            case "bars":
+                return BarsMark(brush, active, size);
+
+            default:
+                return new TextBlock
+                {
+                    Text = active ? Glyph.Vpn : Glyph.Shield,
+                    FontFamily = Ui.IconFont,
+                    FontSize = size,
+                    Foreground = brush,
+                };
+        }
+    }
+
+    /// <summary>
+    /// The "Bars" style: macOS's own VPN menu artwork — a rounded frame with four bars cut into
+    /// it, fully when connected and part-way when not. macOS reads the artwork from its VPN menu
+    /// extra; Windows has no such file, so this is the drawn copy the Mac also carries.
+    /// </summary>
+    private static FrameworkElement BarsMark(Brush brush, bool active, double height)
+    {
+        var width = Math.Round(height * 18 / 14);
+        var frame = new Rect(0, height * 0.07, width, height * 0.86);
+        var inner = new Rect(
+            frame.X + (frame.Width * 0.2),
+            frame.Y + (frame.Height * 0.28),
+            frame.Width * 0.6,
+            frame.Height * 0.44);
+        var gap = inner.Width * 0.12;
+        var barWidth = (inner.Width - (gap * 3)) / 4;
+
+        var bars = new GeometryGroup();
+        for (var index = 0; index < 4; index++)
+        {
+            bars.Children.Add(new RectangleGeometry(new Rect(inner.X + (index * (barWidth + gap)), inner.Y, barWidth, inner.Height)));
+        }
+
+        bars.Freeze();
+
+        // Even-odd: each bar inside the frame becomes a hole.
+        var cut = new GeometryGroup { FillRule = FillRule.EvenOdd };
+        cut.Children.Add(new RectangleGeometry(frame, frame.Height * 0.3, frame.Height * 0.3));
+        cut.Children.Add(bars);
+        cut.Freeze();
+
+        var canvas = new Grid { Width = width, Height = height };
+        canvas.Children.Add(new System.Windows.Shapes.Path { Data = cut, Fill = brush });
+
+        if (!active)
+        {
+            // Off only cuts part-way: the bars keep 40 % of the frame's colour.
+            canvas.Children.Add(new System.Windows.Shapes.Path { Data = bars, Fill = brush, Opacity = 0.4 });
+        }
+
+        return canvas;
+    }
+
+    private static System.Windows.Shapes.Line Slash(Brush brush, double size)
+        => new()
+        {
+            X1 = size * 0.08,
+            Y1 = size * 0.92,
+            X2 = size * 0.92,
+            Y2 = size * 0.08,
+            Stroke = brush,
+            StrokeThickness = Math.Max(1.2, size / 10),
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+        };
 
     internal ReadoutStyle Layout
     {
@@ -233,10 +453,10 @@ internal sealed class MeterReadout : UserControl
         _dashDown.FontSize = _dashUp.FontSize = Math.Max(8, fontSize - 1);
         _dashTotal.FontSize = Math.Min(18, fontSize + 1);
         _ring.Width = _ring.Height = Math.Max(12, Math.Round((fontSize - 1) * 1.35) + 1);
-        if (_style is ReadoutStyle.Dashboard or ReadoutStyle.DashboardBasic)
-        {
-            BuildLayout();
-        }
+
+        // Every style, not just the Dashboards: a fixed-width rate slot is sized from the font,
+        // so a size change has to remeasure it.
+        BuildLayout();
 
         _ = secondaryBrush;
     }
@@ -248,14 +468,24 @@ internal sealed class MeterReadout : UserControl
             UpdateDashboard(dashboard ?? DashboardMetrics.Local(totals), useBits);
             return;
         }
+        string summary;
         if (_style == ReadoutStyle.Total)
         {
             _downloadText.Text = RateFormatter.FormatRate(totals.RxRateBps + totals.TxRateBps, useBits);
-            return;
+            summary = _downloadText.Text;
+        }
+        else
+        {
+            _downloadText.Text = RateFormatter.FormatRate(totals.RxRateBps, useBits);
+            _uploadText.Text = RateFormatter.FormatRate(totals.TxRateBps, useBits);
+            summary = $"{Localization.L("Download")} {_downloadText.Text}, {Localization.L("Upload")} {_uploadText.Text}";
         }
 
-        _downloadText.Text = RateFormatter.FormatRate(totals.RxRateBps, useBits);
-        _uploadText.Text = RateFormatter.FormatRate(totals.TxRateBps, useBits);
+        if (summary != _rateSummary)
+        {
+            _rateSummary = summary;
+            UpdateAutomationStatus();
+        }
     }
 
     private void BuildLayout()
@@ -271,20 +501,26 @@ internal sealed class MeterReadout : UserControl
                 break;
 
             case ReadoutStyle.Total:
-                _root.Children.Add(Row(_downloadArrow, _downloadText, showArrow: false));
+                var total = Row(_downloadArrow, _downloadText, showArrow: false);
+                total.HorizontalAlignment = HorizontalAlignment.Right;
+                _root.Children.Add(total);
                 break;
 
             case ReadoutStyle.Stacked:
-                _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-                _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                // One tight block, centred on the taskbar's height. Two star-height rows put
+                // each line in its own half of the bar — pushed to the top and bottom edges with
+                // a band of nothing between them, which read as two unrelated numbers.
+                var stack = new StackPanel
+                {
+                    Orientation = Orientation.Vertical,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                };
 
                 // Upload above download, matching the tray meter.
-                var upper = Row(_uploadArrow, _uploadText, showArrow: true);
-                var lower = Row(_downloadArrow, _downloadText, showArrow: true);
-                Grid.SetRow(upper, 0);
-                Grid.SetRow(lower, 1);
-                _root.Children.Add(upper);
-                _root.Children.Add(lower);
+                stack.Children.Add(Row(_uploadArrow, _uploadText, showArrow: true));
+                stack.Children.Add(Row(_downloadArrow, _downloadText, showArrow: true));
+                _root.Children.Add(stack);
                 break;
 
             default:
@@ -296,11 +532,71 @@ internal sealed class MeterReadout : UserControl
                 };
 
                 unified.Children.Add(Row(_uploadArrow, _uploadText, showArrow: true));
-                unified.Children.Add(new FrameworkElement { Width = 12 });
+                unified.Children.Add(new FrameworkElement { Width = UnifiedGap });
                 unified.Children.Add(Row(_downloadArrow, _downloadText, showArrow: true));
                 _root.Children.Add(unified);
                 break;
         }
+
+        RatesWidth = MeasureRates();
+    }
+
+    private const double UnifiedGap = 12;
+
+    private const double ArrowGap = 3;
+
+    /// <summary>
+    /// The width the rates need at their widest — "↑ 99.9 MB/s" — so the taskbar overlay can
+    /// be exactly that wide instead of guessing from the font size and leaving a band of empty
+    /// taskbar beside the numbers. NaN for the Dashboards, which size themselves.
+    /// </summary>
+    internal double RatesWidth { get; private set; } = double.NaN;
+
+    private double MeasureRates()
+    {
+        if (_style is ReadoutStyle.Dashboard or ReadoutStyle.DashboardBasic)
+        {
+            return double.NaN;
+        }
+
+        var number = Widest(_downloadText, RateSamples);
+        if (_style == ReadoutStyle.Total)
+        {
+            return number;
+        }
+
+        var rate = Widest(_uploadArrow, ["↑", "↓"]) + ArrowGap + number;
+        return _style == ReadoutStyle.Stacked ? rate : (2 * rate) + UnifiedGap;
+    }
+
+    /// <summary>
+    /// The width of a rate slot when the alignment fixes it, or NaN for Centred, which sizes
+    /// to the text. Measured in the slot's own font, so it holds at every size.
+    /// </summary>
+    private double SlotWidth(TextBlock prototype, string[] samples)
+    {
+        return _alignment == "center" ? double.NaN : Widest(prototype, samples);
+    }
+
+    /// <summary>The width of the widest sample in <paramref name="prototype"/>'s font.</summary>
+    private static double Widest(TextBlock prototype, string[] samples)
+    {
+        var typeface = new Typeface(prototype.FontFamily, prototype.FontStyle, prototype.FontWeight, prototype.FontStretch);
+        var widest = 0.0;
+        foreach (var sample in samples)
+        {
+            var text = new FormattedText(
+                sample,
+                System.Globalization.CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                prototype.FontSize,
+                Brushes.Black,
+                1.0);
+            widest = Math.Max(widest, text.WidthIncludingTrailingWhitespace);
+        }
+
+        return Math.Ceiling(widest) + 1;
     }
 
     /// <summary>"◔  Σ 12.4  |  ↓ 11.0  |  ↑ 1.4" in the capsule; Basic drops the ring and the total.</summary>
@@ -323,6 +619,11 @@ internal sealed class MeterReadout : UserControl
             block.VerticalAlignment = VerticalAlignment.Center;
             block.FontFamily = _downloadText.FontFamily;
             TextOptions.SetTextFormattingMode(block, TextFormattingMode.Display);
+
+            // Fixed slots here too: the capsule is centred, so a number changing width used
+            // to slide the ring and every separator along with it.
+            block.Width = SlotWidth(block, CompactSamples);
+            block.TextAlignment = _alignment == "right" ? TextAlignment.Right : TextAlignment.Left;
         }
 
         (_ring.Parent as Panel)?.Children.Remove(_ring);
@@ -384,35 +685,62 @@ internal sealed class MeterReadout : UserControl
         return brush;
     }
 
-    private static StackPanel Row(TextBlock arrow, TextBlock value, bool showArrow)
+    /// <summary>
+    /// One rate: the arrow, then the number in its slot. With a fixed slot both lines of the
+    /// Stacked style are the same width, so their arrows share one column.
+    /// </summary>
+    private StackPanel Row(TextBlock arrow, TextBlock value, bool showArrow)
     {
         // Rebuild rather than reparent: a TextBlock can only have one parent, and these are
         // reused across layout changes when the user switches style.
-        if (arrow.Parent is StackPanel oldArrowParent)
-        {
-            oldArrowParent.Children.Remove(arrow);
-        }
-
-        if (value.Parent is StackPanel oldValueParent)
-        {
-            oldValueParent.Children.Remove(value);
-        }
+        Detach(arrow);
+        Detach(value);
 
         var row = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Right,
+            HorizontalAlignment = _alignment switch
+            {
+                "left" => HorizontalAlignment.Left,
+                "right" => HorizontalAlignment.Right,
+                _ => HorizontalAlignment.Center,
+            },
         };
 
         if (showArrow)
         {
-            arrow.Margin = new Thickness(0, 0, 3, 0);
+            arrow.Margin = new Thickness(0, 0, ArrowGap, 0);
+            arrow.VerticalAlignment = VerticalAlignment.Center;
             row.Children.Add(arrow);
         }
 
-        row.Children.Add(value);
+        var width = SlotWidth(value, RateSamples);
+        if (double.IsNaN(width))
+        {
+            value.TextAlignment = TextAlignment.Left;
+            row.Children.Add(value);
+        }
+        else
+        {
+            value.TextAlignment = _alignment == "right" ? TextAlignment.Right : TextAlignment.Left;
+            row.Children.Add(new Border { Width = width, Child = value, VerticalAlignment = VerticalAlignment.Center });
+        }
+
         return row;
+    }
+
+    private static void Detach(FrameworkElement element)
+    {
+        switch (element.Parent)
+        {
+            case Panel panel:
+                panel.Children.Remove(element);
+                break;
+            case Border border:
+                border.Child = null;
+                break;
+        }
     }
 
     private static SolidColorBrush Freeze(ThemeColor color, byte alpha = 0xFF)
@@ -423,26 +751,65 @@ internal sealed class MeterReadout : UserControl
     }
 }
 
-/// <summary>What the meter shows after the rates: the VPN mark and the exit country.</summary>
-internal sealed record MeterAccessories(string? VpnKind, bool VpnActive, ThemeColor ActiveColor, ThemeColor IdleColor, string? Country)
+/// <summary>
+/// What the meter shows after the rates, in the macOS 2.7 order: the link indicator, the VPN
+/// mark, the exit country and the active resolver. Each is optional and independently set.
+/// </summary>
+internal sealed record MeterAccessories(
+    LinkStatus? Link,
+    ThemeColor LinkColor,
+    string? VpnKind,
+    bool VpnActive,
+    ThemeColor VpnColor,
+    double MarkSize,
+    string? Country,
+    ThemeColor IdleColor,
+    string? Resolver,
+    ThemeColor ResolverColor)
 {
     /// <summary>
-    /// Builds the accessories from the settings and the live state, or null when the user
-    /// has neither switched on — the overwhelmingly common case, which must cost nothing.
+    /// Builds the accessories from the settings and the live state, or null when nothing is
+    /// switched on — the overwhelmingly common case, which must cost nothing.
     /// </summary>
-    internal static MeterAccessories? From(AppSettings settings, bool vpnActive, string? country, ThemeColor idle)
+    /// <param name="resolverName">The active DNS profile's display name, or null when it is System Default.</param>
+    internal static MeterAccessories? From(
+        AppSettings settings,
+        bool vpnActive,
+        string? country,
+        ThemeColor idle,
+        LinkStatus? link,
+        string? resolverName)
     {
+        var showLink = settings.LinkIndicator && link is not null;
         var showVpn = settings.VpnIndicator != "off" && (vpnActive || settings.VpnShowWhenOff);
-        var showCountry = settings.ShowCountryFlag && !string.IsNullOrEmpty(country);
-        if (!showVpn && !showCountry)
+
+        // The country reads as the tunnel's exit, so it can be limited to the times one is up.
+        var showCountry = settings.ShowCountryFlag && !string.IsNullOrEmpty(country) &&
+                          (vpnActive || !settings.CountryFlagOnlyWithVpn);
+
+        // Only while it is not System Default: quiet on a network left alone.
+        var showResolver = settings.ShowResolver && !string.IsNullOrEmpty(resolverName);
+
+        if (!showLink && !showVpn && !showCountry && !showResolver)
         {
             return null;
         }
 
         var green = ThemeColor.FromHex("2EA043");
-        var active = AccentPalette.Resolve(settings.VpnIndicatorColor, settings.VpnIndicatorColorHex, green) ?? green;
+        var vpnColor = AccentPalette.Resolve(settings.VpnIndicatorColor, settings.VpnIndicatorColorHex, green) ?? green;
+        var resolverColor = AccentPalette.Resolve(settings.ResolverColor, settings.ResolverColorHex, idle) ?? idle;
 
-        return new MeterAccessories(showVpn ? settings.VpnIndicator : null, vpnActive, active, idle, showCountry ? country : null);
+        return new MeterAccessories(
+            showLink ? link : null,
+            showLink ? settings.ResolveLinkColor(link!.Health) : idle,
+            showVpn ? settings.VpnIndicator : null,
+            vpnActive,
+            vpnColor,
+            settings.VpnIndicatorSize,
+            showCountry ? country : null,
+            idle,
+            showResolver ? resolverName : null,
+            resolverColor);
     }
 }
 

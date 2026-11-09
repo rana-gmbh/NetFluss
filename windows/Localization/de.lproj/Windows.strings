@@ -246,3 +246,12 @@
 "Privacy Policy" = "Datenschutzerklärung";
 "Look up public IP addresses and countries" = "Öffentliche IP-Adressen und Länder abfragen";
 "Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." = "Zeigt deine öffentliche Adresse und ihr Land (api.ipify.org, ipwho.is) sowie die Länder der Server in Network Slice (api.country.is). Diese Dienste sehen die abgefragten Adressen. Ausgeschaltet bleiben diese Angaben leer.";
+
+/* 2.7 link indicator and resolver label */
+"A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. It follows whichever connection carries your traffic." = "Ein WLAN- oder Kabelsymbol rechts neben den Raten, in der Farbe des Verbindungszustands: verbunden, verbunden ohne Internet oder nicht verbunden. Es folgt der Verbindung, über die dein Datenverkehr läuft.";
+"Appears only while the resolver is not the system default, so the taskbar stays quiet on a network you have not overridden." = "Erscheint nur, solange nicht der Systemstandard aktiv ist – so bleibt die Taskleiste in Netzen ruhig, in denen du nichts geändert hast.";
+"Leave empty to use Windows' own check. An address of your own is asked directly; a redirect counts as a login page." = "Leer lassen, um die Prüfung von Windows zu verwenden. Eine eigene Adresse wird direkt abgefragt; eine Weiterleitung gilt als Anmeldeseite.";
+"Red" = "Rot";
+"Show active resolver on the taskbar" = "Aktiven DNS-Resolver in der Taskleiste anzeigen";
+"URL to check (empty uses Windows' own check)" = "Zu prüfende URL (leer = Prüfung von Windows)";
+"Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows' own internet check — the one behind the taskbar's network icon — so it notices a hotel login page or a dead upstream without making a request of its own." = "Ohne diese Prüfung zeigt das Symbol nur, ob die Verbindung steht. Mit ihr liest NetFluss die Internetprüfung von Windows – die hinter dem Netzwerksymbol der Taskleiste – und bemerkt so eine Hotel-Anmeldeseite oder eine tote Gegenstelle, ohne selbst eine Anfrage zu senden.";

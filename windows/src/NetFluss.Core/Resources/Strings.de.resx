@@ -2788,4 +2788,25 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." xml:space="preserve">
     <value>Zeigt deine öffentliche Adresse und ihr Land (api.ipify.org, ipwho.is) sowie die Länder der Server in Network Slice (api.country.is). Diese Dienste sehen die abgefragten Adressen. Ausgeschaltet bleiben diese Angaben leer.</value>
   </data>
+  <data name="A Wi-Fi or cable symbol right of the rates, in the colour of the connection&apos;s state: connected, connected without internet, or not connected. It follows whichever connection carries your traffic." xml:space="preserve">
+    <value>Ein WLAN- oder Kabelsymbol rechts neben den Raten, in der Farbe des Verbindungszustands: verbunden, verbunden ohne Internet oder nicht verbunden. Es folgt der Verbindung, über die dein Datenverkehr läuft.</value>
+  </data>
+  <data name="Appears only while the resolver is not the system default, so the taskbar stays quiet on a network you have not overridden." xml:space="preserve">
+    <value>Erscheint nur, solange nicht der Systemstandard aktiv ist – so bleibt die Taskleiste in Netzen ruhig, in denen du nichts geändert hast.</value>
+  </data>
+  <data name="Leave empty to use Windows&apos; own check. An address of your own is asked directly; a redirect counts as a login page." xml:space="preserve">
+    <value>Leer lassen, um die Prüfung von Windows zu verwenden. Eine eigene Adresse wird direkt abgefragt; eine Weiterleitung gilt als Anmeldeseite.</value>
+  </data>
+  <data name="Red" xml:space="preserve">
+    <value>Rot</value>
+  </data>
+  <data name="Show active resolver on the taskbar" xml:space="preserve">
+    <value>Aktiven DNS-Resolver in der Taskleiste anzeigen</value>
+  </data>
+  <data name="URL to check (empty uses Windows&apos; own check)" xml:space="preserve">
+    <value>Zu prüfende URL (leer = Prüfung von Windows)</value>
+  </data>
+  <data name="Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows&apos; own internet check — the one behind the taskbar&apos;s network icon — so it notices a hotel login page or a dead upstream without making a request of its own." xml:space="preserve">
+    <value>Ohne diese Prüfung zeigt das Symbol nur, ob die Verbindung steht. Mit ihr liest NetFluss die Internetprüfung von Windows – die hinter dem Netzwerksymbol der Taskleiste – und bemerkt so eine Hotel-Anmeldeseite oder eine tote Gegenstelle, ohne selbst eine Anfrage zu senden.</value>
+  </data>
 </root>

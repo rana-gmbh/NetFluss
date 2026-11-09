@@ -72,6 +72,16 @@ internal static class TaskbarPage
                 new Choice(16.0, Kit.L("Largest")),
             ])));
 
+        page.Children.Add(Kit.Card(
+            Kit.L("Rate alignment"),
+            Kit.L("Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column."),
+            Kit.Combo(settings, nameof(AppSettings.RateAlignment),
+            [
+                new Choice("center", Kit.L("Centered")),
+                new Choice("left", Kit.L("Left")),
+                new Choice("right", Kit.L("Right")),
+            ])));
+
         var hideCaption = Kit.Caption(string.Empty);
         var hideText = new StackPanel();
         hideText.Children.Add(Kit.Text(Kit.L("Hide the notification area icon")));
@@ -139,7 +149,17 @@ internal static class TaskbarPage
                 new Choice("off", Kit.L("Off")),
                 new Choice("dot", Kit.L("Dot")),
                 new Choice("shield", Kit.L("Shield")),
+                new Choice("globe", Kit.L("Globe")),
+                new Choice("bars", Kit.L("Bars")),
             ], 140)));
+
+        // The marks are sized on their own since macOS 2.7, rather than stuck at the rate font.
+        var sizeCard = Kit.Card(
+            Kit.L("Indicator size"),
+            null,
+            Kit.Combo(settings, nameof(AppSettings.VpnIndicatorSize),
+                Enumerable.Range(0, 5).Select(step => new Choice(10.0 + (step * 2), $"{10 + (step * 2)} pt")), 140));
+        page.Children.Add(sizeCard);
 
         var colorCard = Kit.Card(
             Kit.L("VPN indicator color"),
@@ -162,6 +182,71 @@ internal static class TaskbarPage
             Kit.L("Shows the country your public IP is in, looked up via ipify.org and ipwho.is. Windows has no flag glyphs, so it appears as the country code."),
             Kit.Switch(settings, nameof(AppSettings.ShowCountryFlag))));
 
+        var flagWithVpnCard = Kit.Card(
+            Kit.L("Show flag only while a VPN is active"),
+            null,
+            Kit.Switch(settings, nameof(AppSettings.CountryFlagOnlyWithVpn)));
+        page.Children.Add(flagWithVpnCard);
+
+        // ============================== Link indicator ==============================
+        page.Children.Add(Kit.Header(Kit.L("Link indicator")));
+
+        page.Children.Add(Kit.Card(
+            Kit.L("Link indicator"),
+            Kit.L("A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. It follows whichever connection carries your traffic."),
+            Kit.Switch(settings, nameof(AppSettings.LinkIndicator))));
+
+        FrameworkElement LinkColor(string selection, string hex, Func<ThemeColor> resolve)
+            => Kit.ColorPicker(settings, selection, hex, resolve, withAutomatic: false);
+
+        var linkColorCards = new[]
+        {
+            Kit.Card(Kit.L("Connected"), null, LinkColor(nameof(AppSettings.LinkColorOnline), nameof(AppSettings.LinkColorOnlineHex), () => settings.ResolveLinkColor(LinkHealth.Online))),
+            Kit.Card(Kit.L("No internet"), null, LinkColor(nameof(AppSettings.LinkColorLimited), nameof(AppSettings.LinkColorLimitedHex), () => settings.ResolveLinkColor(LinkHealth.Limited))),
+            Kit.Card(Kit.L("Not connected"), null, LinkColor(nameof(AppSettings.LinkColorOffline), nameof(AppSettings.LinkColorOfflineHex), () => settings.ResolveLinkColor(LinkHealth.Offline))),
+        };
+        foreach (var card in linkColorCards)
+        {
+            page.Children.Add(card);
+        }
+
+        var checkCard = Kit.Card(
+            Kit.L("Check internet access"),
+            Kit.L("Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows' own internet check — the one behind the taskbar's network icon — so it notices a hotel login page or a dead upstream without making a request of its own."),
+            Kit.Switch(settings, nameof(AppSettings.LinkCheckInternet)));
+        page.Children.Add(checkCard);
+
+        var probe = new TextBox { Width = 260, ToolTip = Kit.L("URL to check (empty uses Windows' own check)") };
+        probe.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding(nameof(AppSettings.LinkProbeUrl))
+        {
+            Source = settings,
+            Mode = System.Windows.Data.BindingMode.TwoWay,
+            UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus,
+        });
+        var probeCard = Kit.Card(
+            Kit.L("Check address"),
+            Kit.L("Leave empty to use Windows' own check. An address of your own is asked directly; a redirect counts as a login page."),
+            probe);
+        page.Children.Add(probeCard);
+
+        // ============================== Active resolver ==============================
+        page.Children.Add(Kit.Header(Kit.L("DNS")));
+
+        page.Children.Add(Kit.Card(
+            Kit.L("Show active resolver on the taskbar"),
+            Kit.L("Appears only while the resolver is not the system default, so the taskbar stays quiet on a network you have not overridden."),
+            Kit.Switch(settings, nameof(AppSettings.ShowResolver))));
+
+        var resolverColorCard = Kit.Card(
+            Kit.L("Resolver name colour"),
+            null,
+            Kit.ColorPicker(settings, nameof(AppSettings.ResolverColor), nameof(AppSettings.ResolverColorHex), () =>
+            {
+                var idle = SystemTheme.IsShellLight() ? ThemeColor.FromHex("5D5D5D") : ThemeColor.FromHex("C5C5C5");
+                return AccentPalette.Resolve(settings.ResolverColor, settings.ResolverColorHex, idle) ?? idle;
+            }));
+        page.Children.Add(resolverColorCard);
+
         var renderer = new TrayMeterRenderer();
 
         void Refresh()
@@ -181,9 +266,20 @@ internal static class TaskbarPage
             glyphCard.Opacity = iconMode ? 1 : 0.6;
             glyphCombo.IsEnabled = iconMode;
 
-            var vpnOn = settings.VpnIndicator != "off";
-            colorCard.IsEnabled = whenOffCard.IsEnabled = vpnOn;
-            colorCard.Opacity = whenOffCard.Opacity = vpnOn ? 1 : 0.6;
+            void Gate(bool on, params FrameworkElement[] cards)
+            {
+                foreach (var card in cards)
+                {
+                    card.IsEnabled = on;
+                    card.Opacity = on ? 1 : 0.6;
+                }
+            }
+
+            Gate(settings.VpnIndicator != "off", colorCard, whenOffCard, sizeCard);
+            Gate(settings.ShowCountryFlag, flagWithVpnCard);
+            Gate(settings.LinkIndicator, [.. linkColorCards, checkCard]);
+            Gate(settings.LinkIndicator && settings.LinkCheckInternet, probeCard);
+            Gate(settings.ShowResolver, resolverColorCard);
 
             RenderPreview(settings, renderer, strip, previewCaption, glyphImage);
         }

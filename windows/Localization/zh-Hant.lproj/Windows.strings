@@ -246,3 +246,12 @@
 "Privacy Policy" = "隱私權政策";
 "Look up public IP addresses and countries" = "查詢公用 IP 位址和國家/地區";
 "Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." = "顯示你的公用位址及其所在國家/地區（api.ipify.org、ipwho.is），以及 Network Slice 中伺服器的國家/地區（api.country.is）。這些服務能看到所查詢的位址。關閉後，這些資訊將保持空白。";
+
+/* 2.7 link indicator and resolver label */
+"A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. It follows whichever connection carries your traffic." = "在速率右側顯示 Wi-Fi 或網路線圖示，顏色表示連線狀態：已連線、已連線但無法存取網際網路、未連線。它跟隨承載你流量的連線。";
+"Appears only while the resolver is not the system default, so the taskbar stays quiet on a network you have not overridden." = "僅在解析器不是系統預設值時顯示，因此在你未更改的網路上工作列保持簡潔。";
+"Leave empty to use Windows' own check. An address of your own is asked directly; a redirect counts as a login page." = "留空則使用 Windows 內建的檢查。自訂位址會被直接存取；重新導向視為登入頁面。";
+"Red" = "紅色";
+"Show active resolver on the taskbar" = "在工作列上顯示目前的解析器";
+"URL to check (empty uses Windows' own check)" = "檢查網址（留空則使用 Windows 內建的檢查）";
+"Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows' own internet check — the one behind the taskbar's network icon — so it notices a hotel login page or a dead upstream without making a request of its own." = "關閉此檢查時，圖示只表示連線是否建立。開啟後，NetFluss 讀取 Windows 內建的網際網路檢查（即工作列網路圖示背後的檢查），無需自行發出要求即可發現飯店登入頁面或上游故障。";

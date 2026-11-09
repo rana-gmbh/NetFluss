@@ -349,6 +349,97 @@ public sealed class AppSettings : INotifyPropertyChanged
     /// <summary>Built-ins followed by the user's own, which is the order the Mac shows them in.</summary>
     public IReadOnlyList<DnsPreset> AllDnsPresets() => [.. DnsPreset.BuiltIn, .. CustomDnsPresets];
 
+    /// <summary>
+    /// User names for the built-in profiles — "Home" for Cloudflare, "Work" for Quad9 —
+    /// by preset id. Only the name changes: the servers stay fixed, so a name can never point
+    /// somewhere it does not say (macOS 2.7).
+    /// </summary>
+    public Dictionary<string, string> DnsPresetCustomNames { get; set; } = [];
+
+    /// <summary>
+    /// What to call a profile everywhere it appears: the user's name for a renamed built-in,
+    /// otherwise the built-in's translated name or the custom profile's own.
+    /// </summary>
+    public string DnsPresetDisplayName(DnsPreset preset)
+        => preset.IsBuiltIn && DnsPresetCustomNames.TryGetValue(preset.Id, out var custom) && !string.IsNullOrWhiteSpace(custom)
+            ? custom
+            : preset.IsBuiltIn ? Localization.L(preset.Name) : preset.Name;
+
+    /// <summary>
+    /// Renames a built-in profile, or restores its own name when given blank. Custom profiles
+    /// are named when they are created and are not affected.
+    /// </summary>
+    public void RenameDnsPreset(string presetId, string? name)
+    {
+        if (!DnsPreset.BuiltIn.Any(preset => preset.Id == presetId))
+        {
+            return;
+        }
+
+        var trimmed = name?.Trim();
+        var updated = new Dictionary<string, string>(DnsPresetCustomNames, StringComparer.Ordinal);
+        var builtInName = DnsPreset.BuiltIn.First(preset => preset.Id == presetId).Name;
+
+        // Typing the original name back counts as clearing the rename, so the profile goes on
+        // following its translation rather than pinning the English word.
+        if (string.IsNullOrEmpty(trimmed) || trimmed == builtInName || trimmed == Localization.L(builtInName))
+        {
+            if (!updated.Remove(presetId))
+            {
+                return;
+            }
+        }
+        else
+        {
+            if (updated.TryGetValue(presetId, out var existing) && existing == trimmed)
+            {
+                return;
+            }
+
+            updated[presetId] = trimmed;
+        }
+
+        // Replaced rather than mutated: Set<T> compares a Dictionary by reference.
+        DnsPresetCustomNames = updated;
+        OnPropertyChanged(nameof(DnsPresetCustomNames));
+    }
+
+    /// <summary>
+    /// Switch the resolver automatically by Wi-Fi network (macOS 2.7). Needs the helper: without
+    /// it every network change would cost an administrator prompt, so it refuses rather than
+    /// degrading into that.
+    /// </summary>
+    public bool DnsAutoSwitchEnabled
+    {
+        get => _dnsAutoSwitchEnabled;
+        set => Set(ref _dnsAutoSwitchEnabled, value);
+    }
+
+    /// <summary>"On this network, use this resolver." Most specific first is decided by the engine.</summary>
+    public List<DnsRule> DnsRules { get; set; } = [];
+
+    /// <summary>
+    /// The catch-all for any network without a rule of its own, wired ones included; empty
+    /// leaves those networks unchanged. This is what stops a public resolver following the
+    /// user home.
+    /// </summary>
+    public string DnsRuleFallbackPresetId
+    {
+        get => _dnsRuleFallbackPresetId;
+        set => Set(ref _dnsRuleFallbackPresetId, value ?? string.Empty);
+    }
+
+    /// <summary>Replaces the rule list, raising the change the store saves on.</summary>
+    public void SetDnsRules(IEnumerable<DnsRule> rules)
+    {
+        DnsRules = [.. rules];
+        OnPropertyChanged(nameof(DnsRules));
+    }
+
+    /// <summary>Whether anything needs the active DNS profile kept current.</summary>
+    [JsonIgnore]
+    public bool NeedsActiveDns => ShowResolver || DnsAutoSwitchEnabled;
+
     /// <summary>Adds a preset, rejecting anything that would not survive an elevated apply.</summary>
     public DnsValidation AddDnsPreset(string name, IReadOnlyList<string> servers)
     {
@@ -729,15 +820,43 @@ public sealed class AppSettings : INotifyPropertyChanged
     private string _vpnIndicatorColorHex = string.Empty;
     private bool _vpnShowWhenOff = true;
     private bool _showCountryFlag;
+    private double _vpnIndicatorSize = 14;
+    private bool _countryFlagOnlyWithVpn;
+    private string _rateAlignment = "center";
+    private bool _linkIndicator;
+    private bool _linkCheckInternet = true;
+    private string _linkProbeUrl = string.Empty;
+    private string _linkColorOnline = "green";
+    private string _linkColorOnlineHex = string.Empty;
+    private string _linkColorLimited = "orange";
+    private string _linkColorLimitedHex = string.Empty;
+    private string _linkColorOffline = "red";
+    private string _linkColorOfflineHex = string.Empty;
+    private bool _showResolver;
+    private string _resolverColor = "system";
+    private string _resolverColorHex = string.Empty;
+    private bool _dnsAutoSwitchEnabled;
+    private string _dnsRuleFallbackPresetId = string.Empty;
 
     /// <summary>
-    /// "off", "dot" or "shield": a mark after the rates showing whether any VPN is up —
-    /// NetFluss's own or any other client's (the macOS 2.6 menu bar VPN indicator).
+    /// "off", "dot", "shield", "globe" or "bars": a mark after the rates showing whether any
+    /// VPN is up — NetFluss's own or any other client's. Dot and Shield are the macOS 2.6
+    /// styles; Globe and Bars arrived in 2.7.2.
     /// </summary>
     public string VpnIndicator
     {
         get => _vpnIndicator;
-        set => Set(ref _vpnIndicator, value is "dot" or "shield" ? value : "off");
+        set => Set(ref _vpnIndicator, value is "dot" or "shield" or "globe" or "bars" ? value : "off");
+    }
+
+    /// <summary>
+    /// The VPN mark's own size in points, 10–18 — independent of the rate font since macOS
+    /// 2.7, where it had been stuck at the size of the text.
+    /// </summary>
+    public double VpnIndicatorSize
+    {
+        get => _vpnIndicatorSize;
+        set => Set(ref _vpnIndicatorSize, double.IsFinite(value) ? Math.Clamp(Math.Round(value), 10, 18) : 14);
     }
 
     /// <summary>Accent name, "system" or "custom" (with <see cref="VpnIndicatorColorHex"/>).</summary>
@@ -766,6 +885,127 @@ public sealed class AppSettings : INotifyPropertyChanged
         get => _showCountryFlag;
         set => Set(ref _showCountryFlag, value);
     }
+
+    /// <summary>
+    /// Show the country only while a VPN is up. It reads as the tunnel's exit country, and
+    /// at home it is just the user's own country repeated back to them (macOS 2.7).
+    /// </summary>
+    public bool CountryFlagOnlyWithVpn
+    {
+        get => _countryFlagOnlyWithVpn;
+        set => Set(ref _countryFlagOnlyWithVpn, value);
+    }
+
+    // ============================ Meter accessories (2.7) ============================
+
+    /// <summary>
+    /// "left", "center" or "right": how the rates sit in their column. Centred is the
+    /// historical look and the default; Left keeps the arrows still, Right keeps the arrows
+    /// *and* the units still by lining the numbers up (macOS 2.7.1).
+    /// </summary>
+    public string RateAlignment
+    {
+        get => _rateAlignment;
+        set => Set(ref _rateAlignment, value is "left" or "right" ? value : "center");
+    }
+
+    /// <summary>
+    /// A Wi-Fi or cable glyph after the rates that follows whichever physical interface
+    /// carries the default route, coloured by whether the internet is reachable.
+    /// </summary>
+    public bool LinkIndicator
+    {
+        get => _linkIndicator;
+        set => Set(ref _linkIndicator, value);
+    }
+
+    /// <summary>
+    /// Check internet access rather than only "the interface is up". Without it there is no
+    /// way to tell a hotel login page from a working connection, so amber cannot appear.
+    /// </summary>
+    public bool LinkCheckInternet
+    {
+        get => _linkCheckInternet;
+        set => Set(ref _linkCheckInternet, value);
+    }
+
+    /// <summary>
+    /// Address to check instead of Windows' own connectivity test. Empty — the default —
+    /// means NetFluss asks Windows, and makes no request of its own.
+    /// </summary>
+    public string LinkProbeUrl
+    {
+        get => _linkProbeUrl;
+        set => Set(ref _linkProbeUrl, LinkProbe.Normalize(value));
+    }
+
+    public string LinkColorOnline
+    {
+        get => _linkColorOnline;
+        set => Set(ref _linkColorOnline, string.IsNullOrWhiteSpace(value) ? "green" : value);
+    }
+
+    public string LinkColorOnlineHex
+    {
+        get => _linkColorOnlineHex;
+        set => Set(ref _linkColorOnlineHex, value ?? string.Empty);
+    }
+
+    public string LinkColorLimited
+    {
+        get => _linkColorLimited;
+        set => Set(ref _linkColorLimited, string.IsNullOrWhiteSpace(value) ? "orange" : value);
+    }
+
+    public string LinkColorLimitedHex
+    {
+        get => _linkColorLimitedHex;
+        set => Set(ref _linkColorLimitedHex, value ?? string.Empty);
+    }
+
+    public string LinkColorOffline
+    {
+        get => _linkColorOffline;
+        set => Set(ref _linkColorOffline, string.IsNullOrWhiteSpace(value) ? "red" : value);
+    }
+
+    public string LinkColorOfflineHex
+    {
+        get => _linkColorOfflineHex;
+        set => Set(ref _linkColorOfflineHex, value ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Show the active DNS profile's name after the other marks. It appears only while the
+    /// profile is not System Default: quiet on a network left alone, informative on one that
+    /// has been overridden.
+    /// </summary>
+    public bool ShowResolver
+    {
+        get => _showResolver;
+        set => Set(ref _showResolver, value);
+    }
+
+    /// <summary>Accent name, "system" or "custom" (with <see cref="ResolverColorHex"/>).</summary>
+    public string ResolverColor
+    {
+        get => _resolverColor;
+        set => Set(ref _resolverColor, string.IsNullOrWhiteSpace(value) ? "system" : value);
+    }
+
+    public string ResolverColorHex
+    {
+        get => _resolverColorHex;
+        set => Set(ref _resolverColorHex, value ?? string.Empty);
+    }
+
+    /// <summary>The configured colour for a link state, falling back to the state's default.</summary>
+    public ThemeColor ResolveLinkColor(LinkHealth health) => health switch
+    {
+        LinkHealth.Online => AccentPalette.Resolve(LinkColorOnline, LinkColorOnlineHex, LinkStatus.DefaultOnline) ?? LinkStatus.DefaultOnline,
+        LinkHealth.Limited => AccentPalette.Resolve(LinkColorLimited, LinkColorLimitedHex, LinkStatus.DefaultLimited) ?? LinkStatus.DefaultLimited,
+        _ => AccentPalette.Resolve(LinkColorOffline, LinkColorOfflineHex, LinkStatus.DefaultOffline) ?? LinkStatus.DefaultOffline,
+    };
 
     /// <summary>Whether anything on the meter needs VPN detection at all.</summary>
     [JsonIgnore]

@@ -21,6 +21,27 @@ using System.Net.Sockets;
 namespace NetFluss.Core;
 
 /// <summary>
+/// "On this network, use this resolver." Port of the macOS <c>DNSRule</c>.
+///
+/// <para><see cref="Bssid"/> pins the rule to one access point. An SSID on its own is a weak
+/// key — anyone can name their network after your router, and the rule would then fire on
+/// theirs — so the BSSID is offered as a tightening rather than a requirement.</para>
+/// </summary>
+public sealed record DnsRule
+{
+    public string Id { get; init; } = Guid.NewGuid().ToString();
+
+    public required string Ssid { get; init; }
+
+    /// <summary>Null or empty means "any access point with this name".</summary>
+    public string? Bssid { get; init; }
+
+    public required string PresetId { get; init; }
+
+    public bool Enabled { get; init; } = true;
+}
+
+/// <summary>
 /// A named set of DNS servers. Port of the macOS <c>DNSPreset</c>, including the built-in
 /// list, so both platforms offer the same choices under the same names.
 /// </summary>
