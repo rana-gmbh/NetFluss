@@ -418,7 +418,7 @@ internal static class VpnPage
         if (profile.Options.UseProfileDns)
         {
             var presets = context.Settings.AllDnsPresets().Where(p => p.Servers.Count > 0)
-                .Select(p => new Choice(p.Id, Kit.L(p.Name)))
+                .Select(p => new Choice(p.Id, context.Settings.DnsPresetDisplayName(p)))
                 .Prepend(new Choice(string.Empty, Kit.L("Choose a DNS preset")));
             body.Children.Add(Option("DNS preset", Kit.Combo(presets, profile.Options.DnsPresetId ?? string.Empty,
                 value => vpn.SetOptions(profile, o => o with { DnsPresetId = value as string is { Length: > 0 } id ? id : null }), 220)));

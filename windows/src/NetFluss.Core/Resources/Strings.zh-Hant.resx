@@ -1865,7 +1865,7 @@
     <value>依網路自動切換 DNS</value>
   </data>
   <data name="Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." xml:space="preserve">
-    <value>根據你加入的 Wi-Fi 網路選擇解析器——家中用一個，公共網路用另一個。需要特權協助程式，否則每次切換都會要求輸入密碼。</value>
+    <value>根據你連線的 Wi-Fi 網路選擇解析器——家裡用一個，公共網路用另一個。需要 NetFluss 輔助工具（一般 → 系統存取），否則每次切換都會要求管理員核准。</value>
   </data>
   <data name="Automatic DNS" xml:space="preserve">
     <value>自動 DNS</value>
@@ -1895,7 +1895,7 @@
     <value>目前網路沒有適用的規則。</value>
   </data>
   <data name="Install the privileged helper to let NetFluss change DNS without asking each time." xml:space="preserve">
-    <value>安裝特權協助程式，讓 NetFluss 無需每次詢問即可變更 DNS。</value>
+    <value>安裝 NetFluss 輔助工具（一般 → 系統存取），讓 NetFluss 無需每次詢問即可變更 DNS。</value>
   </data>
   <data name="Paused: a VPN profile is controlling DNS right now." xml:space="preserve">
     <value>已暫停：VPN 設定檔目前正在控制 DNS。</value>
@@ -1913,7 +1913,7 @@
     <value>在 {0} 上使用 {1}。</value>
   </data>
   <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
-    <value>沒有可用的 Wi-Fi 網路名稱。請加入 Wi-Fi 網路，或在下方允許位置存取——沒有它 Windows 不會提供網路名稱。</value>
+    <value>無法取得 Wi-Fi 網路名稱。請連線 Wi-Fi 網路，或在 Wi-Fi 頁面允許位置存取——否則 Windows 不會提供網路名稱。</value>
   </data>
   <data name="Resolver name colour" xml:space="preserve">
     <value>解析器名稱顏色</value>
@@ -2808,5 +2808,8 @@
   </data>
   <data name="Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows&apos; own internet check — the one behind the taskbar&apos;s network icon — so it notices a hotel login page or a dead upstream without making a request of its own." xml:space="preserve">
     <value>關閉此檢查時，圖示只表示連線是否建立。開啟後，NetFluss 讀取 Windows 內建的網際網路檢查（即工作列網路圖示背後的檢查），無需自行發出要求即可發現飯店登入頁面或上游故障。</value>
+  </data>
+  <data name="Leave empty to restore the original name." xml:space="preserve">
+    <value>留空以還原原始名稱。</value>
   </data>
 </root>

@@ -80,7 +80,7 @@ internal sealed class DnsSection : IPopoverSection
 
         // Rows are rebuilt only when what they show changed, so hovering one is not undone
         // by a background re-read that found nothing new.
-        var signature = string.Join('|', presets.Select(p => p.Id)) + $"#{dns.ActivePresetId}#{dns.ApplyingPresetId}#{dns.AdapterId}";
+        var signature = string.Join('|', presets.Select(p => p.Id + "=" + _context.Settings.DnsPresetDisplayName(p))) + $"#{dns.ActivePresetId}#{dns.ApplyingPresetId}#{dns.AdapterId}";
         if (signature == _signature)
         {
             return;
@@ -98,7 +98,7 @@ internal sealed class DnsSection : IPopoverSection
             mark.Width = 18;
             mark.Margin = new Thickness(0, 0, 8, 0);
 
-            var name = Ui.Label(Localization.L(preset.Name), 12, Ui.Text, isActive ? FontWeights.SemiBold : FontWeights.Normal);
+            var name = Ui.Label(_context.Settings.DnsPresetDisplayName(preset), 12, Ui.Text, isActive ? FontWeights.SemiBold : FontWeights.Normal);
             var servers = Ui.Label(
                 preset.IsAutomatic ? PopoverContext.L("Automatic (DHCP)") : string.Join(", ", preset.Servers),
                 10,

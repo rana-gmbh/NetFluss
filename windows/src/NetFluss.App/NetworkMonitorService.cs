@@ -216,6 +216,13 @@ public sealed class NetworkMonitorService : INotifyPropertyChanged, IDisposable
     /// </summary>
     public bool DetectVpn { get; set; }
 
+    /// <summary>
+    /// The link indicator or automatic DNS is on, so the carrier's addresses and Wi-Fi name
+    /// are kept current with the popover closed — the macOS <c>wifiInfoNeededInBackground</c>.
+    /// Every network change still triggers a read at once; the cadence is only a safety net.
+    /// </summary>
+    public bool WatchLink { get; set; }
+
     /// <summary>The meter shows the exit country, so the public address is kept fresh.</summary>
     public bool MeterShowsCountry
     {
@@ -426,7 +433,7 @@ public sealed class NetworkMonitorService : INotifyPropertyChanged, IDisposable
     /// <summary>Wi-Fi details, local addresses and the public address, each on its own cadence.</summary>
     private void RefreshDetails(DateTime now)
     {
-        if (_detailMonitoring && !_wifiReadInFlight && now - _lastWifiRefresh >= WifiDetailInterval)
+        if ((_detailMonitoring || WatchLink) && !_wifiReadInFlight && now - _lastWifiRefresh >= WifiDetailInterval)
         {
             _lastWifiRefresh = now;
             _ = RefreshWifiDetailsAsync();
@@ -435,8 +442,8 @@ public sealed class NetworkMonitorService : INotifyPropertyChanged, IDisposable
         // Addresses are read while the popover is open, and — on a faster cadence — whenever
         // the meter shows a VPN mark or the exit country, since those change with the network
         // whether or not anything else is on screen.
-        var addressInterval = DetectVpn ? VpnInterval : AddressInterval;
-        if ((_detailMonitoring || DetectVpn) && !_addressReadInFlight && now - _lastAddressRefresh >= addressInterval)
+        var addressInterval = DetectVpn || WatchLink ? VpnInterval : AddressInterval;
+        if ((_detailMonitoring || DetectVpn || WatchLink) && !_addressReadInFlight && now - _lastAddressRefresh >= addressInterval)
         {
             _lastAddressRefresh = now;
             _ = RefreshAddressesAsync();

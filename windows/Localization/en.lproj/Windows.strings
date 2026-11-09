@@ -259,3 +259,9 @@
 "Show active resolver on the taskbar" = "Show active resolver on the taskbar";
 "URL to check (empty uses Windows' own check)" = "URL to check (empty uses Windows' own check)";
 "Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows' own internet check — the one behind the taskbar's network icon — so it notices a hotel login page or a dead upstream without making a request of its own." = "Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows' own internet check — the one behind the taskbar's network icon — so it notices a hotel login page or a dead upstream without making a request of its own.";
+
+/* 2.7 automatic DNS and renamed profiles */
+"Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." = "Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the NetFluss helper (General → System access), otherwise every switch would ask for administrator approval.";
+"No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "No Wi-Fi network name is available. Join a Wi-Fi network, or allow location access on the Wi-Fi page — Windows withholds the network name without it.";
+"Install the privileged helper to let NetFluss change DNS without asking each time." = "Install the NetFluss helper (General → System access) to let NetFluss change DNS without asking each time.";
+"Leave empty to restore the original name." = "Leave empty to restore the original name.";

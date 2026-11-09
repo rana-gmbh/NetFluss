@@ -33,6 +33,10 @@ internal sealed class PreferencesContext
 
     internal required AppCommands Commands { get; init; }
 
+    internal required DnsSwitcher Dns { get; init; }
+
+    internal required DnsAutoSwitcher AutoDns { get; init; }
+
     internal AppSettings Settings => Store.Settings;
 }
 

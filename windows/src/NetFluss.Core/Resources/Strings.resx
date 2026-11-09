@@ -1865,7 +1865,7 @@ No network traffic is sent — only local counters from your machine are recorde
     <value>Switch DNS automatically by network</value>
   </data>
   <data name="Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." xml:space="preserve">
-    <value>Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password.</value>
+    <value>Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the NetFluss helper (General → System access), otherwise every switch would ask for administrator approval.</value>
   </data>
   <data name="Automatic DNS" xml:space="preserve">
     <value>Automatic DNS</value>
@@ -1895,7 +1895,7 @@ No network traffic is sent — only local counters from your machine are recorde
     <value>No rule applies to the current network.</value>
   </data>
   <data name="Install the privileged helper to let NetFluss change DNS without asking each time." xml:space="preserve">
-    <value>Install the privileged helper to let NetFluss change DNS without asking each time.</value>
+    <value>Install the NetFluss helper (General → System access) to let NetFluss change DNS without asking each time.</value>
   </data>
   <data name="Paused: a VPN profile is controlling DNS right now." xml:space="preserve">
     <value>Paused: a VPN profile is controlling DNS right now.</value>
@@ -1913,7 +1913,7 @@ No network traffic is sent — only local counters from your machine are recorde
     <value>Using {0} on {1}.</value>
   </data>
   <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
-    <value>No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — Windows withholds the network name without it.</value>
+    <value>No Wi-Fi network name is available. Join a Wi-Fi network, or allow location access on the Wi-Fi page — Windows withholds the network name without it.</value>
   </data>
   <data name="Resolver name colour" xml:space="preserve">
     <value>Resolver name colour</value>
@@ -2808,5 +2808,8 @@ No network traffic is sent — only local counters from your machine are recorde
   </data>
   <data name="Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows&apos; own internet check — the one behind the taskbar&apos;s network icon — so it notices a hotel login page or a dead upstream without making a request of its own." xml:space="preserve">
     <value>Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows' own internet check — the one behind the taskbar's network icon — so it notices a hotel login page or a dead upstream without making a request of its own.</value>
+  </data>
+  <data name="Leave empty to restore the original name." xml:space="preserve">
+    <value>Leave empty to restore the original name.</value>
   </data>
 </root>

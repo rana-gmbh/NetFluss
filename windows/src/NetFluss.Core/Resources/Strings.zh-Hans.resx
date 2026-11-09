@@ -1865,7 +1865,7 @@
     <value>按网络自动切换 DNS</value>
   </data>
   <data name="Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." xml:space="preserve">
-    <value>根据你加入的 Wi-Fi 网络选择解析器——家中用一个，公共网络用另一个。需要特权助手，否则每次切换都会要求输入密码。</value>
+    <value>根据你连接的 Wi-Fi 网络选择解析器——家里用一个，公共网络用另一个。需要 NetFluss 辅助工具（通用 → 系统访问），否则每次切换都会请求管理员批准。</value>
   </data>
   <data name="Automatic DNS" xml:space="preserve">
     <value>自动 DNS</value>
@@ -1895,7 +1895,7 @@
     <value>当前网络没有适用的规则。</value>
   </data>
   <data name="Install the privileged helper to let NetFluss change DNS without asking each time." xml:space="preserve">
-    <value>安装特权助手，让 NetFluss 无需每次询问即可更改 DNS。</value>
+    <value>安装 NetFluss 辅助工具（通用 → 系统访问），让 NetFluss 无需每次询问即可更改 DNS。</value>
   </data>
   <data name="Paused: a VPN profile is controlling DNS right now." xml:space="preserve">
     <value>已暂停：VPN 配置当前正在控制 DNS。</value>
@@ -1913,7 +1913,7 @@
     <value>在 {0} 上使用 {1}。</value>
   </data>
   <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
-    <value>没有可用的 Wi-Fi 网络名称。请加入 Wi-Fi 网络，或在下方允许位置访问——没有它 Windows 不会提供网络名称。</value>
+    <value>无法获取 Wi-Fi 网络名称。请连接 Wi-Fi 网络，或在 Wi-Fi 页面允许位置访问——否则 Windows 不会提供网络名称。</value>
   </data>
   <data name="Resolver name colour" xml:space="preserve">
     <value>解析器名称颜色</value>
@@ -2808,5 +2808,8 @@
   </data>
   <data name="Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows&apos; own internet check — the one behind the taskbar&apos;s network icon — so it notices a hotel login page or a dead upstream without making a request of its own." xml:space="preserve">
     <value>关闭此检测时，图标只表示连接是否建立。开启后，NetFluss 读取 Windows 自带的互联网检测（即任务栏网络图标背后的检测），无需自行发出请求即可发现酒店登录页面或上游故障。</value>
+  </data>
+  <data name="Leave empty to restore the original name." xml:space="preserve">
+    <value>留空以恢复原始名称。</value>
   </data>
 </root>

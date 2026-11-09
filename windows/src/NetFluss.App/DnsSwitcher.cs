@@ -33,6 +33,9 @@ internal sealed class DnsSwitcher
 
     internal string? ActivePresetId { get; private set; }
 
+    /// <summary>The adapter's static resolvers at the last read; null until the first one.</summary>
+    internal IReadOnlyList<string>? StaticServers { get; private set; }
+
     internal string? ApplyingPresetId { get; private set; }
 
     internal string? Error { get; private set; }
@@ -53,9 +56,10 @@ internal sealed class DnsSwitcher
 
         AdapterId = id;
         AdapterName = id is null ? null : DnsController.AdapterName(id);
-        ActivePresetId = id is null
+        StaticServers = id is null ? null : DnsController.StaticServers(id);
+        ActivePresetId = StaticServers is null
             ? null
-            : DnsController.ActivePresetId(_store.Settings.AllDnsPresets(), DnsController.StaticServers(id));
+            : DnsController.ActivePresetId(_store.Settings.AllDnsPresets(), StaticServers);
 
         Changed?.Invoke(this, EventArgs.Empty);
     }
@@ -87,6 +91,30 @@ internal sealed class DnsSwitcher
 
             // Read back rather than assume: the checkmark reflects what the adapter now
             // has, not what was asked for.
+            Refresh();
+        }
+    }
+
+    /// <summary>
+    /// Applies a preset on automatic DNS's behalf: through the helper only, never a UAC prompt,
+    /// and without holding the popover open. Returns whether the helper reported success.
+    /// </summary>
+    internal async Task<bool> ApplyAutomaticallyAsync(DnsPreset preset)
+    {
+        if (IsApplying || AdapterName is not { } adapter || AdapterId is not { } adapterId)
+        {
+            return false;
+        }
+
+        ApplyingPresetId = preset.Id;
+        try
+        {
+            var result = await _privileged.SetDnsAsync(adapterId, adapter, preset.Servers, allowPrompt: false);
+            return result.Succeeded;
+        }
+        finally
+        {
+            ApplyingPresetId = null;
             Refresh();
         }
     }

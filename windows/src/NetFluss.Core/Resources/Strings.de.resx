@@ -1865,7 +1865,7 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
     <value>DNS automatisch nach Netzwerk wechseln</value>
   </data>
   <data name="Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." xml:space="preserve">
-    <value>Wählt den Resolver anhand des WLANs, mit dem du dich verbindest — einen für zu Hause, einen für öffentliche Netze. Benötigt den privilegierten Helfer, sonst würde jeder Wechsel nach deinem Passwort fragen.</value>
+    <value>Wählt den Resolver anhand des WLANs, mit dem du dich verbindest — einen für zu Hause, einen für öffentliche Netze. Benötigt den NetFluss-Helfer (Allgemein → Systemzugriff), sonst würde jeder Wechsel nach einer Administratorbestätigung fragen.</value>
   </data>
   <data name="Automatic DNS" xml:space="preserve">
     <value>Automatisches DNS</value>
@@ -1895,7 +1895,7 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
     <value>Für das aktuelle Netzwerk gilt keine Regel.</value>
   </data>
   <data name="Install the privileged helper to let NetFluss change DNS without asking each time." xml:space="preserve">
-    <value>Installiere den privilegierten Helfer, damit NetFluss DNS ändern kann, ohne jedes Mal zu fragen.</value>
+    <value>Installiere den NetFluss-Helfer (Allgemein → Systemzugriff), damit NetFluss DNS ändern kann, ohne jedes Mal zu fragen.</value>
   </data>
   <data name="Paused: a VPN profile is controlling DNS right now." xml:space="preserve">
     <value>Pausiert: Ein VPN-Profil steuert gerade das DNS.</value>
@@ -1913,7 +1913,7 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
     <value>Verwendet {0} in {1}.</value>
   </data>
   <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
-    <value>Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube unten den Ortungszugriff — ohne ihn gibt Windows den Netzwerknamen nicht preis.</value>
+    <value>Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube den Standortzugriff auf der Seite WLAN — ohne ihn gibt Windows den Netzwerknamen nicht preis.</value>
   </data>
   <data name="Resolver name colour" xml:space="preserve">
     <value>Farbe des Resolver-Namens</value>
@@ -2808,5 +2808,8 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   </data>
   <data name="Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows&apos; own internet check — the one behind the taskbar&apos;s network icon — so it notices a hotel login page or a dead upstream without making a request of its own." xml:space="preserve">
     <value>Ohne diese Prüfung zeigt das Symbol nur, ob die Verbindung steht. Mit ihr liest NetFluss die Internetprüfung von Windows – die hinter dem Netzwerksymbol der Taskleiste – und bemerkt so eine Hotel-Anmeldeseite oder eine tote Gegenstelle, ohne selbst eine Anfrage zu senden.</value>
+  </data>
+  <data name="Leave empty to restore the original name." xml:space="preserve">
+    <value>Leer lassen, um den ursprünglichen Namen wiederherzustellen.</value>
   </data>
 </root>

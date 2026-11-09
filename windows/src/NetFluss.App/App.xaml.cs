@@ -33,6 +33,7 @@ public partial class NetFlussApplication : Application
     private WifiService? _wifi;
     private DnsSwitcher? _dns;
     private LinkHealthService? _link;
+    private DnsAutoSwitcher? _autoDns;
     private DateTime _lastDnsRead = DateTime.MinValue;
     private PrivilegedActions? _privileged;
     private StatisticsService? _statistics;
@@ -124,10 +125,11 @@ public partial class NetFlussApplication : Application
         _wifi = new WifiService(_store);
         _privileged = new PrivilegedActions(_helper);
         _dns = new DnsSwitcher(_store, _monitor, _privileged);
-        _link = new LinkHealthService(_monitor, _store) { IsWanted = () => _store.Settings.LinkIndicator };
+        _link = new LinkHealthService(_monitor, _store) { IsWanted = () => _store.Settings.LinkIndicator || _store.Settings.DnsAutoSwitchEnabled };
         _statistics = new StatisticsService(_store, _monitor);
         _routers = new RouterService(_monitor, _store);
         _vpn = new Vpn.VpnManager(_helper, _privileged, _store, _monitor, Dispatcher);
+        _autoDns = new DnsAutoSwitcher(_store, _monitor, _dns, _link, _privileged, () => _vpn.Status, () => _vpn.Profiles);
         _updates = new UpdateNotifier(_store);
         _updates.UpdateFound += OnUpdateFound;
 
@@ -194,7 +196,14 @@ public partial class NetFlussApplication : Application
                 PushAccessories();
             }
         };
-        _monitor.Ticked += (_, _) => RefreshDnsIfWanted();
+        _monitor.Ticked += (_, _) =>
+        {
+            RefreshDnsIfWanted();
+            if (!_exiting)
+            {
+                _autoDns.Evaluate();
+            }
+        };
         var lastTimerState = _timer.State;
         _timer.Changed += (_, _) =>
         {
@@ -760,6 +769,7 @@ public partial class NetFlussApplication : Application
         _monitor.AdapterGraceSeconds = settings.AdapterGraceEnabled ? settings.AdapterGraceSeconds : null;
         _monitor.PreferIPv6 = settings.ExternalIPv6;
         _monitor.DetectVpn = settings.NeedsVpnDetection;
+        _monitor.WatchLink = settings.LinkIndicator || settings.DnsAutoSwitchEnabled;
         _monitor.MeterShowsCountry = settings.ShowCountryFlag;
         _monitor.AllowIpLookups = settings.AllowIpLookups;
 
@@ -1039,6 +1049,8 @@ public partial class NetFlussApplication : Application
         Routers = _routers!,
         Vpn = _vpn!,
         Commands = _commands!,
+        Dns = _dns!,
+        AutoDns = _autoDns!,
     };
 
     private void ShowPreferences(string? tab = null)

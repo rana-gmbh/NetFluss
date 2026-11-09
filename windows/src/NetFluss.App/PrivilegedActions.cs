@@ -21,7 +21,11 @@ internal sealed class PrivilegedActions(HelperClient helper)
     /// <summary>True when changes will apply without a UAC prompt.</summary>
     internal bool IsSilent => helper.IsConnected && helper.IsCurrentVersion;
 
-    internal async Task<DnsApplyResult> SetDnsAsync(string adapterId, string adapterName, IReadOnlyList<string> servers)
+    /// <param name="allowPrompt">
+    /// False for changes nobody asked for at that moment — automatic DNS on a network change —
+    /// which must fail rather than put a UAC prompt in front of the user.
+    /// </param>
+    internal async Task<DnsApplyResult> SetDnsAsync(string adapterId, string adapterName, IReadOnlyList<string> servers, bool allowPrompt = true)
     {
         var validation = DnsValidator.Validate(servers);
         if (!validation.IsValid)
@@ -49,6 +53,11 @@ internal sealed class PrivilegedActions(HelperClient helper)
 
             // No answer at all: the helper went away mid-request. Fall through to elevation
             // rather than report a failure the user can do nothing about.
+        }
+
+        if (!allowPrompt)
+        {
+            return DnsApplyResult.Fail(Localization.L("The helper could not change DNS."));
         }
 
         return await _elevated.ApplyAsync(adapterName, servers);

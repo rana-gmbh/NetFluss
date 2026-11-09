@@ -255,3 +255,9 @@
 "Show active resolver on the taskbar" = "在任务栏上显示当前解析器";
 "URL to check (empty uses Windows' own check)" = "检测网址（留空则使用 Windows 自带的检测）";
 "Without this check the symbol only reports whether the connection is up. With it, NetFluss reads Windows' own internet check — the one behind the taskbar's network icon — so it notices a hotel login page or a dead upstream without making a request of its own." = "关闭此检测时，图标只表示连接是否建立。开启后，NetFluss 读取 Windows 自带的互联网检测（即任务栏网络图标背后的检测），无需自行发出请求即可发现酒店登录页面或上游故障。";
+
+/* 2.7 automatic DNS and renamed profiles */
+"Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." = "根据你连接的 Wi-Fi 网络选择解析器——家里用一个，公共网络用另一个。需要 NetFluss 辅助工具（通用 → 系统访问），否则每次切换都会请求管理员批准。";
+"No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "无法获取 Wi-Fi 网络名称。请连接 Wi-Fi 网络，或在 Wi-Fi 页面允许位置访问——否则 Windows 不会提供网络名称。";
+"Install the privileged helper to let NetFluss change DNS without asking each time." = "安装 NetFluss 辅助工具（通用 → 系统访问），让 NetFluss 无需每次询问即可更改 DNS。";
+"Leave empty to restore the original name." = "留空以恢复原始名称。";
