@@ -48,6 +48,7 @@ struct StatisticsArchive: Codable, Sendable {
     var createdAt: Date
     var lastAdapterSampleAt: Date?
     var lastAppSampleAt: Date?
+    var lastNodeSampleAt: Date?
     var appTrafficSchemaVersion: Int
     var adapterDisplayNames: [String: String]
     var adapterMinute: [String: [String: StatisticsTrafficAmounts]]
@@ -56,11 +57,18 @@ struct StatisticsArchive: Codable, Sendable {
     var appMinute: [String: [String: StatisticsTrafficAmounts]]
     var appHourly: [String: [String: StatisticsTrafficAmounts]]
     var appDaily: [String: [String: StatisticsTrafficAmounts]]
+    /// Per-proxy-node traffic from the Clash API (issue #61). Absent from
+    /// archives written before 2.7, which is why every node field decodes
+    /// through `decodeIfPresent`.
+    var nodeMinute: [String: [String: StatisticsTrafficAmounts]]
+    var nodeHourly: [String: [String: StatisticsTrafficAmounts]]
+    var nodeDaily: [String: [String: StatisticsTrafficAmounts]]
 
     static let empty = StatisticsArchive(
         createdAt: Date(),
         lastAdapterSampleAt: nil,
         lastAppSampleAt: nil,
+        lastNodeSampleAt: nil,
         appTrafficSchemaVersion: currentAppTrafficSchemaVersion,
         adapterDisplayNames: [:],
         adapterMinute: [:],
@@ -68,13 +76,17 @@ struct StatisticsArchive: Codable, Sendable {
         adapterDaily: [:],
         appMinute: [:],
         appHourly: [:],
-        appDaily: [:]
+        appDaily: [:],
+        nodeMinute: [:],
+        nodeHourly: [:],
+        nodeDaily: [:]
     )
 
     private enum CodingKeys: String, CodingKey {
         case createdAt
         case lastAdapterSampleAt
         case lastAppSampleAt
+        case lastNodeSampleAt
         case appTrafficSchemaVersion
         case adapterDisplayNames
         case adapterMinute
@@ -83,12 +95,16 @@ struct StatisticsArchive: Codable, Sendable {
         case appMinute
         case appHourly
         case appDaily
+        case nodeMinute
+        case nodeHourly
+        case nodeDaily
     }
 
     init(
         createdAt: Date,
         lastAdapterSampleAt: Date?,
         lastAppSampleAt: Date?,
+        lastNodeSampleAt: Date? = nil,
         appTrafficSchemaVersion: Int = Self.currentAppTrafficSchemaVersion,
         adapterDisplayNames: [String: String],
         adapterMinute: [String: [String: StatisticsTrafficAmounts]],
@@ -96,11 +112,15 @@ struct StatisticsArchive: Codable, Sendable {
         adapterDaily: [String: [String: StatisticsTrafficAmounts]],
         appMinute: [String: [String: StatisticsTrafficAmounts]],
         appHourly: [String: [String: StatisticsTrafficAmounts]],
-        appDaily: [String: [String: StatisticsTrafficAmounts]]
+        appDaily: [String: [String: StatisticsTrafficAmounts]],
+        nodeMinute: [String: [String: StatisticsTrafficAmounts]] = [:],
+        nodeHourly: [String: [String: StatisticsTrafficAmounts]] = [:],
+        nodeDaily: [String: [String: StatisticsTrafficAmounts]] = [:]
     ) {
         self.createdAt = createdAt
         self.lastAdapterSampleAt = lastAdapterSampleAt
         self.lastAppSampleAt = lastAppSampleAt
+        self.lastNodeSampleAt = lastNodeSampleAt
         self.appTrafficSchemaVersion = appTrafficSchemaVersion
         self.adapterDisplayNames = adapterDisplayNames
         self.adapterMinute = adapterMinute
@@ -109,6 +129,9 @@ struct StatisticsArchive: Codable, Sendable {
         self.appMinute = appMinute
         self.appHourly = appHourly
         self.appDaily = appDaily
+        self.nodeMinute = nodeMinute
+        self.nodeHourly = nodeHourly
+        self.nodeDaily = nodeDaily
     }
 
     init(from decoder: Decoder) throws {
@@ -116,6 +139,7 @@ struct StatisticsArchive: Codable, Sendable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         lastAdapterSampleAt = try container.decodeIfPresent(Date.self, forKey: .lastAdapterSampleAt)
         lastAppSampleAt = try container.decodeIfPresent(Date.self, forKey: .lastAppSampleAt)
+        lastNodeSampleAt = try container.decodeIfPresent(Date.self, forKey: .lastNodeSampleAt)
         appTrafficSchemaVersion = try container.decodeIfPresent(Int.self, forKey: .appTrafficSchemaVersion) ?? 0
         adapterDisplayNames = try container.decodeIfPresent([String: String].self, forKey: .adapterDisplayNames) ?? [:]
         adapterMinute = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .adapterMinute) ?? [:]
@@ -124,6 +148,9 @@ struct StatisticsArchive: Codable, Sendable {
         appMinute = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .appMinute) ?? [:]
         appHourly = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .appHourly) ?? [:]
         appDaily = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .appDaily) ?? [:]
+        nodeMinute = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .nodeMinute) ?? [:]
+        nodeHourly = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .nodeHourly) ?? [:]
+        nodeDaily = try container.decodeIfPresent([String: [String: StatisticsTrafficAmounts]].self, forKey: .nodeDaily) ?? [:]
     }
 }
 
@@ -135,6 +162,13 @@ struct StatisticsAdapterDelta: Sendable {
 }
 
 struct StatisticsAppDelta: Sendable {
+    let name: String
+    let downloadBytes: UInt64
+    let uploadBytes: UInt64
+}
+
+/// One proxy node's traffic in a single sampling interval (issue #61).
+struct StatisticsNodeDelta: Sendable, Equatable {
     let name: String
     let downloadBytes: UInt64
     let uploadBytes: UInt64
@@ -198,6 +232,18 @@ struct StatisticsAppRow: Identifiable, Sendable {
     let bytes: UInt64
 }
 
+/// A proxy node's totals for the selected range. Shaped like
+/// `StatisticsAdapterRow` because it renders the same way: a quota reader wants
+/// sent and received side by side, not two separate top-ten lists.
+struct StatisticsNodeRow: Identifiable, Sendable {
+    let id: String
+    let name: String
+    let downloadBytes: UInt64
+    let uploadBytes: UInt64
+
+    var totalBytes: UInt64 { downloadBytes + uploadBytes }
+}
+
 struct StatisticsReport: Sendable {
     let range: StatisticsRange
     let displayTitle: String
@@ -215,6 +261,7 @@ struct StatisticsReport: Sendable {
     let adapters: [StatisticsAdapterRow]
     let topDownloadApps: [StatisticsAppRow]
     let topUploadApps: [StatisticsAppRow]
+    let nodes: [StatisticsNodeRow]
 
     var hasAdapterData: Bool {
         totalDownloadBytes > 0 || totalUploadBytes > 0 || !adapters.isEmpty || !timeline.isEmpty
@@ -222,5 +269,9 @@ struct StatisticsReport: Sendable {
 
     var hasAppData: Bool {
         !topDownloadApps.isEmpty || !topUploadApps.isEmpty
+    }
+
+    var hasNodeData: Bool {
+        !nodes.isEmpty
     }
 }

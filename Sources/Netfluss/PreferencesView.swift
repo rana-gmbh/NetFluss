@@ -187,7 +187,7 @@ struct ThemeChip: View {
     }
 }
 
-private enum PreferencePane: String, CaseIterable, Identifiable {
+enum PreferencePane: String, CaseIterable, Identifiable {
     case general
     case adapters
     case statistics
@@ -247,6 +247,43 @@ private enum PreferencePane: String, CaseIterable, Identifiable {
     }
 }
 
+/// Explanatory text under a preference row.
+///
+/// These are plain `Text` inside a `Form`, which truncates to a single line
+/// instead of wrapping — several explanations were being cut off mid-sentence
+/// with an ellipsis. `fixedSize` lets the text claim the height it needs, and
+/// the tooltip covers what a narrow window or a longer translation can still
+/// clip.
+private struct PreferenceNote: View {
+    @AppStorage("appLanguage") private var appLanguage: String = AppLanguage.system.rawValue
+    private let key: String
+
+    init(_ key: String) {
+        self.key = key
+    }
+
+    var body: some View {
+        let language = AppLanguage.current(from: appLanguage)
+        let text = NSLocalizedString(key, bundle: language.bundle, value: key, comment: "")
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help(text)
+    }
+}
+
+private extension View {
+    /// Same treatment for status and error lines, whose text is computed rather
+    /// than looked up — those are exactly the ones that run long.
+    func preferenceNote(fullText: String) -> some View {
+        fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help(fullText)
+    }
+}
+
 struct PreferencesView: View {
     @AppStorage("refreshInterval") private var refreshInterval: Double = 1.0
     @AppStorage("showInactive") private var showInactive: Bool = false
@@ -271,7 +308,19 @@ struct PreferencesView: View {
     @AppStorage("menuBarVPNIndicatorColor") private var menuBarVPNIndicatorColor: String = "green"
     @AppStorage("menuBarVPNIndicatorColorHex") private var menuBarVPNIndicatorColorHex: String = ""
     @AppStorage("menuBarVPNShowWhenOff") private var menuBarVPNShowWhenOff: Bool = true
+    @AppStorage("menuBarVPNIndicatorSize") private var menuBarVPNIndicatorSize: Double = 14
+    @AppStorage("menuBarRateAlignment") private var menuBarRateAlignment: String = "center"
     @AppStorage("menuBarShowCountryFlag") private var menuBarShowCountryFlag: Bool = false
+    @AppStorage("menuBarLinkIndicator") private var menuBarLinkIndicator: Bool = false
+    @AppStorage("menuBarLinkCheckInternet") private var menuBarLinkCheckInternet: Bool = true
+    @AppStorage("menuBarLinkProbeURL") private var menuBarLinkProbeURL: String = ""
+    @AppStorage("menuBarLinkColorOnline") private var menuBarLinkColorOnline: String = "green"
+    @AppStorage("menuBarLinkColorOnlineHex") private var menuBarLinkColorOnlineHex: String = ""
+    @AppStorage("menuBarLinkColorLimited") private var menuBarLinkColorLimited: String = "orange"
+    @AppStorage("menuBarLinkColorLimitedHex") private var menuBarLinkColorLimitedHex: String = ""
+    @AppStorage("menuBarLinkColorOffline") private var menuBarLinkColorOffline: String = "red"
+    @AppStorage("menuBarLinkColorOfflineHex") private var menuBarLinkColorOfflineHex: String = ""
+    @AppStorage("menuBarCountryFlagOnlyWithVPN") private var menuBarCountryFlagOnlyWithVPN: Bool = false
     @AppStorage("connectionStatusMode") private var connectionStatusMode: String = "flow"
     @AppStorage("totalsOnlyVisibleAdapters") private var totalsOnlyVisibleAdapters: Bool = false
     @AppStorage("excludeTunnelAdaptersFromTotals") private var excludeTunnelAdaptersFromTotals: Bool = false
@@ -281,9 +330,16 @@ struct PreferencesView: View {
     @AppStorage("topAppsGracePeriodSeconds") private var topAppsGracePeriodSeconds: Double = 3.0
     @AppStorage("collectStatistics") private var collectStatistics: Bool = false
     @AppStorage("collectAppStatistics") private var collectAppStatistics: Bool = true
+    @AppStorage("collectProxyNodeStatistics") private var collectProxyNodeStatistics: Bool = false
+    @AppStorage("clashAPIHost") private var clashAPIHost: String = ""
     @AppStorage("showUsageSummary") private var showUsageSummary: Bool = false
     @AppStorage("externalIPv6") private var externalIPv6: Bool = false
     @AppStorage("showDNSSwitcher") private var showDNSSwitcher: Bool = false
+    @AppStorage("menuBarResolverColor") private var menuBarResolverColor: String = "system"
+    @AppStorage("menuBarResolverColorHex") private var menuBarResolverColorHex: String = ""
+    @AppStorage("dnsAutoSwitchEnabled") private var dnsAutoSwitchEnabled: Bool = false
+    @AppStorage("dnsRuleFallbackPresetID") private var dnsRuleFallbackPresetID: String = ""
+    @AppStorage("menuBarShowResolver") private var menuBarShowResolver: Bool = false
     @AppStorage("showWifiSwitcher") private var showWifiSwitcher: Bool = false
     @AppStorage("wifiLimitEnabled") private var wifiLimitEnabled: Bool = false
     @AppStorage("wifiLimitCount") private var wifiLimitCount: Int = 10
@@ -296,6 +352,7 @@ struct PreferencesView: View {
     @AppStorage("openWRTHost") private var openWRTHost: String = ""
     @AppStorage("opnsenseEnabled") private var opnsenseEnabled: Bool = false
     @AppStorage("opnsenseHost") private var opnsenseHost: String = ""
+    @AppStorage("lookUpPublicIP") private var lookUpPublicIP: Bool = true
     @AppStorage("automaticUpdateChecksEnabled") private var automaticUpdateChecksEnabled: Bool = true
     @AppStorage("appLanguage") private var appLanguage: String = AppLanguage.system.rawValue
     @State private var hiddenAdapters: Set<String> = []
@@ -304,23 +361,33 @@ struct PreferencesView: View {
     @State private var draggingID: String? = nil
     @State private var dragBaseOrder: [String] = []
     @State private var renamingAdapter: AdapterStatus? = nil
-    @State private var launchAtLogin: Bool = false
+    @State private var launchAtLoginState: LaunchAtLoginState = .off
+    @State private var launchAtLoginError: String?
     @State private var hiddenApps: [String] = []
     @State private var showHiddenAppsSheet = false
     @State private var customDNSPresets: [DNSPreset] = []
+    @State private var dnsRules: [DNSRule] = []
+    /// Bumped after a built-in is renamed; the names live in UserDefaults, not
+    /// in @State, so the list needs a nudge to redraw.
+    @State private var dnsPresetRenameTick: UInt = 0
     @State private var hiddenDNSPresets: Set<String> = []
     @State private var dnsPresetOrder: [String] = []
     @State private var dnsDraggingID: String? = nil
     @State private var dnsDragBaseOrder: [String] = []
     @State private var selectedPane: PreferencePane = .general
+    @State private var searchText = ""
     // "Credentials configured?" flags — cached in state so the keychain
     // (SecItemCopyMatching, a disk+securityd hit) isn't queried in `body`, which
     // re-evaluates every monitor tick while Preferences is open.
     @State private var unifiConfigured = false
     @State private var openWRTConfigured = false
+    @State private var clashSecretConfigured = false
+    @State private var clashTestInFlight = false
+    @State private var clashTestStatus: String?
+    @State private var clashTestSucceeded = false
     @State private var opnsenseConfigured = false
 
-    @EnvironmentObject private var monitor: NetworkMonitor
+    @EnvironmentObject private var monitor: PreferencesNetworkState
 
     var body: some View {
         VStack(spacing: 0) {
@@ -328,6 +395,11 @@ struct PreferencesView: View {
             Divider()
             Form {
                 if selectedPane == .general {
+                    Section {
+                        launchAtLoginControls
+                    } header: {
+                        LText("Launch")
+                    }
                     Section {
                         SystemAccessControls()
                     } header: {
@@ -342,9 +414,7 @@ struct PreferencesView: View {
                 } label: {
                     LText("Language")
                 }
-                LText("System Default follows the language selected in macOS.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("System Default follows the language selected in macOS.")
             } header: {
                 LText("Language")
             }
@@ -355,28 +425,6 @@ struct PreferencesView: View {
                 }
             } header: {
                 LText("Units")
-            }
-
-                    Section {
-                Toggle(isOn: Binding(
-                    get: { launchAtLogin },
-                    set: { enable in
-                        do {
-                            if enable {
-                                try SMAppService.mainApp.register()
-                            } else {
-                                try SMAppService.mainApp.unregister()
-                            }
-                        } catch {
-                            // Silently ignore — expected in dev builds outside /Applications
-                        }
-                        launchAtLogin = SMAppService.mainApp.status == .enabled
-                    }
-                )) {
-                    LText("Launch at login")
-                }
-            } header: {
-                LText("Launch")
             }
 
                     Section {
@@ -399,11 +447,18 @@ struct PreferencesView: View {
                 Toggle(isOn: $automaticUpdateChecksEnabled) {
                     LText("Check for updates automatically")
                 }
-                LText("Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About.")
             } header: {
                 LText("Update")
+            }
+
+                    Section {
+                Toggle(isOn: $lookUpPublicIP) {
+                    LText("Look up public IP addresses and countries")
+                }
+                PreferenceNote("Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag.")
+            } header: {
+                LText("Privacy")
             }
                 }
 
@@ -495,12 +550,8 @@ struct PreferencesView: View {
                 Toggle(isOn: $excludeTunnelAdaptersFromTotals) {
                     LText("Exclude VPN/tunnel adapters from totals")
                 }
-                LText("When enabled, the Download/Upload summary and menu bar use only adapters that are visible here.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                LText("When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("When enabled, the Download/Upload summary and menu bar use only adapters that are visible here.")
+                PreferenceNote("When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list.")
             } header: {
                 LText("Adapters")
             }
@@ -511,25 +562,28 @@ struct PreferencesView: View {
                 Toggle(isOn: $collectStatistics) {
                     LText("Collect historical statistics")
                 }
-                LText("Disabled by default to avoid extra background work and energy use. When enabled, NetFluss keeps hourly and daily rollups for adapters and optional app traffic analysis.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Disabled by default to avoid extra background work and energy use. When enabled, NetFluss keeps hourly and daily rollups for adapters and optional app traffic analysis.")
 
                 Toggle(isOn: $showUsageSummary) {
                     LText("Display usage summary on popover")
                 }
                 .disabled(!collectStatistics)
-                LText("Shows today's and this month's upload, download, and total data in the popover. Requires historical statistics collection.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Shows today's and this month's upload, download, and total data in the popover. Requires historical statistics collection.")
 
                 if collectStatistics {
                     Toggle(isOn: $collectAppStatistics) {
                         LText("Collect app statistics")
                     }
-                    LText("App statistics are on by default and may increase energy consumption because NetFluss periodically samples per-app network usage in the background.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    PreferenceNote("App statistics are on by default and may increase energy consumption because NetFluss periodically samples per-app network usage in the background.")
+
+                    Toggle(isOn: $collectProxyNodeStatistics) {
+                        LText("Collect proxy node statistics")
+                    }
+                    PreferenceNote("Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription.")
+
+                    if collectProxyNodeStatistics {
+                        proxyNodeSettings
+                    }
                 }
             } header: {
                 LText("Statistics")
@@ -629,6 +683,20 @@ struct PreferencesView: View {
                     }
                     LabeledContent {
                         TrailingPreferenceControl(width: appearanceControlWidth) {
+                            Picker("", selection: $menuBarRateAlignment) {
+                                LText("Centered").tag("center")
+                                LText("Left").tag("left")
+                                LText("Right").tag("right")
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 230)
+                        }
+                    } label: {
+                        LText("Rate alignment")
+                    }
+                    PreferenceNote("Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column.")
+                    LabeledContent {
+                        TrailingPreferenceControl(width: appearanceControlWidth) {
                             Picker("", selection: $menuBarPinnedUnit) {
                                 LText("Auto").tag("auto")
                                 Text(useBits ? "Kb/s" : "KB/s").tag("K")
@@ -662,9 +730,11 @@ struct PreferencesView: View {
                                 LText("Off").tag("off")
                                 LText("Dot").tag("dot")
                                 LText("Shield").tag("shield")
+                                LText("Globe").tag("globe")
+                                LText("Bars").tag("bars")
                             }
                             .pickerStyle(.segmented)
-                            .frame(width: 230)
+                            .frame(width: 340)
                         }
                     } label: {
                         LText("VPN indicator")
@@ -681,18 +751,50 @@ struct PreferencesView: View {
                             LText("Show when VPN is off")
                         }
                     }
+                    Toggle(isOn: $menuBarLinkIndicator) {
+                        LText("Link indicator")
+                    }
+                    PreferenceNote("A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic.")
+                    if menuBarLinkIndicator {
+                        linkIndicatorSettings
+                    }
+                    if menuBarVPNIndicator != "off" || menuBarShowCountryFlag || menuBarLinkIndicator {
+                        LabeledContent {
+                            TrailingPreferenceControl(width: appearanceControlWidth) {
+                                HStack(spacing: 8) {
+                                    Text("\(Int(menuBarVPNIndicatorSize)) pt")
+                                        .monospacedDigit()
+                                        .frame(width: 36, alignment: .trailing)
+                                    Stepper("", value: $menuBarVPNIndicatorSize, in: 10...18, step: 1)
+                                        .labelsHidden()
+                                }
+                            }
+                        } label: {
+                            LText("Indicator size")
+                        }
+                    }
+                    if menuBarShowResolver {
+                        LabeledContent {
+                            TrailingPreferenceControl(width: appearanceControlWidth) {
+                                ColorSwatchPicker(selection: $menuBarResolverColor, customHex: $menuBarResolverColorHex)
+                            }
+                        } label: {
+                            LText("Resolver name colour")
+                        }
+                    }
                     Toggle(isOn: $menuBarShowCountryFlag) {
                         LText("Country flag")
                     }
+                    if menuBarShowCountryFlag {
+                        Toggle(isOn: $menuBarCountryFlagOnlyWithVPN) {
+                            LText("Show flag only while a VPN is active")
+                        }
+                    }
                     if menuBarVPNIndicator != "off" || menuBarShowCountryFlag {
-                        LText("Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is).")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        PreferenceNote("Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is).")
                     }
                 }
-                LText("Dashboard uses router-wide traffic when Fritz!Box, UniFi, OpenWRT, or OPNsense bandwidth is enabled and available.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Dashboard uses router-wide traffic when Fritz!Box, UniFi, OpenWRT, or OPNsense bandwidth is enabled and available.")
             } header: {
                 LText("Appearance")
             }
@@ -729,9 +831,7 @@ struct PreferencesView: View {
 
                     Section {
                         PopoverSectionsReorderEditor()
-                        LText("Drag to reorder sections in the popover. Toggling a row mirrors the corresponding pref in DNS, Wi-Fi, Router, or Top Apps panels.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        PreferenceNote("Drag to reorder sections in the popover. Toggling a row mirrors the corresponding pref in DNS, Wi-Fi, Router, or Top Apps panels.")
                     } header: {
                         LText("Popover sections")
                     }
@@ -743,9 +843,7 @@ struct PreferencesView: View {
                     LText("Show top apps by network usage")
                 }
                 if showTopApps {
-                    LText("Shows the top 5 processes ranked by current network traffic.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("Shows the top 5 processes ranked by current network traffic.")
                     Toggle(isOn: $topAppsGracePeriodEnabled) {
                         LText("Keep apps visible after traffic stops")
                     }
@@ -779,9 +877,7 @@ struct PreferencesView: View {
                     LText("Show DNS switcher in popover")
                 }
                 if showDNSSwitcher {
-                    LText("DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.")
 
                     ForEach(sortedDNSPresets) { preset in
                         HStack(spacing: 8) {
@@ -800,6 +896,19 @@ struct PreferencesView: View {
                                 }
                             }
                             Spacer()
+                            if preset.isBuiltIn {
+                                Button {
+                                    AddDNSWindowController.shared.showRename(preset: preset) { [self] updated in
+                                        NetworkMonitor.setDNSPresetName(updated.name, for: preset.id)
+                                        dnsPresetRenameTick &+= 1
+                                    }
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 11))
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Rename")
+                            }
                             if !preset.isBuiltIn {
                                 Button {
                                     AddDNSWindowController.shared.showEdit(preset: preset) { [self] updated in
@@ -870,6 +979,18 @@ struct PreferencesView: View {
             } header: {
                 LText("DNS Switcher")
             }
+
+                    Section {
+                Toggle(isOn: $dnsAutoSwitchEnabled) {
+                    LText("Switch DNS automatically by network")
+                }
+                PreferenceNote("Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password.")
+                if dnsAutoSwitchEnabled {
+                    dnsRuleSettings
+                }
+            } header: {
+                LText("Automatic DNS")
+            }
                 }
 
                 if selectedPane == .wifi {
@@ -878,9 +999,7 @@ struct PreferencesView: View {
                     LText("Show Wi-Fi networks in popover")
                 }
                 if showWifiSwitcher {
-                    LText("Lists nearby Wi-Fi networks from the system's cached scan. Tap a row to join — saved networks reconnect immediately, new secured networks prompt for a password.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("Lists nearby Wi-Fi networks from the system's cached scan. Tap a row to join — saved networks reconnect immediately, new secured networks prompt for a password.")
 
                     Toggle(isOn: $wifiLimitEnabled) {
                         LText("Only show the strongest networks")
@@ -896,9 +1015,7 @@ struct PreferencesView: View {
                         } label: {
                             LText("Maximum networks shown")
                         }
-                        LText("Pinned networks and the currently-connected network always appear regardless of this limit.")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
+                        PreferenceNote("Pinned networks and the currently-connected network always appear regardless of this limit.")
                     }
                 }
             } header: {
@@ -939,9 +1056,7 @@ struct PreferencesView: View {
                     } label: {
                         LText("Router address")
                     }
-                    LText("Queries your Fritz!Box via TR-064 (no authentication needed for bandwidth data). Auto uses the current default gateway. Set a fixed address if your Fritz!Box is reachable at a different IP. Port 49000 must be reachable.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("Queries your Fritz!Box via TR-064 (no authentication needed for bandwidth data). Auto uses the current default gateway. Set a fixed address if your Fritz!Box is reachable at a different IP. Port 49000 must be reachable.")
                     if let error = monitor.fritzBoxError {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -950,6 +1065,7 @@ struct PreferencesView: View {
                             Text(error)
                                 .foregroundStyle(.secondary)
                                 .font(.caption)
+                                .preferenceNote(fullText: error)
                         }
                     }
                 }
@@ -1031,13 +1147,9 @@ struct PreferencesView: View {
                         LText(unifiUseAPIKey ? "API key" : "Credentials")
                     }
                     if unifiUseAPIKey {
-                        LText("Queries your UniFi gateway via its local API (HTTPS) using a Network API key. Create one in the UniFi Network app under Settings → Control Plane → Integrations. API keys work with 2FA enabled and never expire.")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
+                        PreferenceNote("Queries your UniFi gateway via its local API (HTTPS) using a Network API key. Create one in the UniFi Network app under Settings → Control Plane → Integrations. API keys work with 2FA enabled and never expire.")
                     } else {
-                        LText("Queries your UniFi gateway via its local API (HTTPS). Requires a local admin account on the UniFi controller. If the account has 2FA enabled, use an API key instead — password login cannot complete a 2FA challenge.")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
+                        PreferenceNote("Queries your UniFi gateway via its local API (HTTPS). Requires a local admin account on the UniFi controller. If the account has 2FA enabled, use an API key instead — password login cannot complete a 2FA challenge.")
                     }
                     if let error = monitor.unifiError {
                         HStack(spacing: 4) {
@@ -1047,6 +1159,7 @@ struct PreferencesView: View {
                             Text(error)
                                 .foregroundStyle(.secondary)
                                 .font(.caption)
+                                .preferenceNote(fullText: error)
                         }
                     }
                 }
@@ -1114,9 +1227,7 @@ struct PreferencesView: View {
                     } label: {
                         LText("Credentials")
                     }
-                    LText("Queries your OpenWRT router via ubus JSON-RPC over HTTPS. Auto uses the current default gateway, which may be the wrong router on dual-router setups. Set a fixed OpenWRT IP or URL if needed — for plain HTTP, enter http://<IP>. Requires the router's admin credentials and the uhttpd-mod-ubus package.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("Queries your OpenWRT router via ubus JSON-RPC over HTTPS. Auto uses the current default gateway, which may be the wrong router on dual-router setups. Set a fixed OpenWRT IP or URL if needed — for plain HTTP, enter http://<IP>. Requires the router's admin credentials and the uhttpd-mod-ubus package.")
                     if let error = monitor.openWRTError {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -1125,6 +1236,7 @@ struct PreferencesView: View {
                             Text(error)
                                 .foregroundStyle(.secondary)
                                 .font(.caption)
+                                .preferenceNote(fullText: error)
                         }
                     }
                 }
@@ -1188,9 +1300,7 @@ struct PreferencesView: View {
                     } label: {
                         LText("API Credentials")
                     }
-                    LText("Queries your OPNsense router via its REST API over HTTPS. Auto uses the current default gateway. If the web interface uses plain HTTP or a different port, enter the full URL (e.g. http://192.168.1.1 or https://192.168.1.1:8443). Requires an API key and secret configured in OPNsense.")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
+                    PreferenceNote("Queries your OPNsense router via its REST API over HTTPS. Auto uses the current default gateway. If the web interface uses plain HTTP or a different port, enter the full URL (e.g. http://192.168.1.1 or https://192.168.1.1:8443). Requires an API key and secret configured in OPNsense.")
                     if let error = monitor.opnsenseError {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -1199,6 +1309,7 @@ struct PreferencesView: View {
                             Text(error)
                                 .foregroundStyle(.secondary)
                                 .font(.caption)
+                                .preferenceNote(fullText: error)
                         }
                     }
                 }
@@ -1209,6 +1320,14 @@ struct PreferencesView: View {
 
             }
             .formStyle(.grouped)
+            .overlay {
+                if !searchText.isEmpty {
+                    PreferenceSearchResults(query: searchText) { pane in
+                        selectedPane = pane
+                        searchText = ""
+                    }
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -1219,7 +1338,14 @@ struct PreferencesView: View {
             customDNSPresets = loadCustomDNSPresets()
             hiddenDNSPresets = Set(UserDefaults.standard.stringArray(forKey: "hiddenDNSPresets") ?? [])
             dnsPresetOrder = UserDefaults.standard.stringArray(forKey: "dnsPresetOrder") ?? []
-            launchAtLogin = SMAppService.mainApp.status == .enabled
+            dnsRules = DNSRule.load()
+            refreshLaunchAtLogin()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshLaunchAtLogin()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            refreshLaunchAtLogin()
         }
         .sheet(item: $renamingAdapter) { adapter in
             RenameAdapterSheet(
@@ -1266,12 +1392,348 @@ struct PreferencesView: View {
     /// Re-read the router "credentials configured?" flags from the keychain.
     /// Called on appear, when hosts/mode change, and after an editor saves — so
     /// `body` never touches the keychain on its 1 Hz re-evaluation.
+    /// Launch at login (issue #67). Every SMAppService state gets its own
+    /// explanation: the old toggle swallowed all of them and snapped back off,
+    /// which users reasonably read as "greyed out".
+    @ViewBuilder
+    private var launchAtLoginControls: some View {
+        Toggle(isOn: Binding(
+            get: { launchAtLoginState.isOn },
+            set: { enable in
+                let result = LaunchAtLogin.set(enabled: enable)
+                launchAtLoginState = result.state
+                launchAtLoginError = result.error
+            }
+        )) {
+            LText("Launch at login")
+        }
+        // Only a translocated copy is disabled outright: nothing the user does
+        // in NetFluss can register it, so a live switch would just lie.
+        .disabled(launchAtLoginState == .unavailable && LaunchAtLogin.isTranslocated)
+
+        switch launchAtLoginState {
+        case .needsApproval:
+            PreferenceNote("macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.")
+            Button {
+                LaunchAtLogin.openLoginItemsSettings()
+            } label: {
+                LText("Open Login Items…")
+            }
+        case .unavailable:
+            PreferenceNote("macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.")
+        case .on, .off:
+            if let error = launchAtLoginError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .preferenceNote(fullText: error)
+            }
+        }
+    }
+
+    private func refreshLaunchAtLogin() {
+        let state = LaunchAtLogin.currentState
+        if state != launchAtLoginState {
+            launchAtLoginState = state
+            // A state change from outside — approving it in System Settings,
+            // say — makes any earlier error stale.
+            launchAtLoginError = nil
+        }
+    }
+
+    @ViewBuilder
+    private var dnsRuleSettings: some View {
+        ForEach($dnsRules) { $rule in
+            dnsRuleRow($rule)
+        }
+
+        HStack(spacing: 8) {
+            Button {
+                addRuleForCurrentNetwork()
+            } label: {
+                LText("Add current network")
+            }
+            .disabled(currentSSID == nil)
+            if let ssid = currentSSID {
+                Text(ssid)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        if currentSSID == nil {
+            PreferenceNote("No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.")
+        }
+
+        LabeledContent {
+            TrailingPreferenceControl(width: appearanceControlWidth) {
+                Picker("", selection: $dnsRuleFallbackPresetID) {
+                    LText("Leave unchanged").tag("")
+                    ForEach(sortedDNSPresets) { preset in
+                        Text(preset.name).tag(preset.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 190)
+            }
+        } label: {
+            LText("Any other network")
+        }
+        PreferenceNote("Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home.")
+
+        Toggle(isOn: $menuBarShowResolver) {
+            LText("Show active resolver in menu bar")
+        }
+        PreferenceNote("Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden.")
+
+        Text(dnsAutoSwitchExplanation)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .preferenceNote(fullText: dnsAutoSwitchExplanation)
+    }
+
+    @ViewBuilder
+    private func dnsRuleRow(_ rule: Binding<DNSRule>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Toggle("", isOn: rule.enabled).labelsHidden()
+                Text(rule.wrappedValue.ssid)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                Spacer()
+                Picker("", selection: rule.presetID) {
+                    ForEach(sortedDNSPresets) { preset in
+                        Text(preset.name).tag(preset.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 150)
+                Button {
+                    let id = rule.wrappedValue.id
+                    dnsRules.removeAll { $0.id == id }
+                    DNSRule.save(dnsRules)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+            }
+            Toggle(isOn: Binding(
+                get: { !(rule.wrappedValue.bssid ?? "").isEmpty },
+                set: { pinned in
+                    rule.wrappedValue.bssid = pinned ? currentBSSID : nil
+                    DNSRule.save(dnsRules)
+                }
+            )) {
+                LText("Only this access point")
+            }
+            .font(.caption)
+            .disabled(currentBSSID == nil && (rule.wrappedValue.bssid ?? "").isEmpty)
+        }
+        .onChange(of: rule.wrappedValue) { _ in DNSRule.save(dnsRules) }
+    }
+
+    private var currentSSID: String? {
+        monitor.adapters.first { $0.type == .wifi && $0.isUp && !($0.wifiSSID ?? "").isEmpty }?.wifiSSID
+    }
+
+    private var currentBSSID: String? {
+        monitor.adapters.first { $0.type == .wifi && $0.isUp }?.wifiDetail?.bssid
+    }
+
+    private func addRuleForCurrentNetwork() {
+        guard let ssid = currentSSID else { return }
+        guard !dnsRules.contains(where: { $0.ssid == ssid }) else { return }
+        dnsRules.append(DNSRule(ssid: ssid, presetID: "system"))
+        DNSRule.save(dnsRules)
+    }
+
+    /// Live state from the engine, so a resolver the app changed by itself is
+    /// never left unexplained.
+    private var dnsAutoSwitchExplanation: String {
+        switch monitor.dnsAutoSwitchState {
+        case .off, .noRule:
+            return L10n.text("No rule applies to the current network.")
+        case .needsHelper:
+            return L10n.text("Install the privileged helper to let NetFluss change DNS without asking each time.")
+        case .suspendedByVPN:
+            return L10n.text("Paused: a VPN profile is controlling DNS right now.")
+        case .waitingForPortal(let ssid):
+            return L10n.format("Waiting for %@ to let you online before changing DNS.", ssid)
+        case .waitingForNetwork(let ssid):
+            return L10n.format("Waiting for a connection to %@ before changing DNS.", ssid)
+        case .applied(let ssid, let presetID):
+            let name = NetworkMonitor.allDNSPresets().first { $0.id == presetID }?.name ?? presetID
+            return ssid.isEmpty
+                ? L10n.format("Using %@ on this network.", name)
+                : L10n.format("Using %@ on %@.", name, ssid)
+        }
+    }
+
+    @ViewBuilder
+    private var linkIndicatorSettings: some View {
+        LabeledContent {
+            TrailingPreferenceControl(width: appearanceControlWidth) {
+                ColorSwatchPicker(selection: $menuBarLinkColorOnline, customHex: $menuBarLinkColorOnlineHex)
+            }
+        } label: {
+            LText("Connected")
+        }
+        LabeledContent {
+            TrailingPreferenceControl(width: appearanceControlWidth) {
+                ColorSwatchPicker(selection: $menuBarLinkColorLimited, customHex: $menuBarLinkColorLimitedHex)
+            }
+        } label: {
+            LText("No internet")
+        }
+        LabeledContent {
+            TrailingPreferenceControl(width: appearanceControlWidth) {
+                ColorSwatchPicker(selection: $menuBarLinkColorOffline, customHex: $menuBarLinkColorOfflineHex)
+            }
+        } label: {
+            LText("Not connected")
+        }
+        Toggle(isOn: $menuBarLinkCheckInternet) {
+            LText("Check internet access")
+        }
+        PreferenceNote("Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing.")
+        if menuBarLinkCheckInternet {
+            LabeledContent {
+                HStack(spacing: 6) {
+                    Text(menuBarLinkProbeURL.isEmpty ? "captive.apple.com" : menuBarLinkProbeURL)
+                        .font(.system(size: 12))
+                        .foregroundStyle(menuBarLinkProbeURL.isEmpty ? Color.secondary : Color.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Button("Edit…") {
+                        EditRouterHostController.shared.show(
+                            title: "Internet Check Address",
+                            placeholder: "URL to check (empty uses Apple's)",
+                            currentHost: menuBarLinkProbeURL
+                        ) { newURL in
+                            menuBarLinkProbeURL = newURL
+                        }
+                    }
+                }
+            } label: {
+                LText("Check address")
+            }
+        }
+    }
+
+    /// Pulled out of the Form: inline, the address/secret/test rows blew past
+    /// the type-checker's budget for a single expression.
+    @ViewBuilder
+    private var proxyNodeSettings: some View {
+        LabeledContent {
+            HStack(spacing: 6) {
+                Text(effectiveClashHost)
+                    .font(.system(size: 12))
+                    .foregroundStyle(clashAPIHost.isEmpty ? Color.secondary : Color.primary)
+                if clashAPIHost.isEmpty {
+                    LText("(default)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+                Button("Edit…") {
+                    EditRouterHostController.shared.show(
+                        title: "Proxy Controller Address",
+                        placeholder: "Host:port of the Clash API (default 127.0.0.1:9090)",
+                        currentHost: clashAPIHost
+                    ) { newHost in
+                        clashAPIHost = newHost
+                    }
+                }
+            }
+        } label: {
+            LText("Controller address")
+        }
+
+        LabeledContent {
+            HStack(spacing: 6) {
+                if clashSecretConfigured {
+                    LText("Configured")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                } else {
+                    LText("None")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Button("Edit…") {
+                    EditClashSecretController.shared.show(host: effectiveClashHost) {
+                        refreshClashSecretStatus()
+                    }
+                }
+            }
+        } label: {
+            LText("Controller secret")
+        }
+
+        HStack(spacing: 8) {
+            Button {
+                testClashController()
+            } label: {
+                LText("Test connection")
+            }
+            .disabled(clashTestInFlight)
+            if let status = clashTestStatus {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(clashTestSucceeded ? Color.secondary : Color.orange)
+                    .preferenceNote(fullText: status)
+            }
+            Spacer()
+        }
+
+        PreferenceNote("The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already.")
+    }
+
+    /// What the sampler will actually talk to, so the pane and the collector
+    /// never disagree about which address is in use.
+    private var effectiveClashHost: String {
+        clashAPIHost.isEmpty ? "127.0.0.1:\(ClashAPIMonitor.defaultPort)" : clashAPIHost
+    }
+
+    private func refreshClashSecretStatus() {
+        let secret = VPNCredentialStore().load(account: StatisticsManager.proxyNodeSecretAccount)?.password
+        clashSecretConfigured = !(secret ?? "").isEmpty
+    }
+
+    private func testClashController() {
+        clashTestInFlight = true
+        clashTestStatus = nil
+        let host = effectiveClashHost
+        let secret = VPNCredentialStore().load(account: StatisticsManager.proxyNodeSecretAccount)?.password ?? ""
+
+        Task {
+            do {
+                let snapshot = try await ClashAPIMonitor.fetchConnections(host: host, secret: secret)
+                await MainActor.run {
+                    clashTestSucceeded = true
+                    clashTestStatus = L10n.format(
+                        "Connected — %d open connections.",
+                        snapshot.connections.count
+                    )
+                    clashTestInFlight = false
+                }
+            } catch {
+                await MainActor.run {
+                    clashTestSucceeded = false
+                    clashTestStatus = StatisticsManager.describe(error)
+                    clashTestInFlight = false
+                }
+            }
+        }
+    }
+
     private func refreshRouterCredentialStatus() {
         let unifi = unifiHost.isEmpty ? monitor.gatewayIP : unifiHost
         unifiConfigured = unifiUseAPIKey
             ? (UniFiMonitor.loadAPIKey(host: unifi) != nil)
             : (UniFiMonitor.loadCredentials(host: unifi) != nil)
         openWRTConfigured = OpenWRTMonitor.loadCredentials(host: openWRTHost.isEmpty ? monitor.gatewayIP : openWRTHost) != nil
+        refreshClashSecretStatus()
         opnsenseConfigured = OPNsenseMonitor.loadCredentials(host: opnsenseHost.isEmpty ? monitor.gatewayIP : opnsenseHost) != nil
     }
 
@@ -1282,11 +1744,17 @@ struct PreferencesView: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, 10)
 
+            TextField(L10n.text("Search settings"), text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 260)
+                .onExitCommand { searchText = "" }
+
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 6) {
                     ForEach(PreferencePane.allCases) { pane in
                         Button {
                             selectedPane = pane
+                            searchText = ""
                         } label: {
                             VStack(spacing: 5) {
                                 Image(systemName: pane.systemImage)
@@ -1367,7 +1835,15 @@ struct PreferencesView: View {
     }
 
     private var allDNSPresets: [DNSPreset] {
-        DNSPreset.builtIn + customDNSPresets
+        // Reading the tick is what makes SwiftUI redraw after a rename: the
+        // names live in UserDefaults, which the view does not observe.
+        _ = dnsPresetRenameTick
+        let names = NetworkMonitor.dnsPresetCustomNames()
+        let builtIn = DNSPreset.builtIn.map { preset -> DNSPreset in
+            guard let name = names[preset.id], !name.isEmpty else { return preset }
+            return DNSPreset(id: preset.id, name: name, servers: preset.servers, isBuiltIn: true)
+        }
+        return builtIn + customDNSPresets
     }
 
     private var hiddenAppsButtonTitle: String {
@@ -1675,17 +2151,17 @@ private struct SystemAccessControls: View {
 
     private var locationStatusLabel: String {
         switch wifi.locationStatus {
-        case .notDetermined: return NSLocalizedString("Not requested yet", comment: "")
-        case .denied: return NSLocalizedString("Denied — open System Settings to allow", comment: "")
-        case .authorized: return NSLocalizedString("Granted", comment: "")
+        case .notDetermined: return L10n.text("Not requested yet")
+        case .denied: return L10n.text("Denied — open System Settings to allow")
+        case .authorized: return L10n.text("Granted")
         }
     }
 
     private var locationButtonTitle: String {
         switch wifi.locationStatus {
-        case .notDetermined: return NSLocalizedString("Grant Location Access…", comment: "")
-        case .denied: return NSLocalizedString("Open Location Settings…", comment: "")
-        case .authorized: return NSLocalizedString("Refresh Wi-Fi Scan", comment: "")
+        case .notDetermined: return L10n.text("Grant Location Access…")
+        case .denied: return L10n.text("Open Location Settings…")
+        case .authorized: return L10n.text("Refresh Wi-Fi Scan")
         }
     }
 
@@ -1702,9 +2178,7 @@ private struct SystemAccessControls: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                LText("Required to list nearby Wi-Fi networks. macOS uses the same gate for its own Wi-Fi menu.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Required to list nearby Wi-Fi networks. macOS uses the same gate for its own Wi-Fi menu.")
             }
 
             Divider()
@@ -1731,12 +2205,11 @@ private struct SystemAccessControls: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
+                            .help(helperStatus)
                             .multilineTextAlignment(.trailing)
                     }
                 }
-                LText("Used to change DNS servers and to persist new Wi-Fi credentials into macOS's Known Networks. macOS may show a \"Background Items Added\" approval prompt the first time.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                PreferenceNote("Used to change DNS servers and to persist new Wi-Fi credentials into macOS's Known Networks. macOS may show a \"Background Items Added\" approval prompt the first time.")
             }
         }
     }
@@ -1750,9 +2223,9 @@ private struct SystemAccessControls: View {
                 helperWorking = false
                 switch outcome {
                 case .alreadyEnabled:
-                    helperStatus = NSLocalizedString("Already installed", comment: "")
+                    helperStatus = L10n.text("Already installed")
                 case .registered:
-                    helperStatus = NSLocalizedString("Registered", comment: "")
+                    helperStatus = L10n.text("Registered")
                 case .requiresApproval(let msg):
                     helperStatus = msg
                 case .unavailable(let msg):

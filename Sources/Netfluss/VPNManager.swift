@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Netfluss. If not, see <https://www.gnu.org/licenses/>.
 
+import Combine
 import Foundation
 import NetworkExtension
 import Darwin
@@ -32,12 +33,29 @@ import Darwin
 final class VPNManager: ObservableObject {
     static let shared = VPNManager()
 
-    @Published private(set) var profiles: [VPNProfile] = []
+    @Published private(set) var profiles: [VPNProfile] = [] {
+        didSet { refreshNativeWatchers() }
+    }
     @Published private(set) var status: VPNRuntimeStatus = .idle
+    /// The last Disconnect couldn't stop the tunnel, so it may still be up.
+    /// Keeps the Disconnect button offered instead of Connect.
+    @Published private(set) var stopFailed = false
 
     /// Set by AppState so the manager can refresh the public IP/flag on
     /// connect/disconnect.
-    weak var networkMonitor: NetworkMonitor?
+    weak var networkMonitor: NetworkMonitor? {
+        didSet { observeTunnels() }
+    }
+    private var tunnelsObservation: AnyCancellable?
+    private var untrackedTunnelCheck: Task<Void, Never>?
+    /// System VPN services followed through SystemConfiguration, by name.
+    private var nativeWatchers: [String: NativeVPNWatcher] = [:]
+    /// Tunnel interfaces up before a system VPN was started, to tell which one
+    /// it brought up.
+    private var tunnelsBeforeNativeStart: Set<String> = []
+    /// A system VPN that was connected outside NetFluss (System Settings, the
+    /// menu bar). Quitting NetFluss leaves that one alone.
+    private var nativeConnectedElsewhere = false
 
     private let helper: PrivilegedHelperManager
     private let store: VPNProfileStore
@@ -50,6 +68,11 @@ final class VPNManager: ObservableObject {
     /// notifications to the current connection.
     private let ikev2Controller = IKEv2VPNController()
     private var activeIKEv2 = false
+    /// Bumped whenever the wanted connection changes, so a backend start that
+    /// finishes after the user cancelled can tell it is no longer wanted.
+    private var connectAttempt: UInt64 = 0
+    /// Keychain answers for `hasStoredCredentials`, which views read while drawing.
+    private var credentialPresence: [UUID: Bool] = [:]
 
     /// Auto-reconnect: when a profile with `options.autoReconnect` drops
     /// unexpectedly, we re-dispatch the connection with exponential backoff
@@ -83,6 +106,7 @@ final class VPNManager: ObservableObject {
         ikev2Controller.onStatusChange = { [weak self] status in
             self?.handleIKEv2Status(status)
         }
+        refreshNativeWatchers()
     }
 
     // MARK: - Profile management
@@ -110,7 +134,10 @@ final class VPNManager: ObservableObject {
     }
 
     func hasStoredCredentials(_ profile: VPNProfile) -> Bool {
-        credentialStore.load(account: profile.keychainAccount) != nil
+        if let known = credentialPresence[profile.id] { return known }
+        let present = credentialStore.load(account: profile.keychainAccount) != nil
+        credentialPresence[profile.id] = present
+        return present
     }
 
     /// Import a WireGuard config (single `.conf`, folder, or `.zip`) into a new
@@ -151,6 +178,7 @@ final class VPNManager: ObservableObject {
             ikev2Username: username
         )
         credentialStore.save(account: profile.keychainAccount, username: username, password: password)
+        credentialPresence[profile.id] = nil
         profiles.append(profile)
         try? store.save(profiles)
         return profile
@@ -178,6 +206,7 @@ final class VPNManager: ObservableObject {
 
     /// Store (or clear) the username/password for a profile in the Keychain.
     func setCredentials(for profile: VPNProfile, username: String?, password: String?) {
+        credentialPresence[profile.id] = nil
         if username == nil && password == nil {
             credentialStore.delete(account: profile.keychainAccount)
         } else {
@@ -188,6 +217,7 @@ final class VPNManager: ObservableObject {
     func deleteProfile(_ profile: VPNProfile) {
         if status.profileID == profile.id { disconnect() }
         credentialStore.delete(account: profile.keychainAccount)
+        credentialPresence[profile.id] = nil
         profiles.removeAll { $0.id == profile.id }
         try? store.removeProfileDirectory(profile.id)
         try? store.save(profiles)
@@ -256,14 +286,73 @@ final class VPNManager: ObservableObject {
     /// the network stack / VPN subsystem is ready (an immediate connect at launch
     /// is unreliable, especially for IKEv2).
     func connectOnLaunchIfNeeded() {
-        guard !status.state.isActive,
-              let profile = profiles.first(where: { $0.options.connectOnLaunch }) else { return }
         Task { [weak self] in
+            await self?.stopOrphanedTunnels()
+            guard let profile = self?.profiles.first(where: { $0.options.connectOnLaunch }) else { return }
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard let self, !self.status.state.isActive,
                   self.profiles.contains(where: { $0.id == profile.id }) else { return }
             self.connect(profile)
         }
+    }
+
+    /// Stop tunnels left by a run of NetFluss that crashed. A root tunnel this
+    /// process knows nothing about shows as "not connected" and can't be stopped
+    /// from the UI, and connect-on-launch would start a second one beside it.
+    ///
+    /// Only asks an already-enabled helper with profiles to look after: reaching
+    /// the helper registers it, which must not happen just because the app
+    /// launched.
+    private func stopOrphanedTunnels() async {
+        guard !profiles.isEmpty, !status.state.isActive, await helper.isEnabled else { return }
+        guard let result = await helper.stopOrphanedVPNTunnels(owner: NSUserName()), result.success else { return }
+        let stopped = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        if stopped != "0" { VPNDiagnosticsLog.shared.log("Stopped \(stopped) tunnel(s) left by an earlier run") }
+    }
+
+    /// The bundled OpenVPN and WireGuard tools are built for macOS 14: the last
+    /// builds for macOS 13 are stuck on OpenSSL 3.5.2. IKEv2 and system VPNs use
+    /// macOS's own client, so they still work on 13.
+    nonisolated static func supportsBundledTools(on version: OperatingSystemVersion) -> Bool {
+        version.majorVersion >= 14
+    }
+
+    nonisolated static var bundledToolsSupported: Bool {
+        supportsBundledTools(on: ProcessInfo.processInfo.operatingSystemVersion)
+    }
+
+    /// Whether quitting has anything to take down.
+    var hasActiveConnection: Bool {
+        status.state.isActive || activeTunnelHandle != nil || activeIKEv2 || ovpnClient != nil
+    }
+
+    /// Take the connection down before the app exits. Nothing else can: without
+    /// the app there is no way to control a tunnel still running as root, and the
+    /// next launch would not know about it.
+    func prepareForTermination() async {
+        guard hasActiveConnection else { return }
+        connectAttempt &+= 1
+        cancelPendingReconnect()
+        stopWireGuardMonitor()
+        await networkMonitor?.restoreVPNDNSAndWait()
+        ovpnClient?.disconnect()
+
+        if let handle = activeTunnelHandle {
+            _ = await helper.stopVPNTunnel(handle: handle)
+            activeTunnelHandle = nil
+        } else if let profileID = status.profileID,
+                  let profile = profiles.first(where: { $0.id == profileID }),
+                  profile.kind == .ikev2 {
+            if profile.ikev2Server != nil {
+                ikev2Controller.disconnect()
+                activeIKEv2 = false
+            } else if let service = profile.nativeServiceName, !nativeConnectedElsewhere {
+                _ = await ProcessRunner.offloaded { NativeVPN.stop(service) }
+            }
+        }
+        ovpnClient?.close()
+        ovpnClient = nil
+        status = .idle
     }
 
     /// Enable/disable applying the profile's own DNS servers while connected.
@@ -301,10 +390,18 @@ final class VPNManager: ObservableObject {
     /// Start the backend for a profile. Shared by the user-facing `connect` and
     /// the auto-reconnect loop; `reconnecting` only affects the displayed state.
     private func dispatchConnect(_ profile: VPNProfile, endpoint: VPNServerEndpoint?, reconnecting: Bool) {
+        connectAttempt &+= 1
+        let attempt = connectAttempt
+        nativeConnectedElsewhere = false
         status = VPNRuntimeStatus(state: reconnecting ? .reconnecting : .connecting,
                                   profileID: profile.id, serverID: endpoint?.id)
         Task { [weak self] in
             guard let self else { return }
+            // One connection at a time: whatever ran before goes first. Starting
+            // over a live tunnel lost the only handle to it, and its utun stayed
+            // up behind a profile reading "Not connected" (issue #68).
+            await self.clearPreviousTunnels()
+            guard attempt == self.connectAttempt else { return }
             switch profile.kind {
             case .openVPN, .wireGuard:
                 await self.startBundledTunnel(profile, endpoint: endpoint)
@@ -323,8 +420,9 @@ final class VPNManager: ObservableObject {
         // tunnel can outlive an `.failed` state (e.g. a WireGuard utun that stayed
         // up), and the user must still be able to tear it down. Without this,
         // disconnect() no-ops from `.failed` and orphans the tunnel + temp config.
-        guard status.state.isActive || activeTunnelHandle != nil || activeIKEv2 || ovpnClient != nil else { return }
+        guard hasActiveConnection else { return }
         // A deliberate disconnect ends any auto-reconnect cycle.
+        connectAttempt &+= 1
         cancelPendingReconnect()
         stopWireGuardMonitor()
         reconnectAttempts = 0
@@ -342,12 +440,21 @@ final class VPNManager: ObservableObject {
                 // Give the clean shutdown a moment, then ensure the process is gone.
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 let stop = await self.helper.stopVPNTunnel(handle: handle)
-                if let stop, stop.terminationStatus != 0 {
-                    VPNDiagnosticsLog.shared.log("Disconnect (\(handle)) helper error: \(stop.stderr.isEmpty ? "unknown" : stop.stderr)")
-                } else {
-                    VPNDiagnosticsLog.shared.log("Disconnected \(handle)")
+                guard let stop, stop.success else {
+                    // Saying "Not connected" here is how a tunnel ends up up and
+                    // unexplained. Keep the handle so Disconnect can try again.
+                    let reason = stop.map { $0.stderr.isEmpty ? $0.stdout : $0.stderr } ?? "no reply from the helper"
+                    VPNDiagnosticsLog.shared.log("Disconnect (\(handle)) FAILED: \(reason.isEmpty ? "unknown" : reason)")
+                    self.ovpnClient?.close()
+                    self.ovpnClient = nil
+                    self.stopFailed = true
+                    self.status.state = .failed(L10n.text("NetFluss couldn't stop the VPN tunnel, so it may still be up. Try Disconnect again."))
+                    return
                 }
+                VPNDiagnosticsLog.shared.log("Disconnected \(handle)")
                 self.activeTunnelHandle = nil
+                // Anything else this user's helper still runs is a leftover.
+                await self.stopOrphanedTunnelsNow(reason: "after disconnecting")
             } else if let profileID = previous.profileID,
                       let profile = self.profiles.first(where: { $0.id == profileID }),
                       profile.kind == .ikev2 {
@@ -355,21 +462,113 @@ final class VPNManager: ObservableObject {
                     self.ikev2Controller.disconnect()   // NEVPNManager; status flows via handleIKEv2Status
                     self.activeIKEv2 = false
                 } else if let service = profile.nativeServiceName {
-                    NativeVPN.stop(service)
+                    _ = await ProcessRunner.offloaded { NativeVPN.stop(service) }
                 }
             }
             self.ovpnClient?.close()
             self.ovpnClient = nil
+            self.stopFailed = false
+            self.nativeConnectedElsewhere = false
             self.status = .idle
             self.refreshPublicIP()
+        }
+    }
+
+    // MARK: - Leftover tunnels
+
+    /// Stop the tunnel this manager last ran, and any other the helper still
+    /// runs for this user, before a new connection starts.
+    private func clearPreviousTunnels() async {
+        ovpnClient?.close()
+        ovpnClient = nil
+        stopWireGuardMonitor()
+        if let handle = activeTunnelHandle {
+            let stop = await helper.stopVPNTunnel(handle: handle)
+            VPNDiagnosticsLog.shared.log(stop?.success == true
+                ? "Stopped the previous tunnel \(handle) before connecting"
+                : "Could not stop the previous tunnel \(handle) before connecting")
+            activeTunnelHandle = nil
+        }
+        stopFailed = false
+        await stopOrphanedTunnelsNow(reason: "before connecting")
+    }
+
+    /// Ask the helper to stop every tunnel it runs for this user. Only while no
+    /// tunnel is tracked here: it can't tell a wanted one from a leftover.
+    private func stopOrphanedTunnelsNow(reason: String) async {
+        guard activeTunnelHandle == nil, await helper.isEnabled else { return }
+        guard let result = await helper.stopOrphanedVPNTunnels(owner: NSUserName()), result.success else { return }
+        let stopped = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !stopped.isEmpty, stopped != "0" {
+            VPNDiagnosticsLog.shared.log("Stopped \(stopped) leftover tunnel(s) \(reason)")
+        }
+    }
+
+    /// Nothing is running or starting here, so any tunnel the helper runs for
+    /// this user is one this app lost track of.
+    private var isQuiet: Bool {
+        !status.state.isActive && status.state != .disconnecting
+            && activeTunnelHandle == nil && ovpnClient == nil && !activeIKEv2
+    }
+
+    private func observeTunnels() {
+        tunnelsObservation = networkMonitor?.$vpnTunnels
+            .removeDuplicates()
+            .sink { [weak self] tunnels in
+                Task { @MainActor in self?.tunnelsChanged(tunnels) }
+            }
+    }
+
+    /// A tunnel came up or went away while nothing is connected here: if the
+    /// helper says one of them is ours, stop it. Same as at launch, but without
+    /// waiting for the next launch to notice.
+    private func tunnelsChanged(_ tunnels: Set<String>) {
+        guard !tunnels.isEmpty, isQuiet else { return }
+        untrackedTunnelCheck?.cancel()
+        untrackedTunnelCheck = Task { [weak self] in
+            // Let a stop that is still in flight finish first.
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard let self, !Task.isCancelled, self.isQuiet, await self.helper.isEnabled else { return }
+            let attempt = self.connectAttempt
+            guard let list = await self.helper.listVPNTunnels(owner: NSUserName()), list.success else { return }
+            let handles = list.stdout.split(whereSeparator: \.isNewline).map(String.init)
+            for handle in handles {
+                // A connect started meanwhile owns whatever it brings up.
+                guard attempt == self.connectAttempt, self.isQuiet else { return }
+                let stop = await self.helper.stopVPNTunnel(handle: handle)
+                VPNDiagnosticsLog.shared.log(stop?.success == true
+                    ? "Stopped tunnel \(handle), left running with no connection in NetFluss"
+                    : "Could not stop tunnel \(handle), left running with no connection in NetFluss")
+            }
+        }
+    }
+
+    /// A failed connection leaves nothing running: an openvpn kept alive behind
+    /// "Failed" holds its utun up, which reads as a VPN that never went away.
+    private func releaseFailedTunnel() {
+        guard let handle = activeTunnelHandle else { return }
+        activeTunnelHandle = nil
+        ovpnClient?.close()
+        ovpnClient = nil
+        let helper = self.helper
+        Task {
+            let stop = await helper.stopVPNTunnel(handle: handle)
+            if stop?.success != true {
+                VPNDiagnosticsLog.shared.log("Could not stop the failed tunnel \(handle)")
+            }
         }
     }
 
     // MARK: - Backends
 
     private func startBundledTunnel(_ profile: VPNProfile, endpoint: VPNServerEndpoint?) async {
+        guard Self.bundledToolsSupported else {
+            status.state = .failed(L10n.text("OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work."))
+            return
+        }
         let configPath = store.configPath(for: profile, endpoint: endpoint)
         let socketPath = Self.managementSocketPath(for: profile)
+        let attempt = connectAttempt
 
         let result = await helper.startVPNTunnel(
             kind: profile.kind.rawValue,
@@ -377,6 +576,16 @@ final class VPNManager: ObservableObject {
             managementSocketPath: socketPath,
             socketOwner: NSUserName()
         )
+
+        // WireGuard can take a while to come up. If the user cancelled meanwhile,
+        // this tunnel is unwanted and nothing else knows about it.
+        guard attempt == connectAttempt else {
+            if let result, result.success {
+                let handle = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+                _ = await helper.stopVPNTunnel(handle: handle)
+            }
+            return
+        }
 
         guard let result, result.success else {
             let reason = result?.stderr ?? L10n.text("Could not start the VPN helper.")
@@ -429,7 +638,11 @@ final class VPNManager: ObservableObject {
                 VPNDiagnosticsLog.shared.log("OpenVPN connected\(assignedIP.map { " (\($0))" } ?? "")")
                 status.state = .connected
                 if status.connectedSince == nil { status.connectedSince = Date() }
-                if let assignedIP { status.assignedIP = assignedIP }
+                if let assignedIP {
+                    status.assignedIP = assignedIP
+                    // The management state names no device; the address finds it.
+                    status.tunnelInterface = VPNDetector.snapshot().tunnels.first { $0.value == assignedIP }?.key
+                }
                 reconnectAttempts = 0    // a good connection clears the backoff
                 refreshPublicIP()
                 applyProfileDNSIfNeeded(status.profileID)
@@ -445,6 +658,7 @@ final class VPNManager: ObservableObject {
             status.bytesOut = outBytes
         case .needCredentials:
             status.state = .failed(L10n.text("This VPN needs a username and password. Add them in the profile's settings and reconnect."))
+            releaseFailedTunnel()
         case .authFailed(let message):
             failWithReason(message)
         case .disconnected:
@@ -529,6 +743,7 @@ final class VPNManager: ObservableObject {
     private func failWithReason(_ base: String) {
         VPNDiagnosticsLog.shared.log("VPN failed: \(base)")
         status.state = .failed(base)
+        releaseFailedTunnel()
         guard let profileID = status.profileID,
               let profile = profiles.first(where: { $0.id == profileID }) else { return }
         let logPath = Self.managementLogPath(for: profile)
@@ -604,6 +819,7 @@ final class VPNManager: ObservableObject {
             status.state = .failed(L10n.text("The VPN password isn't stored — remove the profile and add it again."))
             return
         }
+        let attempt = connectAttempt
         activeIKEv2 = true
         do {
             try await ikev2Controller.connect(
@@ -611,6 +827,7 @@ final class VPNManager: ObservableObject {
                 username: username, password: password
             )
             // Connection progress arrives via handleIKEv2Status.
+            if attempt != connectAttempt { ikev2Controller.disconnect() }
         } catch {
             activeIKEv2 = false
             status.state = .failed(error.localizedDescription)
@@ -811,22 +1028,96 @@ final class VPNManager: ObservableObject {
             status.state = .failed(L10n.text("No system VPN service is associated with this profile."))
             return
         }
-        guard NativeVPN.start(service) else {
+        tunnelsBeforeNativeStart = Set(VPNDetector.snapshot().tunnels.keys)
+        guard await ProcessRunner.offloaded({ NativeVPN.start(service) }) else {
             status.state = .failed(L10n.text("Could not start the system VPN."))
             return
         }
-        // Native connect is asynchronous — poll for the Connected state.
+        // Native connect is asynchronous — poll for the Connected state. The
+        // service's watcher usually reports it first.
         for _ in 0..<25 {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             guard status.profileID == profile.id, status.state.isActive else { return }
-            if NativeVPN.status(service) == "Connected" {
-                status.state = .connected
-                status.connectedSince = Date()
-                refreshPublicIP()
+            if status.state == .connected { return }
+            if await ProcessRunner.offloaded({ NativeVPN.status(service) }) == "Connected" {
+                markNativeConnected()
                 return
             }
         }
-        status.state = .failed(L10n.format("The system VPN did not connect (%@).", NativeVPN.status(service)))
+        let finalStatus = await ProcessRunner.offloaded { NativeVPN.status(service) }
+        status.state = .failed(L10n.format("The system VPN did not connect (%@).", finalStatus))
+    }
+
+    private func markNativeConnected() {
+        guard status.state != .connected else { return }
+        status.state = .connected
+        status.connectedSince = Date()
+        let added = Set(VPNDetector.snapshot().tunnels.keys).subtracting(tunnelsBeforeNativeStart)
+        if added.count == 1 { status.tunnelInterface = added.first }
+        refreshPublicIP()
+    }
+
+    // MARK: - System VPN status
+
+    /// Follow every system VPN a profile points at. Without this a system VPN
+    /// that dropped, or was disconnected in System Settings, kept reading
+    /// "Connected" here, and one connected there never showed up (issue #68).
+    private func refreshNativeWatchers() {
+        let wanted = Set(profiles.compactMap { $0.kind == .ikev2 && $0.ikev2Server == nil ? $0.nativeServiceName : nil })
+        for name in nativeWatchers.keys where !wanted.contains(name) {
+            nativeWatchers.removeValue(forKey: name)?.invalidate()
+        }
+        let missing = wanted.subtracting(nativeWatchers.keys)
+        guard !missing.isEmpty else { return }
+        Task { [weak self] in
+            let services = await ProcessRunner.offloaded { NativeVPN.list() }
+            guard let self else { return }
+            let stillWanted = Set(self.profiles.compactMap {
+                $0.kind == .ikev2 && $0.ikev2Server == nil ? $0.nativeServiceName : nil
+            })
+            for service in services where missing.contains(service.name) && stillWanted.contains(service.name) {
+                guard self.nativeWatchers[service.name] == nil, let serviceID = service.serviceID else { continue }
+                let name = service.name
+                guard let watcher = NativeVPNWatcher(serviceID: serviceID, onChange: { [weak self] state in
+                    self?.handleNativeStatus(state, serviceName: name)
+                }) else { continue }
+                self.nativeWatchers[name] = watcher
+                watcher.start()
+            }
+        }
+    }
+
+    private func handleNativeStatus(_ state: NativeVPNWatcher.State, serviceName: String) {
+        guard let profile = profiles.first(where: {
+            $0.kind == .ikev2 && $0.ikev2Server == nil && $0.nativeServiceName == serviceName
+        }) else { return }
+        let isCurrent = status.profileID == profile.id
+        switch state {
+        case .connected:
+            if isCurrent, status.state == .connecting || status.state == .reconnecting {
+                markNativeConnected()
+            } else if isQuiet {
+                // A start of ours that outlasted its wait still counts as ours.
+                let ours = isCurrent && { if case .failed = status.state { return true }; return false }()
+                VPNDiagnosticsLog.shared.log(ours
+                    ? "System VPN \"\(serviceName)\" connected late"
+                    : "System VPN \"\(serviceName)\" connected outside NetFluss")
+                nativeConnectedElsewhere = !ours
+                if !ours { tunnelsBeforeNativeStart = [] }
+                status = VPNRuntimeStatus(state: .connected, profileID: profile.id)
+                status.connectedSince = Date()
+                refreshPublicIP()
+            }
+        case .disconnected:
+            guard isCurrent, status.state == .connected else { return }
+            VPNDiagnosticsLog.shared.log("System VPN \"\(serviceName)\" disconnected")
+            nativeConnectedElsewhere = false
+            networkMonitor?.restoreVPNDNS()
+            status = VPNRuntimeStatus(state: .idle, profileID: profile.id)
+            refreshPublicIP()
+        case .connecting, .disconnecting:
+            break
+        }
     }
 
     /// Parse the local [Interface] Address from a WireGuard config for display.
@@ -876,6 +1167,7 @@ struct VPNProfileStore {
 
     func load() throws -> [VPNProfile] {
         guard fileManager.fileExists(atPath: profilesFile.path) else { return [] }
+        protectBaseDirectory()
         let data = try Data(contentsOf: profilesFile)
         return try JSONDecoder().decode([VPNProfile].self, from: data)
     }
@@ -889,6 +1181,7 @@ struct VPNProfileStore {
     func writeConfigFiles(_ files: [VPNConfigImporter.ConfigFile], profileID: UUID) throws {
         let dir = profileDirectory(profileID)
         try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        protectBaseDirectory()
         for file in files {
             let dest = dir.appendingPathComponent(file.name)
             // file.name may carry subdirectories (folder/zip imports).
@@ -897,6 +1190,17 @@ struct VPNProfileStore {
             // Configs can hold VPN private/pre-shared keys — keep them owner-only.
             try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dest.path)
         }
+    }
+
+    /// WireGuard private keys and OpenVPN keys sit in these configs in plain text,
+    /// so they stay out of Time Machine and out of other users' reach. Run on load
+    /// as well, for profiles imported before this existed.
+    private func protectBaseDirectory() {
+        try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: baseDirectory.path)
+        var directory = baseDirectory
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? directory.setResourceValues(values)
     }
 
     /// Absolute path of the config used to connect: the selected endpoint's own

@@ -424,8 +424,11 @@
 "Off" = "Aus";
 "Dot" = "Punkt";
 "Shield" = "Schild";
+"Globe" = "Globus";
+"Bars" = "Balken";
 "VPN indicator color" = "Farbe der VPN-Anzeige";
 "Show when VPN is off" = "Auch anzeigen, wenn VPN aus ist";
+"Show flag only while a VPN is active" = "Flagge nur bei aktivem VPN anzeigen";
 "Country flag" = "Länderflagge";
 "Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is)." = "Wird rechts neben den Raten angezeigt. Die VPN-Anzeige erkennt auch VPNs, die von anderen Apps gestartet wurden. Die Länderflagge zeigt, wo sich deine öffentliche IP befindet (ermittelt über ipify.org und ipwho.is).";
 "Traffic Timer" = "Traffic-Stoppuhr";
@@ -538,6 +541,7 @@
 "Could not start the VPN helper." = "Der VPN-Helfer konnte nicht gestartet werden.";
 "This VPN needs a username and password. Add them in the profile's settings and reconnect." = "Dieses VPN benötigt Benutzername und Passwort. Trage sie in den Profileinstellungen ein und verbinde dich erneut.";
 "The VPN connection stopped." = "Die VPN-Verbindung wurde beendet.";
+"NetFluss couldn't stop the VPN tunnel, so it may still be up. Try Disconnect again." = "NetFluss konnte den VPN-Tunnel nicht beenden, er könnte also noch aktiv sein. Klicke erneut auf „Trennen“.";
 "This IKEv2 profile is missing its server settings." = "Diesem IKEv2-Profil fehlen die Server-Einstellungen.";
 "The VPN password isn't stored — remove the profile and add it again." = "Das VPN-Passwort ist nicht gespeichert – entferne das Profil und füge es erneut hinzu.";
 "No system VPN service is associated with this profile." = "Diesem Profil ist kein System-VPN-Dienst zugeordnet.";
@@ -586,3 +590,115 @@
 "The M-Lab upload server URL is missing." = "Die URL des M-Lab-Upload-Servers fehlt.";
 "The M-Lab upload socket closed unexpectedly." = "Die M-Lab-Upload-Verbindung wurde unerwartet geschlossen.";
 "Auto-selected nearby edge" = "Automatisch gewählter nahegelegener Edge-Server";
+
+/* Proxy node statistics (issue #61) */
+"Proxy nodes" = "Proxy-Nodes";
+"Traffic per outbound node for the selected range, read from the proxy controller." = "Datenverkehr pro ausgehendem Node im gewählten Zeitraum, ausgelesen über den Proxy-Controller.";
+"No node traffic recorded yet." = "Noch kein Node-Datenverkehr aufgezeichnet.";
+"Unattributed" = "Nicht zugeordnet";
+"Unknown node" = "Unbekannter Node";
+"Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS." = "„Nicht zugeordnet“ umfasst Datenverkehr, den der Controller gezählt, aber keinem Node zugeordnet hat — meist Verbindungen, die zwischen zwei Abfragen geöffnet und wieder geschlossen wurden, sowie DNS.";
+"Collect proxy node statistics" = "Proxy-Node-Statistiken erfassen";
+"Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription." = "Zeichnet auf, wie viel Datenverkehr jeder ausgehende Node übertragen hat — für Clients mit Clash-API wie sing-box, mihomo oder Clash Verge. Nützlich bei einem Abo mit Datenlimit.";
+"Controller address" = "Controller-Adresse";
+"Controller secret" = "Controller-Secret";
+"(default)" = "(Standard)";
+"Proxy Controller Address" = "Proxy-Controller-Adresse";
+"Host:port of the Clash API (default 127.0.0.1:9090)" = "Host:Port der Clash-API (Standard 127.0.0.1:9090)";
+"Proxy Controller Secret" = "Proxy-Controller-Secret";
+"The secret from your client's Clash API settings. Leave empty if none is configured." = "Das Secret aus den Clash-API-Einstellungen deines Clients. Leer lassen, wenn keines konfiguriert ist.";
+"Secret" = "Secret";
+"Test connection" = "Verbindung testen";
+"Connected — %d open connections." = "Verbunden — %d offene Verbindungen.";
+"The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already." = "Die Clash-API ist deaktiviert, solange dein Client keinen external-controller setzt. In sing-box ist das experimental.clash_api.external_controller in der Konfiguration; die meisten GUI-Clients aktivieren sie bereits auf 127.0.0.1:9090.";
+"Could not read the proxy controller." = "Der Proxy-Controller konnte nicht gelesen werden.";
+"The controller address is not valid." = "Die Controller-Adresse ist ungültig.";
+"The controller rejected the secret." = "Der Controller hat das Secret abgelehnt.";
+"The controller answered with HTTP %d." = "Der Controller antwortete mit HTTP %d.";
+"No proxy controller is listening at that address." = "An dieser Adresse lauscht kein Proxy-Controller.";
+"The controller did not answer in time." = "Der Controller hat nicht rechtzeitig geantwortet.";
+"Could not reach the proxy controller." = "Der Proxy-Controller ist nicht erreichbar.";
+"The controller's answer was not in the expected format." = "Die Antwort des Controllers hatte nicht das erwartete Format.";
+
+/* Menu bar link indicator */
+"Link indicator" = "Verbindungsanzeige";
+"A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic." = "Ein WLAN- oder Kabelsymbol rechts neben den Raten, in der Farbe des Verbindungszustands: verbunden, verbunden ohne Internet oder nicht verbunden. Das Symbol richtet sich nach der Schnittstelle, über die der Verkehr läuft.";
+"Indicator size" = "Größe der Anzeigen";
+"No internet" = "Kein Internet";
+"Check internet access" = "Internetzugang prüfen";
+"Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing." = "Ohne diese Prüfung zeigt das Symbol nur, ob die Schnittstelle aktiv ist. Mit ihr fragt NetFluss die Captive-Portal-Adresse von Apple ab — dieselbe, die macOS selbst verwendet — oft genug, um eine Hotel-Anmeldeseite oder eine tote Leitung zu bemerken, und selten genug, dass es nichts kostet.";
+"Check address" = "Prüfadresse";
+"Internet Check Address" = "Adresse für die Internetprüfung";
+"URL to check (empty uses Apple's)" = "Zu prüfende URL (leer = Apple)";
+
+/* Automatic DNS by network */
+"Switch DNS automatically by network" = "DNS automatisch nach Netzwerk wechseln";
+"Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." = "Wählt den Resolver anhand des WLANs, mit dem du dich verbindest — einen für zu Hause, einen für öffentliche Netze. Benötigt den privilegierten Helfer, sonst würde jeder Wechsel nach deinem Passwort fragen.";
+"Automatic DNS" = "Automatisches DNS";
+"Only this access point" = "Nur dieser Access Point";
+"Add current network" = "Aktuelles Netzwerk hinzufügen";
+"Any other network" = "Jedes andere Netzwerk";
+"Leave unchanged" = "Unverändert lassen";
+"Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home." = "Gilt für Netzwerke ohne eigene Regel, auch kabelgebundene. Das verhindert, dass dir ein öffentlicher Resolver nach Hause folgt.";
+"Show active resolver in menu bar" = "Aktiven Resolver in der Menüleiste anzeigen";
+"Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden." = "Erscheint nur, solange der Resolver nicht der Systemstandard ist, damit die Menüleiste in einem nicht überschriebenen Netzwerk ruhig bleibt.";
+"No rule applies to the current network." = "Für das aktuelle Netzwerk gilt keine Regel.";
+"Install the privileged helper to let NetFluss change DNS without asking each time." = "Installiere den privilegierten Helfer, damit NetFluss DNS ändern kann, ohne jedes Mal zu fragen.";
+"Paused: a VPN profile is controlling DNS right now." = "Pausiert: Ein VPN-Profil steuert gerade das DNS.";
+"Waiting for %@ to let you online before changing DNS." = "Warten darauf, dass %@ dich online lässt, bevor DNS geändert wird.";
+"Waiting for a connection to %@ before changing DNS." = "Warten auf eine Verbindung mit %@, bevor DNS geändert wird.";
+"Using %@ on this network." = "Verwendet %@ in diesem Netzwerk.";
+"Using %@ on %@." = "Verwendet %@ in %@.";
+"No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube unten den Ortungszugriff — ohne ihn gibt macOS den Netzwerknamen nicht preis.";
+"Resolver name colour" = "Farbe des Resolver-Namens";
+"Rename DNS Profile" = "DNS-Profil umbenennen";
+"Only the name changes — the servers stay as they are." = "Nur der Name ändert sich — die Server bleiben unverändert.";
+"Uses the servers from DHCP" = "Verwendet die Server von DHCP";
+
+/* Launch at login (issue #67) */
+"macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions." = "macOS wartet darauf, dass du NetFluss unter Systemeinstellungen → Allgemein → Anmeldeobjekte & Erweiterungen erlaubst.";
+"Open Login Items…" = "Anmeldeobjekte öffnen…";
+"macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." = "macOS öffnet NetFluss beim Anmelden nur, wenn es aus dem Ordner „Programme“ gestartet wird. Verschiebe es dorthin und öffne es erneut.";
+
+/* Rate alignment (issue #65) */
+"Rate alignment" = "Ausrichtung der Raten";
+"Centered" = "Zentriert";
+"Left" = "Links";
+"Right" = "Rechts";
+"Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column." = "Bei „Links“ und „Rechts“ bleiben die Pfeile an ihrem Platz, während sich die Zahlen ändern. „Rechts“ richtet die Zahlen außerdem wie eine Spalte aus.";
+"Administrator authentication is not available right now." = "Die Administrator-Anmeldung ist gerade nicht verfügbar.";
+"Administrator permission was denied." = "Die Administratorberechtigung wurde verweigert.";
+"Administrator permission was not granted." = "Die Administratorberechtigung wurde nicht erteilt.";
+"Administrator approval was denied." = "Die Administrator-Freigabe wurde verweigert.";
+"Approve the Netfluss helper in System Settings, then try again." = "Erlaube den NetFluss-Helfer in den Systemeinstellungen und versuche es erneut.";
+"Approve the Netfluss helper in System Settings → General → Login Items." = "Erlaube den NetFluss-Helfer unter Systemeinstellungen → Allgemein → Anmeldeobjekte.";
+"DNS change failed." = "Die DNS-Änderung ist fehlgeschlagen.";
+"DNS change was canceled." = "Die DNS-Änderung wurde abgebrochen.";
+"The active network service could not be identified." = "Der aktive Netzwerkdienst konnte nicht ermittelt werden.";
+"The privileged helper could not be started." = "Der privilegierte Helfer konnte nicht gestartet werden.";
+"The privileged helper could not be reached." = "Der privilegierte Helfer ist nicht erreichbar.";
+"The privileged helper could not be registered." = "Der privilegierte Helfer konnte nicht registriert werden.";
+"The privileged helper bundle is incomplete." = "Das Paket des privilegierten Helfers ist unvollständig.";
+"The privileged helper connection could not be created." = "Die Verbindung zum privilegierten Helfer konnte nicht hergestellt werden.";
+"The privileged helper connection was invalidated." = "Die Verbindung zum privilegierten Helfer wurde ungültig.";
+"The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry." = "Der privilegierte Helfer hat nicht geantwortet. Erlaube ihn unter Systemeinstellungen → Allgemein → Anmeldeobjekte oder entferne den NetFluss-Eintrag und füge ihn neu hinzu.";
+"The privileged helper is not signed correctly." = "Der privilegierte Helfer ist nicht korrekt signiert.";
+"The privileged helper returned an unknown status." = "Der privilegierte Helfer hat einen unbekannten Status gemeldet.";
+"The privileged helper was interrupted." = "Der privilegierte Helfer wurde unterbrochen.";
+"The bundled helper executable is missing." = "Die Programmdatei des Helfers fehlt.";
+"Registration completed but the helper is still not registered." = "Die Registrierung wurde abgeschlossen, aber der Helfer ist noch nicht registriert.";
+"macOS could not reach Service Management." = "macOS konnte Service Management nicht erreichen.";
+"Online" = "Online";
+"Offline" = "Offline";
+"Limited connection" = "Eingeschränkte Verbindung";
+"Copy" = "Kopieren";
+"NetFluss menu" = "NetFluss-Menü";
+"Privacy" = "Datenschutz";
+"Look up public IP addresses and countries" = "Öffentliche IP-Adressen und Länder abfragen";
+"Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag." = "Fragt ipify und ipwho.is nach deiner öffentlichen IP-Adresse und ihrem Land sowie api.country.is nach den Ländern in Network Slice. Ist dies aus, zeigt NetFluss keine externe IP, kein Land und keine Flagge.";
+"Search settings" = "Einstellungen durchsuchen";
+"No matching settings" = "Keine passenden Einstellungen";
+"Welcome to NetFluss" = "Willkommen bei NetFluss";
+"Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more." = "Deine aktuelle Netzwerkgeschwindigkeit steht jetzt in der Menüleiste. Klicke darauf für die Details. Über das Zahnrad dort erreichst du Einstellungen, Statistiken, Speedtest und mehr.";
+"DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it." = "DNS-Umschaltung und VPN nutzen einen kleinen Helfer. NetFluss fragt danach, sobald du ihn zum ersten Mal brauchst.";
+"OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work." = "OpenVPN und WireGuard benötigen macOS 14 oder neuer. IKEv2 und System-VPNs funktionieren weiterhin.";

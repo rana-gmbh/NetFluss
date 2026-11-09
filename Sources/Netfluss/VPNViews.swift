@@ -34,8 +34,10 @@ struct VPNSectionView: View {
         return vpn.profiles.first
     }
 
+    /// Also true after a Disconnect that couldn't stop the tunnel, so the
+    /// button stays Disconnect rather than starting a second connection.
     private func isActive(_ profile: VPNProfile) -> Bool {
-        vpn.status.profileID == profile.id && vpn.status.state.isActive
+        vpn.status.profileID == profile.id && (vpn.status.state.isActive || vpn.stopFailed)
     }
 
     var body: some View {
@@ -195,6 +197,12 @@ struct VPNPreferencesContent: View {
     var body: some View {
         Section {
             Toggle(isOn: $showVPN) { LText("Show VPN in popover") }
+            if !VPNManager.bundledToolsSupported {
+                LText("OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Button { importProfile(kind: .openVPN) } label: { LText("Import OpenVPN profile…") }
             Button { importProfile(kind: .wireGuard) } label: { LText("Import WireGuard profile…") }
             LText("Import a single config file, or a folder or .zip of them (e.g. a provider's router profiles). Each config becomes a selectable server.")
@@ -346,18 +354,19 @@ struct VPNProfileRow: View {
                     }
                     .buttonStyle(.borderless)
                     .disabled((profileIndex ?? 0) == 0)
-                    .help("Move up")
+                    .iconButton("Move up")
                     Button { vpn.moveProfile(profile, up: false) } label: {
                         Image(systemName: "chevron.down")
                     }
                     .buttonStyle(.borderless)
                     .disabled((profileIndex ?? 0) >= vpn.profiles.count - 1)
-                    .help("Move down")
+                    .iconButton("Move down")
                 }
                 Button(role: .destructive) { vpn.deleteProfile(profile) } label: {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
+                .iconButton("Delete")
             }
 
             if profile.servers.count > 1 {

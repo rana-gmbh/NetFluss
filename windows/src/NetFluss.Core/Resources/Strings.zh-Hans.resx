@@ -1255,11 +1255,20 @@
   <data name="Shield" xml:space="preserve">
     <value>盾牌</value>
   </data>
+  <data name="Globe" xml:space="preserve">
+    <value>地球</value>
+  </data>
+  <data name="Bars" xml:space="preserve">
+    <value>条形</value>
+  </data>
   <data name="VPN indicator color" xml:space="preserve">
     <value>VPN 指示器颜色</value>
   </data>
   <data name="Show when VPN is off" xml:space="preserve">
     <value>VPN 关闭时也显示</value>
+  </data>
+  <data name="Show flag only while a VPN is active" xml:space="preserve">
+    <value>仅在 VPN 活动时显示旗帜</value>
   </data>
   <data name="Country flag" xml:space="preserve">
     <value>国家/地区旗帜</value>
@@ -1597,6 +1606,9 @@
   <data name="The VPN connection stopped." xml:space="preserve">
     <value>VPN 连接已停止。</value>
   </data>
+  <data name="NetFluss couldn&apos;t stop the VPN tunnel, so it may still be up. Try Disconnect again." xml:space="preserve">
+    <value>NetFluss 无法停止 VPN 隧道，它可能仍在运行。请再次点按“断开”。</value>
+  </data>
   <data name="This IKEv2 profile is missing its server settings." xml:space="preserve">
     <value>此 IKEv2 配置文件缺少服务器设置。</value>
   </data>
@@ -1741,6 +1753,312 @@
   <data name="Auto-selected nearby edge" xml:space="preserve">
     <value>自动选择的附近边缘节点</value>
   </data>
+  <data name="Proxy nodes" xml:space="preserve">
+    <value>代理节点</value>
+  </data>
+  <data name="Traffic per outbound node for the selected range, read from the proxy controller." xml:space="preserve">
+    <value>所选时间范围内每个出站节点的流量，读取自代理控制器。</value>
+  </data>
+  <data name="No node traffic recorded yet." xml:space="preserve">
+    <value>尚未记录节点流量。</value>
+  </data>
+  <data name="Unattributed" xml:space="preserve">
+    <value>未归类</value>
+  </data>
+  <data name="Unknown node" xml:space="preserve">
+    <value>未知节点</value>
+  </data>
+  <data name="Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS." xml:space="preserve">
+    <value>“未归类”包含控制器已统计但无法归属到某个节点的流量——多为在两次读取之间建立并关闭的连接，以及 DNS。</value>
+  </data>
+  <data name="Collect proxy node statistics" xml:space="preserve">
+    <value>收集代理节点统计</value>
+  </data>
+  <data name="Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription." xml:space="preserve">
+    <value>记录每个出站节点承载的流量，适用于提供 Clash API 的客户端，如 sing-box、mihomo、Clash Verge 等。在按流量计费的订阅下尤其有用。</value>
+  </data>
+  <data name="Controller address" xml:space="preserve">
+    <value>控制器地址</value>
+  </data>
+  <data name="Controller secret" xml:space="preserve">
+    <value>控制器密钥</value>
+  </data>
+  <data name="(default)" xml:space="preserve">
+    <value>（默认）</value>
+  </data>
+  <data name="Proxy Controller Address" xml:space="preserve">
+    <value>代理控制器地址</value>
+  </data>
+  <data name="Host:port of the Clash API (default 127.0.0.1:9090)" xml:space="preserve">
+    <value>Clash API 的 主机:端口（默认 127.0.0.1:9090）</value>
+  </data>
+  <data name="Proxy Controller Secret" xml:space="preserve">
+    <value>代理控制器密钥</value>
+  </data>
+  <data name="The secret from your client&apos;s Clash API settings. Leave empty if none is configured." xml:space="preserve">
+    <value>来自客户端 Clash API 设置的密钥。若未配置则留空。</value>
+  </data>
+  <data name="Secret" xml:space="preserve">
+    <value>密钥</value>
+  </data>
+  <data name="Test connection~2" xml:space="preserve">
+    <value>测试连接</value>
+  </data>
+  <data name="Connected — {0} open connections." xml:space="preserve">
+    <value>已连接——{0} 个打开的连接。</value>
+  </data>
+  <data name="The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already." xml:space="preserve">
+    <value>除非客户端设置了 external-controller，否则 Clash API 处于关闭状态。在 sing-box 中对应配置项为 experimental.clash_api.external_controller；多数图形客户端已在 127.0.0.1:9090 上启用。</value>
+  </data>
+  <data name="Could not read the proxy controller." xml:space="preserve">
+    <value>无法读取代理控制器。</value>
+  </data>
+  <data name="The controller address is not valid." xml:space="preserve">
+    <value>控制器地址无效。</value>
+  </data>
+  <data name="The controller rejected the secret." xml:space="preserve">
+    <value>控制器拒绝了该密钥。</value>
+  </data>
+  <data name="The controller answered with HTTP {0}." xml:space="preserve">
+    <value>控制器返回 HTTP {0}。</value>
+  </data>
+  <data name="No proxy controller is listening at that address." xml:space="preserve">
+    <value>该地址上没有代理控制器在监听。</value>
+  </data>
+  <data name="The controller did not answer in time." xml:space="preserve">
+    <value>控制器未及时响应。</value>
+  </data>
+  <data name="Could not reach the proxy controller." xml:space="preserve">
+    <value>无法连接到代理控制器。</value>
+  </data>
+  <data name="The controller&apos;s answer was not in the expected format." xml:space="preserve">
+    <value>控制器的响应格式不符合预期。</value>
+  </data>
+  <data name="Link indicator" xml:space="preserve">
+    <value>连接指示器</value>
+  </data>
+  <data name="A Wi-Fi or cable symbol right of the rates, in the colour of the connection&apos;s state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic." xml:space="preserve">
+    <value>速率右侧的 Wi-Fi 或网线图标，颜色表示连接状态：已连接、已连接但无网络，或未连接。图标会跟随当前承载流量的接口。</value>
+  </data>
+  <data name="Indicator size" xml:space="preserve">
+    <value>指示器大小</value>
+  </data>
+  <data name="No internet" xml:space="preserve">
+    <value>无网络</value>
+  </data>
+  <data name="Check internet access" xml:space="preserve">
+    <value>检查互联网访问</value>
+  </data>
+  <data name="Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple&apos;s captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing." xml:space="preserve">
+    <value>不启用此检查时，图标仅表示接口是否启用。启用后，NetFluss 会访问 Apple 的强制门户地址（Windows 自身也使用该地址），频率足以发现酒店登录页或上游中断，又低到几乎没有开销。</value>
+  </data>
+  <data name="Check address" xml:space="preserve">
+    <value>检查地址</value>
+  </data>
+  <data name="Internet Check Address" xml:space="preserve">
+    <value>互联网检查地址</value>
+  </data>
+  <data name="URL to check (empty uses Apple&apos;s)" xml:space="preserve">
+    <value>要检查的 URL（留空则使用 Apple 的）</value>
+  </data>
+  <data name="Switch DNS automatically by network" xml:space="preserve">
+    <value>按网络自动切换 DNS</value>
+  </data>
+  <data name="Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." xml:space="preserve">
+    <value>根据你加入的 Wi-Fi 网络选择解析器——家中用一个，公共网络用另一个。需要特权助手，否则每次切换都会要求输入密码。</value>
+  </data>
+  <data name="Automatic DNS" xml:space="preserve">
+    <value>自动 DNS</value>
+  </data>
+  <data name="Only this access point" xml:space="preserve">
+    <value>仅此接入点</value>
+  </data>
+  <data name="Add current network" xml:space="preserve">
+    <value>添加当前网络</value>
+  </data>
+  <data name="Any other network" xml:space="preserve">
+    <value>任何其他网络</value>
+  </data>
+  <data name="Leave unchanged" xml:space="preserve">
+    <value>保持不变</value>
+  </data>
+  <data name="Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home." xml:space="preserve">
+    <value>适用于没有自身规则的网络，包括有线网络。这可以防止公共解析器跟着你回家。</value>
+  </data>
+  <data name="Show active resolver in menu bar" xml:space="preserve">
+    <value>在菜单栏显示当前解析器</value>
+  </data>
+  <data name="Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden." xml:space="preserve">
+    <value>仅在解析器不是系统默认值时显示，因此在未覆盖的网络中菜单栏保持安静。</value>
+  </data>
+  <data name="No rule applies to the current network." xml:space="preserve">
+    <value>当前网络没有适用的规则。</value>
+  </data>
+  <data name="Install the privileged helper to let NetFluss change DNS without asking each time." xml:space="preserve">
+    <value>安装特权助手，让 NetFluss 无需每次询问即可更改 DNS。</value>
+  </data>
+  <data name="Paused: a VPN profile is controlling DNS right now." xml:space="preserve">
+    <value>已暂停：VPN 配置当前正在控制 DNS。</value>
+  </data>
+  <data name="Waiting for {0} to let you online before changing DNS." xml:space="preserve">
+    <value>等待 {0} 允许你上网后再更改 DNS。</value>
+  </data>
+  <data name="Waiting for a connection to {0} before changing DNS." xml:space="preserve">
+    <value>等待连接到 {0} 后再更改 DNS。</value>
+  </data>
+  <data name="Using {0} on this network." xml:space="preserve">
+    <value>在此网络上使用 {0}。</value>
+  </data>
+  <data name="Using {0} on {1}." xml:space="preserve">
+    <value>在 {0} 上使用 {1}。</value>
+  </data>
+  <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
+    <value>没有可用的 Wi-Fi 网络名称。请加入 Wi-Fi 网络，或在下方允许位置访问——没有它 Windows 不会提供网络名称。</value>
+  </data>
+  <data name="Resolver name colour" xml:space="preserve">
+    <value>解析器名称颜色</value>
+  </data>
+  <data name="Rename DNS Profile" xml:space="preserve">
+    <value>重命名 DNS 配置</value>
+  </data>
+  <data name="Only the name changes — the servers stay as they are." xml:space="preserve">
+    <value>仅更改名称——服务器保持不变。</value>
+  </data>
+  <data name="Uses the servers from DHCP" xml:space="preserve">
+    <value>使用来自 DHCP 的服务器</value>
+  </data>
+  <data name="macOS is waiting for you to allow NetFluss under System Settings → General → Login Items &amp; Extensions." xml:space="preserve">
+    <value>Windows 正在等待你在“系统设置 → 通用 → 登录项与扩展”中允许 NetFluss。</value>
+  </data>
+  <data name="Open Login Items…" xml:space="preserve">
+    <value>打开登录项…</value>
+  </data>
+  <data name="macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." xml:space="preserve">
+    <value>只有从“应用程序”文件夹运行时，Windows 才会在登录时打开 NetFluss。请将其移到那里后重新打开。</value>
+  </data>
+  <data name="Rate alignment" xml:space="preserve">
+    <value>速率对齐</value>
+  </data>
+  <data name="Centered" xml:space="preserve">
+    <value>居中</value>
+  </data>
+  <data name="Left" xml:space="preserve">
+    <value>左对齐</value>
+  </data>
+  <data name="Right" xml:space="preserve">
+    <value>右对齐</value>
+  </data>
+  <data name="Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column." xml:space="preserve">
+    <value>选择“左对齐”或“右对齐”时，数字变化时箭头保持不动。“右对齐”还会让数字像列一样对齐。</value>
+  </data>
+  <data name="Administrator authentication is not available right now." xml:space="preserve">
+    <value>当前无法进行管理员身份验证。</value>
+  </data>
+  <data name="Administrator permission was denied." xml:space="preserve">
+    <value>管理员权限被拒绝。</value>
+  </data>
+  <data name="Administrator permission was not granted." xml:space="preserve">
+    <value>未获得管理员权限。</value>
+  </data>
+  <data name="Administrator approval was denied." xml:space="preserve">
+    <value>管理员批准被拒绝。</value>
+  </data>
+  <data name="Approve the Netfluss helper in System Settings, then try again." xml:space="preserve">
+    <value>请在“系统设置”中批准 NetFluss 辅助工具，然后重试。</value>
+  </data>
+  <data name="Approve the Netfluss helper in System Settings → General → Login Items." xml:space="preserve">
+    <value>请在“系统设置”→“通用”→“登录项”中批准 NetFluss 辅助工具。</value>
+  </data>
+  <data name="DNS change failed." xml:space="preserve">
+    <value>更改 DNS 失败。</value>
+  </data>
+  <data name="DNS change was canceled." xml:space="preserve">
+    <value>已取消更改 DNS。</value>
+  </data>
+  <data name="The active network service could not be identified." xml:space="preserve">
+    <value>无法识别当前的网络服务。</value>
+  </data>
+  <data name="The privileged helper could not be started." xml:space="preserve">
+    <value>无法启动特权辅助工具。</value>
+  </data>
+  <data name="The privileged helper could not be reached." xml:space="preserve">
+    <value>无法连接特权辅助工具。</value>
+  </data>
+  <data name="The privileged helper could not be registered." xml:space="preserve">
+    <value>无法注册特权辅助工具。</value>
+  </data>
+  <data name="The privileged helper bundle is incomplete." xml:space="preserve">
+    <value>特权辅助工具不完整。</value>
+  </data>
+  <data name="The privileged helper connection could not be created." xml:space="preserve">
+    <value>无法建立与特权辅助工具的连接。</value>
+  </data>
+  <data name="The privileged helper connection was invalidated." xml:space="preserve">
+    <value>与特权辅助工具的连接已失效。</value>
+  </data>
+  <data name="The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry." xml:space="preserve">
+    <value>特权辅助工具没有响应。请在“系统设置”→“通用”→“登录项”中批准它，或移除 NetFluss 条目后重新添加。</value>
+  </data>
+  <data name="The privileged helper is not signed correctly." xml:space="preserve">
+    <value>特权辅助工具的签名不正确。</value>
+  </data>
+  <data name="The privileged helper returned an unknown status." xml:space="preserve">
+    <value>特权辅助工具返回了未知状态。</value>
+  </data>
+  <data name="The privileged helper was interrupted." xml:space="preserve">
+    <value>特权辅助工具已中断。</value>
+  </data>
+  <data name="The bundled helper executable is missing." xml:space="preserve">
+    <value>缺少内置的辅助工具程序。</value>
+  </data>
+  <data name="Registration completed but the helper is still not registered." xml:space="preserve">
+    <value>注册已完成，但辅助工具仍未注册。</value>
+  </data>
+  <data name="macOS could not reach Service Management." xml:space="preserve">
+    <value>Windows 无法访问 Service Management。</value>
+  </data>
+  <data name="Online" xml:space="preserve">
+    <value>在线</value>
+  </data>
+  <data name="Offline" xml:space="preserve">
+    <value>离线</value>
+  </data>
+  <data name="Limited connection" xml:space="preserve">
+    <value>连接受限</value>
+  </data>
+  <data name="Copy" xml:space="preserve">
+    <value>复制</value>
+  </data>
+  <data name="NetFluss menu" xml:space="preserve">
+    <value>NetFluss 菜单</value>
+  </data>
+  <data name="Privacy" xml:space="preserve">
+    <value>隐私</value>
+  </data>
+  <data name="Look up public IP addresses and countries" xml:space="preserve">
+    <value>查询公网 IP 地址和国家/地区</value>
+  </data>
+  <data name="Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag." xml:space="preserve">
+    <value>向 ipify 和 ipwho.is 查询你的公网 IP 地址及其国家/地区，并向 api.country.is 查询 Network Slice 中的国家/地区。关闭后，NetFluss 不显示外部 IP、国家/地区或旗帜。</value>
+  </data>
+  <data name="Search settings" xml:space="preserve">
+    <value>搜索设置</value>
+  </data>
+  <data name="No matching settings" xml:space="preserve">
+    <value>没有匹配的设置</value>
+  </data>
+  <data name="Welcome to NetFluss" xml:space="preserve">
+    <value>欢迎使用 NetFluss</value>
+  </data>
+  <data name="Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
+    <value>你的实时网速现在显示在菜单栏中。点按它可查看详细信息。那里的齿轮按钮可打开设置、统计、测速等。</value>
+  </data>
+  <data name="DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it." xml:space="preserve">
+    <value>DNS 切换和 VPN 需要一个小型辅助工具。NetFluss 会在你首次需要时请求安装。</value>
+  </data>
+  <data name="OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work." xml:space="preserve">
+    <value>OpenVPN 和 WireGuard 需要 Windows 14 或更高版本。IKEv2 和系统 VPN 仍可使用。</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>“{0}”已存在。</value>
   </data>
@@ -1842,9 +2160,6 @@
   </data>
   <data name="Combined total" xml:space="preserve">
     <value>合计</value>
-  </data>
-  <data name="Copy" xml:space="preserve">
-    <value>复制</value>
   </data>
   <data name="Costs width the digits need below 24 px. The row colour already shows direction." xml:space="preserve">
     <value>会占用 24 像素以下数字所需的宽度。行的颜色已表示方向。</value>
@@ -2467,14 +2782,8 @@
   <data name="Installed, version {0} — newer than this NetFluss ({1}). Update NetFluss, or reinstall the helper from this version." xml:space="preserve">
     <value>已安装，版本 {0} —— 比此 NetFluss（{1}）新。请更新 NetFluss，或重新安装此版本的辅助工具。</value>
   </data>
-  <data name="Privacy" xml:space="preserve">
-    <value>隐私</value>
-  </data>
   <data name="Privacy Policy" xml:space="preserve">
     <value>隐私政策</value>
-  </data>
-  <data name="Look up public IP addresses and countries" xml:space="preserve">
-    <value>查询公网 IP 地址和国家/地区</value>
   </data>
   <data name="Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." xml:space="preserve">
     <value>显示你的公网地址及其所在国家/地区（api.ipify.org、ipwho.is），以及 Network Slice 中服务器的国家/地区（api.country.is）。这些服务能看到所查询的地址。关闭后，这些信息将保持空白。</value>

@@ -89,7 +89,11 @@ enum VPNConfigImporter {
         }
 
         if url.pathExtension.lowercased() == "zip" {
-            return try importTree(root: try extractZip(url), ext: ext, suggestedName: url.deletingPathExtension().lastPathComponent, parse: parse, detectUnsupported: detectUnsupported)
+            // The extracted tree holds the same keys as the zip, and everything
+            // needed has been read into memory by the time this returns.
+            let extracted = try extractZip(url)
+            defer { try? fm.removeItem(at: extracted) }
+            return try importTree(root: extracted, ext: ext, suggestedName: url.deletingPathExtension().lastPathComponent, parse: parse, detectUnsupported: detectUnsupported)
         }
         if isDir.boolValue {
             return try importTree(root: url, ext: ext, suggestedName: url.lastPathComponent, parse: parse, detectUnsupported: detectUnsupported)
@@ -142,7 +146,7 @@ enum VPNConfigImporter {
         }
         guard !configRelPaths.isEmpty else { throw ImportError.noConfigsFound(ext) }
 
-        let byName = Dictionary(uniqueKeysWithValues: files.map { ($0.name, $0.data) })
+        let byName = Dictionary(files.map { ($0.name, $0.data) }, uniquingKeysWith: { first, _ in first })
         var endpoints: [VPNServerEndpoint] = []
         var requiresCredentials = false
         var unsupported: [String] = []
@@ -289,12 +293,9 @@ enum VPNConfigImporter {
         let dest = FileManager.default.temporaryDirectory
             .appendingPathComponent("netfluss-vpn-import-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        process.arguments = ["-x", "-k", zipURL.path, dest.path]
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
+        let result = ProcessRunner.run("/usr/bin/ditto", ["-x", "-k", zipURL.path, dest.path], timeout: 60)
+        guard result.launched, result.status == 0 else {
+            try? FileManager.default.removeItem(at: dest)
             throw ImportError.unreadable("could not extract \(zipURL.lastPathComponent)")
         }
         return dest

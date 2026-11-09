@@ -38,6 +38,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         let view = LocalizedRoot {
             PreferencesView()
                 .environmentObject(monitor)
+                .environmentObject(PreferencesNetworkState(monitor: monitor))
                 .environmentObject(VPNManager.shared)
         }
         let hosting = NSHostingController(rootView: view)
@@ -88,7 +89,12 @@ final class AddDNSWindowController {
         showPanel(editing: preset, onSave: onSave)
     }
 
-    private func showPanel(editing preset: DNSPreset?, onSave: @escaping (DNSPreset) -> Void) {
+    /// Built-in presets can be relabelled but not repointed.
+    func showRename(preset: DNSPreset, onSave: @escaping (DNSPreset) -> Void) {
+        showPanel(editing: preset, nameOnly: true, onSave: onSave)
+    }
+
+    private func showPanel(editing preset: DNSPreset?, nameOnly: Bool = false, onSave: @escaping (DNSPreset) -> Void) {
         if let panel {
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -96,7 +102,7 @@ final class AddDNSWindowController {
         }
         self.onSave = onSave
 
-        let view = AddDNSPanelView(editing: preset) { [weak self] saved in
+        let view = AddDNSPanelView(editing: preset, nameOnly: nameOnly) { [weak self] saved in
             onSave(saved)
             self?.close()
         } onCancel: { [weak self] in
@@ -106,11 +112,11 @@ final class AddDNSWindowController {
 
         let isEdit = preset != nil
         let panel = NSPanel(contentViewController: hosting)
-        panel.title = L10n.text(isEdit ? "Edit Custom DNS" : "Add Custom DNS")
+        panel.title = L10n.text(nameOnly ? "Rename DNS Profile" : (isEdit ? "Edit Custom DNS" : "Add Custom DNS"))
         panel.styleMask = [.titled, .closable, .nonactivatingPanel]
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = false
-        panel.setContentSize(NSSize(width: 340, height: 270))
+        panel.setContentSize(NSSize(width: 340, height: nameOnly ? 190 : 270))
         panel.isReleasedWhenClosed = false
         panel.center()
         panel.makeKeyAndOrderFront(nil)
@@ -383,6 +389,100 @@ struct EditRouterCredentialsPanelView: View {
         let trimmedUser = username.trimmingCharacters(in: .whitespaces)
         guard !trimmedUser.isEmpty, !password.isEmpty else { return }
         onSave(trimmedUser, password)
+    }
+}
+
+// MARK: - Clash API Secret Editor
+
+/// Editor for the proxy controller's `secret` (issue #61). Unlike the router
+/// credential editors an empty value is valid and meaningful: sing-box only
+/// requires a secret when `experimental.clash_api.secret` is set, and clearing
+/// the field is how a user removes one.
+@MainActor
+final class EditClashSecretController {
+    static let shared = EditClashSecretController()
+    private var panel: NSPanel?
+
+    func show(host: String, onSave: @escaping () -> Void = {}) {
+        if let panel {
+            panel.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let view = EditClashSecretPanelView(host: host) { [weak self] secret in
+            let store = VPNCredentialStore()
+            if secret.isEmpty {
+                store.delete(account: StatisticsManager.proxyNodeSecretAccount)
+            } else {
+                store.save(account: StatisticsManager.proxyNodeSecretAccount, username: nil, password: secret)
+            }
+            NotificationCenter.default.post(name: .routerCredentialsChanged, object: nil)
+            onSave()
+            self?.close()
+        } onCancel: { [weak self] in
+            self?.close()
+        }
+        let hosting = NSHostingController(rootView: LocalizedRoot { view })
+
+        let panel = NSPanel(contentViewController: hosting)
+        panel.title = L10n.text("Proxy Controller Secret")
+        panel.styleMask = [.titled, .closable, .nonactivatingPanel]
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.setContentSize(NSSize(width: 340, height: 240))
+        panel.isReleasedWhenClosed = false
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKey()
+
+        self.panel = panel
+    }
+
+    private func close() {
+        panel?.close()
+        panel = nil
+        reactivatePreferencesWindow()
+    }
+}
+
+struct EditClashSecretPanelView: View {
+    let host: String
+    let onSave: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var secret: String = ""
+
+    var body: some View {
+        VStack(spacing: 16) {
+            LText("Proxy Controller Secret")
+                .font(.headline)
+            Text("for \(host)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            LText("The secret from your client's Clash API settings. Leave empty if none is configured.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            SecureField("Secret", text: $secret)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { save() }
+            HStack(spacing: 12) {
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
+    }
+
+    private func save() {
+        onSave(secret.trimmingCharacters(in: .whitespaces))
     }
 }
 
@@ -687,6 +787,7 @@ struct EditOPNsenseCredentialsPanelView: View {
 
 struct AddDNSPanelView: View {
     let editingPreset: DNSPreset?
+    let nameOnly: Bool
     let onSave: (DNSPreset) -> Void
     let onCancel: () -> Void
 
@@ -697,9 +798,11 @@ struct AddDNSPanelView: View {
     @State private var quaternary: String = ""
 
     init(editing preset: DNSPreset? = nil,
+         nameOnly: Bool = false,
          onSave: @escaping (DNSPreset) -> Void,
          onCancel: @escaping () -> Void) {
         self.editingPreset = preset
+        self.nameOnly = nameOnly
         self.onSave = onSave
         self.onCancel = onCancel
     }
@@ -707,25 +810,37 @@ struct AddDNSPanelView: View {
     private var isEditing: Bool { editingPreset != nil }
 
     private var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !primary.trimmingCharacters(in: .whitespaces).isEmpty
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        return nameOnly || !primary.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
         VStack(spacing: 16) {
-            LText(isEditing ? "Edit Custom DNS" : "Add Custom DNS")
+            LText(nameOnly ? "Rename DNS Profile" : (isEditing ? "Edit Custom DNS" : "Add Custom DNS"))
                 .font(.headline)
             VStack(alignment: .leading, spacing: 8) {
                 TextField("Name (e.g. My DNS)", text: $name)
                     .textFieldStyle(.roundedBorder)
-                TextField("Primary DNS (e.g. 1.1.1.1)", text: $primary)
-                    .textFieldStyle(.roundedBorder)
-                TextField("Secondary DNS (optional)", text: $secondary)
-                    .textFieldStyle(.roundedBorder)
-                TextField("Tertiary DNS (optional)", text: $tertiary)
-                    .textFieldStyle(.roundedBorder)
-                TextField("Quaternary DNS (optional)", text: $quaternary)
-                    .textFieldStyle(.roundedBorder)
+                if nameOnly {
+                    Text(editingPreset?.servers.isEmpty == false
+                         ? (editingPreset?.servers.joined(separator: ", ") ?? "")
+                         : L10n.text("Uses the servers from DHCP"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    LText("Only the name changes — the servers stay as they are.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    TextField("Primary DNS (e.g. 1.1.1.1)", text: $primary)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Secondary DNS (optional)", text: $secondary)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Tertiary DNS (optional)", text: $tertiary)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Quaternary DNS (optional)", text: $quaternary)
+                        .textFieldStyle(.roundedBorder)
+                }
             }
             HStack(spacing: 12) {
                 Button("Cancel", action: onCancel)
@@ -759,8 +874,10 @@ struct AddDNSPanelView: View {
         onSave(DNSPreset(
             id: editingPreset?.id ?? UUID().uuidString,
             name: trimName,
-            servers: servers,
-            isBuiltIn: false
+            // A rename must not quietly redefine what the preset points at, or
+            // turn a built-in into a custom one.
+            servers: nameOnly ? (editingPreset?.servers ?? servers) : servers,
+            isBuiltIn: nameOnly ? (editingPreset?.isBuiltIn ?? false) : false
         ))
     }
 }

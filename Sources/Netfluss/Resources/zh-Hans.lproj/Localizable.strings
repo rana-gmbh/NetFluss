@@ -424,8 +424,11 @@
 "Off" = "关闭";
 "Dot" = "圆点";
 "Shield" = "盾牌";
+"Globe" = "地球";
+"Bars" = "条形";
 "VPN indicator color" = "VPN 指示器颜色";
 "Show when VPN is off" = "VPN 关闭时也显示";
+"Show flag only while a VPN is active" = "仅在 VPN 活动时显示旗帜";
 "Country flag" = "国家/地区旗帜";
 "Shown to the right of the rates. The VPN indicator also detects VPNs started by other apps. The country flag shows where your public IP is located (looked up via ipify.org and ipwho.is)." = "显示在速率右侧。VPN 指示器也能检测由其他应用启动的 VPN。国家/地区旗帜显示你的公网 IP 所在位置（通过 ipify.org 和 ipwho.is 查询）。";
 "Traffic Timer" = "流量计时器";
@@ -538,6 +541,7 @@
 "Could not start the VPN helper." = "无法启动 VPN 辅助程序。";
 "This VPN needs a username and password. Add them in the profile's settings and reconnect." = "此 VPN 需要用户名和密码。请在配置文件设置中添加后重新连接。";
 "The VPN connection stopped." = "VPN 连接已停止。";
+"NetFluss couldn't stop the VPN tunnel, so it may still be up. Try Disconnect again." = "NetFluss 无法停止 VPN 隧道，它可能仍在运行。请再次点按“断开”。";
 "This IKEv2 profile is missing its server settings." = "此 IKEv2 配置文件缺少服务器设置。";
 "The VPN password isn't stored — remove the profile and add it again." = "未存储 VPN 密码——请移除此配置文件后重新添加。";
 "No system VPN service is associated with this profile." = "此配置文件未关联任何系统 VPN 服务。";
@@ -586,3 +590,115 @@
 "The M-Lab upload server URL is missing." = "缺少 M-Lab 上传服务器 URL。";
 "The M-Lab upload socket closed unexpectedly." = "M-Lab 上传连接意外关闭。";
 "Auto-selected nearby edge" = "自动选择的附近边缘节点";
+
+/* Proxy node statistics (issue #61) */
+"Proxy nodes" = "代理节点";
+"Traffic per outbound node for the selected range, read from the proxy controller." = "所选时间范围内每个出站节点的流量，读取自代理控制器。";
+"No node traffic recorded yet." = "尚未记录节点流量。";
+"Unattributed" = "未归类";
+"Unknown node" = "未知节点";
+"Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS." = "“未归类”包含控制器已统计但无法归属到某个节点的流量——多为在两次读取之间建立并关闭的连接，以及 DNS。";
+"Collect proxy node statistics" = "收集代理节点统计";
+"Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription." = "记录每个出站节点承载的流量，适用于提供 Clash API 的客户端，如 sing-box、mihomo、Clash Verge 等。在按流量计费的订阅下尤其有用。";
+"Controller address" = "控制器地址";
+"Controller secret" = "控制器密钥";
+"(default)" = "（默认）";
+"Proxy Controller Address" = "代理控制器地址";
+"Host:port of the Clash API (default 127.0.0.1:9090)" = "Clash API 的 主机:端口（默认 127.0.0.1:9090）";
+"Proxy Controller Secret" = "代理控制器密钥";
+"The secret from your client's Clash API settings. Leave empty if none is configured." = "来自客户端 Clash API 设置的密钥。若未配置则留空。";
+"Secret" = "密钥";
+"Test connection" = "测试连接";
+"Connected — %d open connections." = "已连接——%d 个打开的连接。";
+"The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already." = "除非客户端设置了 external-controller，否则 Clash API 处于关闭状态。在 sing-box 中对应配置项为 experimental.clash_api.external_controller；多数图形客户端已在 127.0.0.1:9090 上启用。";
+"Could not read the proxy controller." = "无法读取代理控制器。";
+"The controller address is not valid." = "控制器地址无效。";
+"The controller rejected the secret." = "控制器拒绝了该密钥。";
+"The controller answered with HTTP %d." = "控制器返回 HTTP %d。";
+"No proxy controller is listening at that address." = "该地址上没有代理控制器在监听。";
+"The controller did not answer in time." = "控制器未及时响应。";
+"Could not reach the proxy controller." = "无法连接到代理控制器。";
+"The controller's answer was not in the expected format." = "控制器的响应格式不符合预期。";
+
+/* Menu bar link indicator */
+"Link indicator" = "连接指示器";
+"A Wi-Fi or cable symbol right of the rates, in the colour of the connection's state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic." = "速率右侧的 Wi-Fi 或网线图标，颜色表示连接状态：已连接、已连接但无网络，或未连接。图标会跟随当前承载流量的接口。";
+"Indicator size" = "指示器大小";
+"No internet" = "无网络";
+"Check internet access" = "检查互联网访问";
+"Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing." = "不启用此检查时，图标仅表示接口是否启用。启用后，NetFluss 会访问 Apple 的强制门户地址（macOS 自身也使用该地址），频率足以发现酒店登录页或上游中断，又低到几乎没有开销。";
+"Check address" = "检查地址";
+"Internet Check Address" = "互联网检查地址";
+"URL to check (empty uses Apple's)" = "要检查的 URL（留空则使用 Apple 的）";
+
+/* Automatic DNS by network */
+"Switch DNS automatically by network" = "按网络自动切换 DNS";
+"Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." = "根据你加入的 Wi-Fi 网络选择解析器——家中用一个，公共网络用另一个。需要特权助手，否则每次切换都会要求输入密码。";
+"Automatic DNS" = "自动 DNS";
+"Only this access point" = "仅此接入点";
+"Add current network" = "添加当前网络";
+"Any other network" = "任何其他网络";
+"Leave unchanged" = "保持不变";
+"Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home." = "适用于没有自身规则的网络，包括有线网络。这可以防止公共解析器跟着你回家。";
+"Show active resolver in menu bar" = "在菜单栏显示当前解析器";
+"Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden." = "仅在解析器不是系统默认值时显示，因此在未覆盖的网络中菜单栏保持安静。";
+"No rule applies to the current network." = "当前网络没有适用的规则。";
+"Install the privileged helper to let NetFluss change DNS without asking each time." = "安装特权助手，让 NetFluss 无需每次询问即可更改 DNS。";
+"Paused: a VPN profile is controlling DNS right now." = "已暂停：VPN 配置当前正在控制 DNS。";
+"Waiting for %@ to let you online before changing DNS." = "等待 %@ 允许你上网后再更改 DNS。";
+"Waiting for a connection to %@ before changing DNS." = "等待连接到 %@ 后再更改 DNS。";
+"Using %@ on this network." = "在此网络上使用 %@。";
+"Using %@ on %@." = "在 %2$@ 上使用 %1$@。";
+"No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." = "没有可用的 Wi-Fi 网络名称。请加入 Wi-Fi 网络，或在下方允许位置访问——没有它 macOS 不会提供网络名称。";
+"Resolver name colour" = "解析器名称颜色";
+"Rename DNS Profile" = "重命名 DNS 配置";
+"Only the name changes — the servers stay as they are." = "仅更改名称——服务器保持不变。";
+"Uses the servers from DHCP" = "使用来自 DHCP 的服务器";
+
+/* Launch at login (issue #67) */
+"macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions." = "macOS 正在等待你在“系统设置 → 通用 → 登录项与扩展”中允许 NetFluss。";
+"Open Login Items…" = "打开登录项…";
+"macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." = "只有从“应用程序”文件夹运行时，macOS 才会在登录时打开 NetFluss。请将其移到那里后重新打开。";
+
+/* Rate alignment (issue #65) */
+"Rate alignment" = "速率对齐";
+"Centered" = "居中";
+"Left" = "左对齐";
+"Right" = "右对齐";
+"Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column." = "选择“左对齐”或“右对齐”时，数字变化时箭头保持不动。“右对齐”还会让数字像列一样对齐。";
+"Administrator authentication is not available right now." = "当前无法进行管理员身份验证。";
+"Administrator permission was denied." = "管理员权限被拒绝。";
+"Administrator permission was not granted." = "未获得管理员权限。";
+"Administrator approval was denied." = "管理员批准被拒绝。";
+"Approve the Netfluss helper in System Settings, then try again." = "请在“系统设置”中批准 NetFluss 辅助工具，然后重试。";
+"Approve the Netfluss helper in System Settings → General → Login Items." = "请在“系统设置”→“通用”→“登录项”中批准 NetFluss 辅助工具。";
+"DNS change failed." = "更改 DNS 失败。";
+"DNS change was canceled." = "已取消更改 DNS。";
+"The active network service could not be identified." = "无法识别当前的网络服务。";
+"The privileged helper could not be started." = "无法启动特权辅助工具。";
+"The privileged helper could not be reached." = "无法连接特权辅助工具。";
+"The privileged helper could not be registered." = "无法注册特权辅助工具。";
+"The privileged helper bundle is incomplete." = "特权辅助工具不完整。";
+"The privileged helper connection could not be created." = "无法建立与特权辅助工具的连接。";
+"The privileged helper connection was invalidated." = "与特权辅助工具的连接已失效。";
+"The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry." = "特权辅助工具没有响应。请在“系统设置”→“通用”→“登录项”中批准它，或移除 NetFluss 条目后重新添加。";
+"The privileged helper is not signed correctly." = "特权辅助工具的签名不正确。";
+"The privileged helper returned an unknown status." = "特权辅助工具返回了未知状态。";
+"The privileged helper was interrupted." = "特权辅助工具已中断。";
+"The bundled helper executable is missing." = "缺少内置的辅助工具程序。";
+"Registration completed but the helper is still not registered." = "注册已完成，但辅助工具仍未注册。";
+"macOS could not reach Service Management." = "macOS 无法访问 Service Management。";
+"Online" = "在线";
+"Offline" = "离线";
+"Limited connection" = "连接受限";
+"Copy" = "复制";
+"NetFluss menu" = "NetFluss 菜单";
+"Privacy" = "隐私";
+"Look up public IP addresses and countries" = "查询公网 IP 地址和国家/地区";
+"Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag." = "向 ipify 和 ipwho.is 查询你的公网 IP 地址及其国家/地区，并向 api.country.is 查询 Network Slice 中的国家/地区。关闭后，NetFluss 不显示外部 IP、国家/地区或旗帜。";
+"Search settings" = "搜索设置";
+"No matching settings" = "没有匹配的设置";
+"Welcome to NetFluss" = "欢迎使用 NetFluss";
+"Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more." = "你的实时网速现在显示在菜单栏中。点按它可查看详细信息。那里的齿轮按钮可打开设置、统计、测速等。";
+"DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it." = "DNS 切换和 VPN 需要一个小型辅助工具。NetFluss 会在你首次需要时请求安装。";
+"OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work." = "OpenVPN 和 WireGuard 需要 macOS 14 或更高版本。IKEv2 和系统 VPN 仍可使用。";

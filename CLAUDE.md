@@ -37,11 +37,11 @@ ditto .build/apple/Products/Release/Sparkle.framework NetFluss.app/Contents/Fram
 # Bundle the universal (arm64 + x86_64) VPN toolchain: openvpn + WireGuard
 # (wireguard-go, wg, wg-quick, bash) and their dylib closures, all rewritten to
 # @loader_path and signed. Needs no `brew install` — it downloads pinned Homebrew
-# bottles straight from ghcr.io (both arm64_ventura and x86_64 ventura), so the
+# bottles straight from ghcr.io (both arm64_sonoma and x86_64 sonoma), so the
 # Intel slice is produced on Apple Silicon with no Intel Mac / Intel CI runner.
-# Both slices target macOS 13, so VPN runs on Intel 13/14/15. Version pins live at
+# Both slices target macOS 14, so OpenVPN and WireGuard need macOS 14 (the app itself runs on 13). Version pins live at
 # the top of the script; refresh only to versions that still publish an x86_64
-# `ventura` bottle. Use INTEL=0 for a quick arm64-only local bundle.
+# `sonoma` bottle, and update Packaging/VPN/bottles.sha256 with them. Use INTEL=0 for a quick arm64-only local bundle.
 ./Packaging/VPN/build-vpn-bundle.sh NetFluss.app/Contents/Library/VPN "Developer ID Application: Rana GmbH (D6P24X5377)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.x.x" NetFluss.app/Contents/Info.plist
 xattr -cr NetFluss.app   # strip resource-fork/Finder xattrs or codesign fails with "resource fork ... not allowed"

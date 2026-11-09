@@ -367,7 +367,7 @@ struct NetworkSliceView: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help(L10n.text(helpKey))
+        .iconButton(helpKey)
     }
 
     private func sliceRow(_ entry: NetworkSliceEntry, maxTotal: UInt64, showsHostIcons: Bool, isSelectable: Bool, displaysRates: Bool) -> some View {
@@ -496,7 +496,7 @@ struct NetworkSliceView: View {
                     .font(.system(size: 13, weight: .semibold))
             }
             .buttonStyle(.bordered)
-            .help(L10n.text("Back"))
+            .iconButton("Back")
 
             detailHeaderIcon(selection: selection, entry: entry)
 

@@ -1255,11 +1255,20 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Shield" xml:space="preserve">
     <value>Schild</value>
   </data>
+  <data name="Globe" xml:space="preserve">
+    <value>Globus</value>
+  </data>
+  <data name="Bars" xml:space="preserve">
+    <value>Balken</value>
+  </data>
   <data name="VPN indicator color" xml:space="preserve">
     <value>Farbe der VPN-Anzeige</value>
   </data>
   <data name="Show when VPN is off" xml:space="preserve">
     <value>Auch anzeigen, wenn VPN aus ist</value>
+  </data>
+  <data name="Show flag only while a VPN is active" xml:space="preserve">
+    <value>Flagge nur bei aktivem VPN anzeigen</value>
   </data>
   <data name="Country flag" xml:space="preserve">
     <value>Länderflagge</value>
@@ -1597,6 +1606,9 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="The VPN connection stopped." xml:space="preserve">
     <value>Die VPN-Verbindung wurde beendet.</value>
   </data>
+  <data name="NetFluss couldn&apos;t stop the VPN tunnel, so it may still be up. Try Disconnect again." xml:space="preserve">
+    <value>NetFluss konnte den VPN-Tunnel nicht beenden, er könnte also noch aktiv sein. Klicke erneut auf „Trennen“.</value>
+  </data>
   <data name="This IKEv2 profile is missing its server settings." xml:space="preserve">
     <value>Diesem IKEv2-Profil fehlen die Server-Einstellungen.</value>
   </data>
@@ -1741,6 +1753,312 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Auto-selected nearby edge" xml:space="preserve">
     <value>Automatisch gewählter nahegelegener Edge-Server</value>
   </data>
+  <data name="Proxy nodes" xml:space="preserve">
+    <value>Proxy-Nodes</value>
+  </data>
+  <data name="Traffic per outbound node for the selected range, read from the proxy controller." xml:space="preserve">
+    <value>Datenverkehr pro ausgehendem Node im gewählten Zeitraum, ausgelesen über den Proxy-Controller.</value>
+  </data>
+  <data name="No node traffic recorded yet." xml:space="preserve">
+    <value>Noch kein Node-Datenverkehr aufgezeichnet.</value>
+  </data>
+  <data name="Unattributed" xml:space="preserve">
+    <value>Nicht zugeordnet</value>
+  </data>
+  <data name="Unknown node" xml:space="preserve">
+    <value>Unbekannter Node</value>
+  </data>
+  <data name="Unattributed covers traffic the controller counted but could not pin to a node — mostly connections that opened and closed between two reads, plus DNS." xml:space="preserve">
+    <value>„Nicht zugeordnet“ umfasst Datenverkehr, den der Controller gezählt, aber keinem Node zugeordnet hat — meist Verbindungen, die zwischen zwei Abfragen geöffnet und wieder geschlossen wurden, sowie DNS.</value>
+  </data>
+  <data name="Collect proxy node statistics" xml:space="preserve">
+    <value>Proxy-Node-Statistiken erfassen</value>
+  </data>
+  <data name="Records how much traffic each outbound node carried, for clients that expose the Clash API — sing-box, mihomo, Clash Verge and others. Useful with a metered subscription." xml:space="preserve">
+    <value>Zeichnet auf, wie viel Datenverkehr jeder ausgehende Node übertragen hat — für Clients mit Clash-API wie sing-box, mihomo oder Clash Verge. Nützlich bei einem Abo mit Datenlimit.</value>
+  </data>
+  <data name="Controller address" xml:space="preserve">
+    <value>Controller-Adresse</value>
+  </data>
+  <data name="Controller secret" xml:space="preserve">
+    <value>Controller-Secret</value>
+  </data>
+  <data name="(default)" xml:space="preserve">
+    <value>(Standard)</value>
+  </data>
+  <data name="Proxy Controller Address" xml:space="preserve">
+    <value>Proxy-Controller-Adresse</value>
+  </data>
+  <data name="Host:port of the Clash API (default 127.0.0.1:9090)" xml:space="preserve">
+    <value>Host:Port der Clash-API (Standard 127.0.0.1:9090)</value>
+  </data>
+  <data name="Proxy Controller Secret" xml:space="preserve">
+    <value>Proxy-Controller-Secret</value>
+  </data>
+  <data name="The secret from your client&apos;s Clash API settings. Leave empty if none is configured." xml:space="preserve">
+    <value>Das Secret aus den Clash-API-Einstellungen deines Clients. Leer lassen, wenn keines konfiguriert ist.</value>
+  </data>
+  <data name="Secret" xml:space="preserve">
+    <value>Secret</value>
+  </data>
+  <data name="Test connection~2" xml:space="preserve">
+    <value>Verbindung testen</value>
+  </data>
+  <data name="Connected — {0} open connections." xml:space="preserve">
+    <value>Verbunden — {0} offene Verbindungen.</value>
+  </data>
+  <data name="The Clash API is off unless your client sets external-controller. In sing-box that is experimental.clash_api.external_controller in the config; most GUI clients enable it on 127.0.0.1:9090 already." xml:space="preserve">
+    <value>Die Clash-API ist deaktiviert, solange dein Client keinen external-controller setzt. In sing-box ist das experimental.clash_api.external_controller in der Konfiguration; die meisten GUI-Clients aktivieren sie bereits auf 127.0.0.1:9090.</value>
+  </data>
+  <data name="Could not read the proxy controller." xml:space="preserve">
+    <value>Der Proxy-Controller konnte nicht gelesen werden.</value>
+  </data>
+  <data name="The controller address is not valid." xml:space="preserve">
+    <value>Die Controller-Adresse ist ungültig.</value>
+  </data>
+  <data name="The controller rejected the secret." xml:space="preserve">
+    <value>Der Controller hat das Secret abgelehnt.</value>
+  </data>
+  <data name="The controller answered with HTTP {0}." xml:space="preserve">
+    <value>Der Controller antwortete mit HTTP {0}.</value>
+  </data>
+  <data name="No proxy controller is listening at that address." xml:space="preserve">
+    <value>An dieser Adresse lauscht kein Proxy-Controller.</value>
+  </data>
+  <data name="The controller did not answer in time." xml:space="preserve">
+    <value>Der Controller hat nicht rechtzeitig geantwortet.</value>
+  </data>
+  <data name="Could not reach the proxy controller." xml:space="preserve">
+    <value>Der Proxy-Controller ist nicht erreichbar.</value>
+  </data>
+  <data name="The controller&apos;s answer was not in the expected format." xml:space="preserve">
+    <value>Die Antwort des Controllers hatte nicht das erwartete Format.</value>
+  </data>
+  <data name="Link indicator" xml:space="preserve">
+    <value>Verbindungsanzeige</value>
+  </data>
+  <data name="A Wi-Fi or cable symbol right of the rates, in the colour of the connection&apos;s state: connected, connected without internet, or not connected. The symbol follows whichever interface carries the traffic." xml:space="preserve">
+    <value>Ein WLAN- oder Kabelsymbol rechts neben den Raten, in der Farbe des Verbindungszustands: verbunden, verbunden ohne Internet oder nicht verbunden. Das Symbol richtet sich nach der Schnittstelle, über die der Verkehr läuft.</value>
+  </data>
+  <data name="Indicator size" xml:space="preserve">
+    <value>Größe der Anzeigen</value>
+  </data>
+  <data name="No internet" xml:space="preserve">
+    <value>Kein Internet</value>
+  </data>
+  <data name="Check internet access" xml:space="preserve">
+    <value>Internetzugang prüfen</value>
+  </data>
+  <data name="Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple&apos;s captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing." xml:space="preserve">
+    <value>Ohne diese Prüfung zeigt das Symbol nur, ob die Schnittstelle aktiv ist. Mit ihr fragt NetFluss die Captive-Portal-Adresse von Apple ab — dieselbe, die Windows selbst verwendet — oft genug, um eine Hotel-Anmeldeseite oder eine tote Leitung zu bemerken, und selten genug, dass es nichts kostet.</value>
+  </data>
+  <data name="Check address" xml:space="preserve">
+    <value>Prüfadresse</value>
+  </data>
+  <data name="Internet Check Address" xml:space="preserve">
+    <value>Adresse für die Internetprüfung</value>
+  </data>
+  <data name="URL to check (empty uses Apple&apos;s)" xml:space="preserve">
+    <value>Zu prüfende URL (leer = Apple)</value>
+  </data>
+  <data name="Switch DNS automatically by network" xml:space="preserve">
+    <value>DNS automatisch nach Netzwerk wechseln</value>
+  </data>
+  <data name="Picks a resolver from the Wi-Fi network you join — one for home, another for public networks. Needs the privileged helper, otherwise every switch would ask for your password." xml:space="preserve">
+    <value>Wählt den Resolver anhand des WLANs, mit dem du dich verbindest — einen für zu Hause, einen für öffentliche Netze. Benötigt den privilegierten Helfer, sonst würde jeder Wechsel nach deinem Passwort fragen.</value>
+  </data>
+  <data name="Automatic DNS" xml:space="preserve">
+    <value>Automatisches DNS</value>
+  </data>
+  <data name="Only this access point" xml:space="preserve">
+    <value>Nur dieser Access Point</value>
+  </data>
+  <data name="Add current network" xml:space="preserve">
+    <value>Aktuelles Netzwerk hinzufügen</value>
+  </data>
+  <data name="Any other network" xml:space="preserve">
+    <value>Jedes andere Netzwerk</value>
+  </data>
+  <data name="Leave unchanged" xml:space="preserve">
+    <value>Unverändert lassen</value>
+  </data>
+  <data name="Applied on networks without a rule of their own, including wired ones. This is what stops a public resolver following you home." xml:space="preserve">
+    <value>Gilt für Netzwerke ohne eigene Regel, auch kabelgebundene. Das verhindert, dass dir ein öffentlicher Resolver nach Hause folgt.</value>
+  </data>
+  <data name="Show active resolver in menu bar" xml:space="preserve">
+    <value>Aktiven Resolver in der Menüleiste anzeigen</value>
+  </data>
+  <data name="Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden." xml:space="preserve">
+    <value>Erscheint nur, solange der Resolver nicht der Systemstandard ist, damit die Menüleiste in einem nicht überschriebenen Netzwerk ruhig bleibt.</value>
+  </data>
+  <data name="No rule applies to the current network." xml:space="preserve">
+    <value>Für das aktuelle Netzwerk gilt keine Regel.</value>
+  </data>
+  <data name="Install the privileged helper to let NetFluss change DNS without asking each time." xml:space="preserve">
+    <value>Installiere den privilegierten Helfer, damit NetFluss DNS ändern kann, ohne jedes Mal zu fragen.</value>
+  </data>
+  <data name="Paused: a VPN profile is controlling DNS right now." xml:space="preserve">
+    <value>Pausiert: Ein VPN-Profil steuert gerade das DNS.</value>
+  </data>
+  <data name="Waiting for {0} to let you online before changing DNS." xml:space="preserve">
+    <value>Warten darauf, dass {0} dich online lässt, bevor DNS geändert wird.</value>
+  </data>
+  <data name="Waiting for a connection to {0} before changing DNS." xml:space="preserve">
+    <value>Warten auf eine Verbindung mit {0}, bevor DNS geändert wird.</value>
+  </data>
+  <data name="Using {0} on this network." xml:space="preserve">
+    <value>Verwendet {0} in diesem Netzwerk.</value>
+  </data>
+  <data name="Using {0} on {1}." xml:space="preserve">
+    <value>Verwendet {0} in {1}.</value>
+  </data>
+  <data name="No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it." xml:space="preserve">
+    <value>Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube unten den Ortungszugriff — ohne ihn gibt Windows den Netzwerknamen nicht preis.</value>
+  </data>
+  <data name="Resolver name colour" xml:space="preserve">
+    <value>Farbe des Resolver-Namens</value>
+  </data>
+  <data name="Rename DNS Profile" xml:space="preserve">
+    <value>DNS-Profil umbenennen</value>
+  </data>
+  <data name="Only the name changes — the servers stay as they are." xml:space="preserve">
+    <value>Nur der Name ändert sich — die Server bleiben unverändert.</value>
+  </data>
+  <data name="Uses the servers from DHCP" xml:space="preserve">
+    <value>Verwendet die Server von DHCP</value>
+  </data>
+  <data name="macOS is waiting for you to allow NetFluss under System Settings → General → Login Items &amp; Extensions." xml:space="preserve">
+    <value>Windows wartet darauf, dass du NetFluss unter Systemeinstellungen → Allgemein → Anmeldeobjekte &amp; Erweiterungen erlaubst.</value>
+  </data>
+  <data name="Open Login Items…" xml:space="preserve">
+    <value>Anmeldeobjekte öffnen…</value>
+  </data>
+  <data name="macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again." xml:space="preserve">
+    <value>Windows öffnet NetFluss beim Anmelden nur, wenn es aus dem Ordner „Programme“ gestartet wird. Verschiebe es dorthin und öffne es erneut.</value>
+  </data>
+  <data name="Rate alignment" xml:space="preserve">
+    <value>Ausrichtung der Raten</value>
+  </data>
+  <data name="Centered" xml:space="preserve">
+    <value>Zentriert</value>
+  </data>
+  <data name="Left" xml:space="preserve">
+    <value>Links</value>
+  </data>
+  <data name="Right" xml:space="preserve">
+    <value>Rechts</value>
+  </data>
+  <data name="Left and Right keep the arrows in place while the numbers change. Right also lines the numbers up like a column." xml:space="preserve">
+    <value>Bei „Links“ und „Rechts“ bleiben die Pfeile an ihrem Platz, während sich die Zahlen ändern. „Rechts“ richtet die Zahlen außerdem wie eine Spalte aus.</value>
+  </data>
+  <data name="Administrator authentication is not available right now." xml:space="preserve">
+    <value>Die Administrator-Anmeldung ist gerade nicht verfügbar.</value>
+  </data>
+  <data name="Administrator permission was denied." xml:space="preserve">
+    <value>Die Administratorberechtigung wurde verweigert.</value>
+  </data>
+  <data name="Administrator permission was not granted." xml:space="preserve">
+    <value>Die Administratorberechtigung wurde nicht erteilt.</value>
+  </data>
+  <data name="Administrator approval was denied." xml:space="preserve">
+    <value>Die Administrator-Freigabe wurde verweigert.</value>
+  </data>
+  <data name="Approve the Netfluss helper in System Settings, then try again." xml:space="preserve">
+    <value>Erlaube den NetFluss-Helfer in den Systemeinstellungen und versuche es erneut.</value>
+  </data>
+  <data name="Approve the Netfluss helper in System Settings → General → Login Items." xml:space="preserve">
+    <value>Erlaube den NetFluss-Helfer unter Systemeinstellungen → Allgemein → Anmeldeobjekte.</value>
+  </data>
+  <data name="DNS change failed." xml:space="preserve">
+    <value>Die DNS-Änderung ist fehlgeschlagen.</value>
+  </data>
+  <data name="DNS change was canceled." xml:space="preserve">
+    <value>Die DNS-Änderung wurde abgebrochen.</value>
+  </data>
+  <data name="The active network service could not be identified." xml:space="preserve">
+    <value>Der aktive Netzwerkdienst konnte nicht ermittelt werden.</value>
+  </data>
+  <data name="The privileged helper could not be started." xml:space="preserve">
+    <value>Der privilegierte Helfer konnte nicht gestartet werden.</value>
+  </data>
+  <data name="The privileged helper could not be reached." xml:space="preserve">
+    <value>Der privilegierte Helfer ist nicht erreichbar.</value>
+  </data>
+  <data name="The privileged helper could not be registered." xml:space="preserve">
+    <value>Der privilegierte Helfer konnte nicht registriert werden.</value>
+  </data>
+  <data name="The privileged helper bundle is incomplete." xml:space="preserve">
+    <value>Das Paket des privilegierten Helfers ist unvollständig.</value>
+  </data>
+  <data name="The privileged helper connection could not be created." xml:space="preserve">
+    <value>Die Verbindung zum privilegierten Helfer konnte nicht hergestellt werden.</value>
+  </data>
+  <data name="The privileged helper connection was invalidated." xml:space="preserve">
+    <value>Die Verbindung zum privilegierten Helfer wurde ungültig.</value>
+  </data>
+  <data name="The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry." xml:space="preserve">
+    <value>Der privilegierte Helfer hat nicht geantwortet. Erlaube ihn unter Systemeinstellungen → Allgemein → Anmeldeobjekte oder entferne den NetFluss-Eintrag und füge ihn neu hinzu.</value>
+  </data>
+  <data name="The privileged helper is not signed correctly." xml:space="preserve">
+    <value>Der privilegierte Helfer ist nicht korrekt signiert.</value>
+  </data>
+  <data name="The privileged helper returned an unknown status." xml:space="preserve">
+    <value>Der privilegierte Helfer hat einen unbekannten Status gemeldet.</value>
+  </data>
+  <data name="The privileged helper was interrupted." xml:space="preserve">
+    <value>Der privilegierte Helfer wurde unterbrochen.</value>
+  </data>
+  <data name="The bundled helper executable is missing." xml:space="preserve">
+    <value>Die Programmdatei des Helfers fehlt.</value>
+  </data>
+  <data name="Registration completed but the helper is still not registered." xml:space="preserve">
+    <value>Die Registrierung wurde abgeschlossen, aber der Helfer ist noch nicht registriert.</value>
+  </data>
+  <data name="macOS could not reach Service Management." xml:space="preserve">
+    <value>Windows konnte Service Management nicht erreichen.</value>
+  </data>
+  <data name="Online" xml:space="preserve">
+    <value>Online</value>
+  </data>
+  <data name="Offline" xml:space="preserve">
+    <value>Offline</value>
+  </data>
+  <data name="Limited connection" xml:space="preserve">
+    <value>Eingeschränkte Verbindung</value>
+  </data>
+  <data name="Copy" xml:space="preserve">
+    <value>Kopieren</value>
+  </data>
+  <data name="NetFluss menu" xml:space="preserve">
+    <value>NetFluss-Menü</value>
+  </data>
+  <data name="Privacy" xml:space="preserve">
+    <value>Datenschutz</value>
+  </data>
+  <data name="Look up public IP addresses and countries" xml:space="preserve">
+    <value>Öffentliche IP-Adressen und Länder abfragen</value>
+  </data>
+  <data name="Asks ipify and ipwho.is for your public IP address and its country, and api.country.is for the countries in Network Slice. With this off, NetFluss shows no external IP, country or flag." xml:space="preserve">
+    <value>Fragt ipify und ipwho.is nach deiner öffentlichen IP-Adresse und ihrem Land sowie api.country.is nach den Ländern in Network Slice. Ist dies aus, zeigt NetFluss keine externe IP, kein Land und keine Flagge.</value>
+  </data>
+  <data name="Search settings" xml:space="preserve">
+    <value>Einstellungen durchsuchen</value>
+  </data>
+  <data name="No matching settings" xml:space="preserve">
+    <value>Keine passenden Einstellungen</value>
+  </data>
+  <data name="Welcome to NetFluss" xml:space="preserve">
+    <value>Willkommen bei NetFluss</value>
+  </data>
+  <data name="Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more." xml:space="preserve">
+    <value>Deine aktuelle Netzwerkgeschwindigkeit steht jetzt in der Menüleiste. Klicke darauf für die Details. Über das Zahnrad dort erreichst du Einstellungen, Statistiken, Speedtest und mehr.</value>
+  </data>
+  <data name="DNS switching and VPN use a small helper. NetFluss asks for it the first time you need it." xml:space="preserve">
+    <value>DNS-Umschaltung und VPN nutzen einen kleinen Helfer. NetFluss fragt danach, sobald du ihn zum ersten Mal brauchst.</value>
+  </data>
+  <data name="OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work." xml:space="preserve">
+    <value>OpenVPN und WireGuard benötigen Windows 14 oder neuer. IKEv2 und System-VPNs funktionieren weiterhin.</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>„{0}“ ist bereits vorhanden.</value>
   </data>
@@ -1842,9 +2160,6 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   </data>
   <data name="Combined total" xml:space="preserve">
     <value>Gesamtsumme</value>
-  </data>
-  <data name="Copy" xml:space="preserve">
-    <value>Kopieren</value>
   </data>
   <data name="Costs width the digits need below 24 px. The row colour already shows direction." xml:space="preserve">
     <value>Kostet Breite, die die Ziffern unter 24 px brauchen. Die Zeilenfarbe zeigt die Richtung bereits an.</value>
@@ -2467,14 +2782,8 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   <data name="Installed, version {0} — newer than this NetFluss ({1}). Update NetFluss, or reinstall the helper from this version." xml:space="preserve">
     <value>Installiert, Version {0} – neuer als dieses NetFluss ({1}). Aktualisiere NetFluss oder installiere den Helfer dieser Version neu.</value>
   </data>
-  <data name="Privacy" xml:space="preserve">
-    <value>Datenschutz</value>
-  </data>
   <data name="Privacy Policy" xml:space="preserve">
     <value>Datenschutzerklärung</value>
-  </data>
-  <data name="Look up public IP addresses and countries" xml:space="preserve">
-    <value>Öffentliche IP-Adressen und Länder abfragen</value>
   </data>
   <data name="Shows your public address and its country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice (api.country.is). These services see the addresses asked about. When off, they stay empty." xml:space="preserve">
     <value>Zeigt deine öffentliche Adresse und ihr Land (api.ipify.org, ipwho.is) sowie die Länder der Server in Network Slice (api.country.is). Diese Dienste sehen die abgefragten Adressen. Ausgeschaltet bleiben diese Angaben leer.</value>

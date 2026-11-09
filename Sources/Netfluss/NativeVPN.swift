@@ -16,6 +16,7 @@
 // along with Netfluss. If not, see <https://www.gnu.org/licenses/>.
 
 import Foundation
+import SystemConfiguration
 
 /// Controls macOS-native VPN services (IKEv2 / IPsec / L2TP) via `scutil --nc`.
 /// These are the VPNs configured in System Settings or installed from a provider
@@ -27,6 +28,8 @@ enum NativeVPN {
         var id: String { name }
         let name: String
         let kind: String   // e.g. "IKEv2", "L2TP", "IPSec"
+        /// SystemConfiguration's id for the service, which status callbacks need.
+        var serviceID: String? = nil
     }
 
     /// Configured native VPN services, parsed from `scutil --nc list`.
@@ -42,9 +45,17 @@ enum NativeVPN {
             if let lb = line.lastIndex(of: "["), let rb = line.lastIndex(of: "]"), lb < rb {
                 kind = String(line[line.index(after: lb)..<rb])
             }
-            services.append(Service(name: name, kind: kind))
+            services.append(Service(name: name, kind: kind, serviceID: serviceID(inListLine: String(line[..<nameStart]))))
         }
         return services
+    }
+
+    /// The service id in the part of a `scutil --nc list` line before the name:
+    /// `* (Disconnected)   4F3E…-…   IPSec`.
+    static func serviceID(inListLine prefix: String) -> String? {
+        prefix.split(whereSeparator: \.isWhitespace)
+            .first { UUID(uuidString: String($0)) != nil }
+            .map(String.init)
     }
 
     /// Current status word ("Connected", "Connecting", "Disconnected", …).
@@ -65,16 +76,72 @@ enum NativeVPN {
     }
 
     private static func run(_ args: [String]) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/scutil")
-        process.arguments = args
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        do { try process.run() } catch { return nil }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        return String(data: data, encoding: .utf8)
+        let result = ProcessRunner.run("/usr/sbin/scutil", args)
+        guard result.launched, result.status == 0 else { return nil }
+        return result.stdoutText
+    }
+}
+
+
+/// Follows one system VPN service through SystemConfiguration's status
+/// callback, so a drop or a change made in System Settings shows up at once
+/// without polling `scutil`.
+@MainActor
+final class NativeVPNWatcher {
+    enum State: Equatable {
+        case connecting, connected, disconnecting, disconnected
+    }
+
+    private var connection: SCNetworkConnection?
+    private let onChange: (State) -> Void
+    private var lastState: State?
+
+    init?(serviceID: String, onChange: @escaping (State) -> Void) {
+        self.onChange = onChange
+        // Every stored property is set, so self can be handed to the callback.
+        // Unretained: `invalidate()` unschedules before the watcher goes away.
+        var context = SCNetworkConnectionContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil,
+            release: nil,
+            copyDescription: nil
+        )
+        let callback: SCNetworkConnectionCallBack = { _, status, info in
+            guard let info else { return }
+            let watcher = Unmanaged<NativeVPNWatcher>.fromOpaque(info).takeUnretainedValue()
+            MainActor.assumeIsolated { watcher.deliver(status) }
+        }
+        guard let connection = SCNetworkConnectionCreateWithServiceID(nil, serviceID as CFString, callback, &context) else {
+            return nil
+        }
+        self.connection = connection
+    }
+
+    /// Start receiving changes on the main run loop, and report the state now.
+    func start() {
+        guard let connection else { return }
+        SCNetworkConnectionScheduleWithRunLoop(connection, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
+        deliver(SCNetworkConnectionGetStatus(connection))
+    }
+
+    /// Must run before the watcher goes away: the callback holds it unretained.
+    func invalidate() {
+        guard let connection else { return }
+        SCNetworkConnectionUnscheduleFromRunLoop(connection, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
+        self.connection = nil
+    }
+
+    private func deliver(_ status: SCNetworkConnectionStatus) {
+        let state: State
+        switch status {
+        case .connected: state = .connected
+        case .connecting: state = .connecting
+        case .disconnecting: state = .disconnecting
+        default: state = .disconnected   // .disconnected and .invalid
+        }
+        guard state != lastState else { return }
+        lastState = state
+        onChange(state)
     }
 }

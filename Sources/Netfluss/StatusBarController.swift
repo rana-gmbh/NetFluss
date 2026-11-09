@@ -31,6 +31,23 @@ private enum MenuBarDisplayStyle: String {
     case dashboardBasic = "dashboardBasic"
 }
 
+/// Where the rates sit inside their space (issue #65).
+///
+/// `center` is the original behaviour: each line is centred on its *live*
+/// width, so the arrows drift as the digits and units change. `left` and
+/// `right` lay everything out against a block sized from the reference text
+/// instead, so the arrows never move; they differ only in where each number
+/// sits within its own fixed-width slot.
+private enum MenuBarRateAlignment: String {
+    case center
+    case left
+    case right
+
+    static var current: MenuBarRateAlignment {
+        MenuBarRateAlignment(rawValue: UserDefaults.standard.string(forKey: "menuBarRateAlignment") ?? "") ?? .center
+    }
+}
+
 private struct MenuBarMetrics {
     let rxRateBps: Double
     let txRateBps: Double
@@ -71,23 +88,41 @@ private struct MenuBarDisplayModel {
     let referenceTotalText: String
     let ringProgress: CGFloat
     let accessories: MenuBarAccessories
+    let alignment: MenuBarRateAlignment
 }
 
 /// Optional status marks drawn to the right of the rates: a VPN indicator
 /// (dot or shield) and the flag of the public IP's country (issue #60).
+/// Both are sized from `menuBarVPNIndicatorSize`, not from the rate font, so
+/// they can be read at a glance in a 22 pt menu bar.
 private struct MenuBarAccessories {
     enum VPNMark {
         case dot(active: Bool, color: NSColor, diameter: CGFloat)
         case symbol(NSImage)
     }
 
+    /// Wi-Fi / cable glyph, coloured by link health. Drawn leftmost so the row
+    /// reads "which connection, is it tunnelled, where does it come out".
+    let link: NSImage?
     let vpn: VPNMark?
     let flag: String?
     let flagFont: NSFont
+    /// Active DNS resolver's name, drawn last so the symbols stay grouped.
+    let resolver: String?
+    let resolverFont: NSFont
+    let resolverColor: NSColor
 
-    static let none = MenuBarAccessories(vpn: nil, flag: nil, flagFont: .systemFont(ofSize: 10))
+    static let none = MenuBarAccessories(
+        link: nil,
+        vpn: nil,
+        flag: nil,
+        flagFont: .systemFont(ofSize: 10),
+        resolver: nil,
+        resolverFont: .systemFont(ofSize: 10),
+        resolverColor: .secondaryLabelColor
+    )
 
-    var isEmpty: Bool { vpn == nil && flag == nil }
+    var isEmpty: Bool { link == nil && vpn == nil && flag == nil && resolver == nil }
 }
 
 private final class MenuBarRatesView: NSView {
@@ -96,7 +131,7 @@ private final class MenuBarRatesView: NSView {
     private static let stackSpacing: CGFloat = 1
     private static let capsulePadding: CGFloat = 7
     private static let accessoryGap: CGFloat = 5
-    private static let accessorySpacing: CGFloat = 4
+    private static let accessorySpacing: CGFloat = 3
 
     private struct TextRun {
         let text: String
@@ -204,8 +239,12 @@ private final class MenuBarRatesView: NSView {
     /// Width of the accessory items themselves, including the spacing between them.
     private static func accessoryItemsWidth(_ accessories: MenuBarAccessories) -> CGFloat {
         var widths: [CGFloat] = []
+        if let link = accessories.link { widths.append(link.size.width) }
         if let vpn = accessories.vpn { widths.append(size(of: vpn).width) }
         if let flag = accessories.flag { widths.append(flagSize(flag, font: accessories.flagFont).width) }
+        if let resolver = accessories.resolver {
+            widths.append(textSize(resolver, font: accessories.resolverFont).width)
+        }
         guard !widths.isEmpty else { return 0 }
         return widths.reduce(0, +) + accessorySpacing * CGFloat(widths.count - 1)
     }
@@ -243,12 +282,27 @@ private final class MenuBarRatesView: NSView {
         (flag as NSString).size(withAttributes: [.font: font])
     }
 
+    private static func textSize(_ text: String, font: NSFont) -> NSSize {
+        (text as NSString).size(withAttributes: [.font: font])
+    }
+
     private func drawAccessories(_ model: MenuBarDisplayModel) {
         let accessories = model.accessories
         guard !accessories.isEmpty else { return }
 
         var x = accessoryTrailingEdge(for: model) - Self.accessoryItemsWidth(accessories)
         let midY = bounds.midY
+
+        if let link = accessories.link {
+            let rect = NSRect(
+                x: x,
+                y: floor(midY - link.size.height / 2),
+                width: link.size.width,
+                height: link.size.height
+            )
+            link.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            x += link.size.width + Self.accessorySpacing
+        }
 
         if let vpn = accessories.vpn {
             let size = Self.size(of: vpn)
@@ -276,6 +330,19 @@ private final class MenuBarRatesView: NSView {
                 at: NSPoint(x: x, y: floor(midY - size.height / 2)),
                 withAttributes: [.font: accessories.flagFont]
             )
+            x += size.width + Self.accessorySpacing
+        }
+
+        if let resolver = accessories.resolver {
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: accessories.resolverFont,
+                .foregroundColor: accessories.resolverColor
+            ]
+            let size = Self.textSize(resolver, font: accessories.resolverFont)
+            (resolver as NSString).draw(
+                at: NSPoint(x: x, y: floor(midY - size.height / 2)),
+                withAttributes: attributes
+            )
         }
     }
 
@@ -283,6 +350,73 @@ private final class MenuBarRatesView: NSView {
     private var ratesWidthInBounds: CGFloat {
         guard let model else { return bounds.width }
         return bounds.width - Self.trailingReserve(for: model)
+    }
+
+    // MARK: Fixed-block layout (issue #65)
+
+    /// A piece of a rate line: either drawn at its natural width, or placed in a
+    /// slot as wide as the reference text, so nothing after it moves when the
+    /// value changes length. Summed, the segments always come to the same width.
+    private enum Segment {
+        case fixed(TextRun)
+        case slot(TextRun, width: CGFloat)
+
+        var advance: CGFloat {
+            switch self {
+            case .fixed(let run): return ceil(run.size.width)
+            case .slot(_, let width): return width
+            }
+        }
+
+        var fits: Bool {
+            guard case .slot(let run, let width) = self else { return true }
+            return ceil(run.size.width) <= width
+        }
+    }
+
+    private static func blockWidth(_ segments: [Segment]) -> CGFloat {
+        segments.reduce(0) { $0 + $1.advance }
+    }
+
+    /// The reference text is the widest form the formatter produces, but a
+    /// proportional font can still surprise. When a live value would overflow
+    /// its slot the caller falls back to centring, rather than letting a number
+    /// run into its arrow.
+    private static func fits(_ segments: [Segment]) -> Bool {
+        segments.allSatisfy(\.fits)
+    }
+
+    private static func referenceWidth(_ text: String, font: NSFont) -> CGFloat {
+        ceil(TextRun(text: text, font: font, color: .clear).size.width)
+    }
+
+    private func draw(segments: [Segment], at origin: NSPoint, alignment: MenuBarRateAlignment) {
+        var x = origin.x
+        for segment in segments {
+            switch segment {
+            case .fixed(let run):
+                (run.text as NSString).draw(at: NSPoint(x: x, y: origin.y), withAttributes: run.attributes)
+            case .slot(let run, let width):
+                let offset = alignment == .right ? max(0, width - ceil(run.size.width)) : 0
+                (run.text as NSString).draw(at: NSPoint(x: x + offset, y: origin.y), withAttributes: run.attributes)
+            }
+            x += segment.advance
+        }
+    }
+
+    private static func stackSegments(
+        text: String,
+        reference: String,
+        font: NSFont,
+        textColor: NSColor,
+        arrow: String,
+        arrowColor: NSColor
+    ) -> [Segment] {
+        [
+            .fixed(TextRun(text: arrow, font: font, color: arrowColor)),
+            .fixed(TextRun(text: " ", font: font, color: textColor)),
+            .slot(TextRun(text: text, font: font, color: textColor), width: referenceWidth(reference, font: font))
+        ]
     }
 
     private func drawStack(_ model: MenuBarDisplayModel) {
@@ -307,6 +441,34 @@ private final class MenuBarRatesView: NSView {
             : 0
         let totalHeight = (lineHeight * 2) + spacing
         let originY = floor((bounds.height - totalHeight) / 2)
+
+        if model.alignment != .center {
+            let up = Self.stackSegments(
+                text: model.fullUpText,
+                reference: model.referenceFullText,
+                font: model.font,
+                textColor: model.upTextColor,
+                arrow: "↑",
+                arrowColor: model.upColor
+            )
+            let down = Self.stackSegments(
+                text: model.fullDownText,
+                reference: model.referenceFullText,
+                font: model.font,
+                textColor: model.downTextColor,
+                arrow: "↓",
+                arrowColor: model.downColor
+            )
+            if Self.fits(up), Self.fits(down) {
+                // One origin for both lines, so ↑ and ↓ stack in a column, and a
+                // block width taken from the reference text, so it never moves.
+                let block = max(Self.blockWidth(up), Self.blockWidth(down))
+                let x = floor((ratesWidthInBounds - block) / 2)
+                draw(segments: up, at: NSPoint(x: x, y: originY), alignment: model.alignment)
+                draw(segments: down, at: NSPoint(x: x, y: originY + lineHeight + spacing), alignment: model.alignment)
+                return
+            }
+        }
 
         let upWidth = Self.width(of: upRuns)
         let downWidth = Self.width(of: downRuns)
@@ -347,6 +509,26 @@ private final class MenuBarRatesView: NSView {
         let textY = floor((bounds.height - lineHeight) / 2)
         let contentWidth = Self.width(of: runs)
         let contentMidX = (capsuleRect.minX + ratesWidthInBounds - Self.horizontalPadding) / 2
+
+        if model.alignment != .center {
+            let slot = Self.referenceWidth(model.referenceFullText, font: model.font)
+            let segments: [Segment] = [
+                .slot(TextRun(text: model.fullDownText, font: model.font, color: model.downTextColor), width: slot),
+                .fixed(TextRun(text: " ", font: model.font, color: model.downTextColor)),
+                .fixed(TextRun(text: "↓", font: model.font, color: model.downColor)),
+                .fixed(TextRun(text: " • ", font: model.font, color: model.secondaryTextColor)),
+                .slot(TextRun(text: model.fullUpText, font: model.font, color: model.upTextColor), width: slot),
+                .fixed(TextRun(text: " ", font: model.font, color: model.upTextColor)),
+                .fixed(TextRun(text: "↑", font: model.font, color: model.upColor))
+            ]
+            if Self.fits(segments) {
+                let block = Self.blockWidth(segments)
+                let x = max(capsuleRect.minX + Self.capsulePadding, floor(contentMidX - (block / 2)))
+                draw(segments: segments, at: NSPoint(x: x, y: textY), alignment: model.alignment)
+                return
+            }
+        }
+
         let textX = max(capsuleRect.minX + Self.capsulePadding, floor(contentMidX - (contentWidth / 2)))
         draw(runs: runs, at: NSPoint(x: textX, y: textY))
     }
@@ -384,6 +566,48 @@ private final class MenuBarRatesView: NSView {
         let textY = floor((bounds.height - lineHeight) / 2)
         let runsWidth = Self.width(of: runs)
         let contentMidX = (capsuleRect.minX + ratesWidthInBounds - Self.horizontalPadding) / 2
+
+        if model.alignment != .center {
+            let compactSlot = Self.referenceWidth(model.referenceCompactText, font: model.smallFont)
+            var segments: [Segment] = []
+            if model.style == .dashboard {
+                // "Σ " stays put; only the total itself sits in a slot.
+                segments += [
+                    .fixed(TextRun(text: "Σ ", font: model.emphasisFont, color: model.textColor)),
+                    .slot(
+                        TextRun(text: model.totalText, font: model.emphasisFont, color: model.textColor),
+                        width: Self.referenceWidth(model.referenceTotalText, font: model.emphasisFont)
+                    ),
+                    .fixed(TextRun(text: "  |  ", font: model.smallFont, color: model.secondaryTextColor))
+                ]
+            }
+            segments += [
+                .fixed(TextRun(text: "↓", font: model.smallFont, color: model.downColor)),
+                .fixed(TextRun(text: " ", font: model.smallFont, color: model.downTextColor)),
+                .slot(TextRun(text: model.compactDownText, font: model.smallFont, color: model.downTextColor), width: compactSlot),
+                .fixed(TextRun(text: "  |  ", font: model.smallFont, color: model.secondaryTextColor)),
+                .fixed(TextRun(text: "↑", font: model.smallFont, color: model.upColor)),
+                .fixed(TextRun(text: " ", font: model.smallFont, color: model.upTextColor)),
+                .slot(TextRun(text: model.compactUpText, font: model.smallFont, color: model.upTextColor), width: compactSlot)
+            ]
+            if Self.fits(segments) {
+                let block = Self.blockWidth(segments)
+                if model.style == .dashboard {
+                    let ringSize = Self.dashboardRingSize(for: model)
+                    let ringRect = NSRect(
+                        x: floor(contentMidX - ((ringSize + 6 + block) / 2)),
+                        y: floor((bounds.height - ringSize) / 2),
+                        width: ringSize,
+                        height: ringSize
+                    )
+                    drawRing(in: ringRect, progress: model.ringProgress, color: model.ringColor, secondaryColor: model.secondaryTextColor)
+                    draw(segments: segments, at: NSPoint(x: ringRect.maxX + 6, y: textY), alignment: model.alignment)
+                } else {
+                    draw(segments: segments, at: NSPoint(x: floor(contentMidX - (block / 2)), y: textY), alignment: model.alignment)
+                }
+                return
+            }
+        }
 
         if model.style == .dashboard {
             let ringSize = Self.dashboardRingSize(for: model)
@@ -550,6 +774,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
     private var dashboardPeakRateBps: Double = 0
     private var dashboardPeakSourceKey: String?
     private var dashboardPeakDate: Date?
+    /// Built symbol images, so a tick that changes nothing doesn't rebuild them
+    /// just to find that out. Cleared whenever a setting changes.
+    private var accessoryImages: [String: NSImage] = [:]
+    /// The resolver label, which otherwise decodes every preset on every tick.
+    private var resolverLabel: (presetID: String, name: String)?
 
     private struct MenuBarRenderState: Equatable {
         let mode: String
@@ -568,6 +797,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         let downTextColorKey: String
         let ringProgressBucket: Int
         var accessoryKey: String = ""
+        var alignment: String = MenuBarRateAlignment.center.rawValue
     }
 
     private struct FontState: Hashable {
@@ -622,6 +852,24 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             }
             .store(in: &cancellables)
 
+        // Link health changes on its own schedule: a probe verdict can land
+        // between rate ticks, and the glyph must not wait for the next byte.
+        monitor.$linkStatus
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateLabel()
+            }
+            .store(in: &cancellables)
+
+        monitor.$activeDNSPresetID
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateLabel()
+            }
+            .store(in: &cancellables)
+
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -657,11 +905,13 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
 
     @objc private func handleScreenSleep() {
         screenAsleep = true
+        monitor.setDisplaysAsleep(true)
         updateDetailMonitoring()
     }
 
     @objc private func handleScreenWake() {
         screenAsleep = false
+        monitor.setDisplaysAsleep(false)
         updateDetailMonitoring()
     }
 
@@ -947,6 +1197,9 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             isPinned: isPinned,
             onTogglePin: { [weak self] in
                 self?.togglePinnedWindow()
+            },
+            onShowMenu: { [weak self] in
+                self?.showContextMenu()
             }
         )
         .environmentObject(monitor)
@@ -1028,6 +1281,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         monitor.start(interval: effectiveInterval)
 
         popover.appearance = nil
+        accessoryImages.removeAll()
+        resolverLabel = nil
         // The context menu only depends on the app language (its items are static,
         // just localized). Rebuilding it on every defaults write — e.g. each frame
         // of a color-picker/slider drag — was needless churn. Rebuild only when the
@@ -1213,7 +1468,6 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
 
         let (accessories, accessoryKey) = menuBarAccessories(
             style: style,
-            fontSize: fontSize,
             defaultTextColor: defaultTextColor,
             secondaryTextColor: secondaryTextColor,
             isDarkAppearance: isDarkAppearance
@@ -1225,6 +1479,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             uploadColorHex,
             downloadColorHex
         ].joined(separator: ":")
+        let rateAlignment = MenuBarRateAlignment.current
         let renderState = MenuBarRenderState(
             mode: mode,
             upText: fullUpText,
@@ -1241,7 +1496,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             upTextColorKey: [menuBarUploadTextColorName, menuBarUploadTextColorHex].joined(separator: ":"),
             downTextColorKey: [menuBarDownloadTextColorName, menuBarDownloadTextColorHex].joined(separator: ":"),
             ringProgressBucket: Int((ringProgress * 100).rounded()),
-            accessoryKey: accessoryKey
+            accessoryKey: accessoryKey,
+            alignment: rateAlignment.rawValue
         )
         if lastRenderState == renderState { return }
         lastRenderState = renderState
@@ -1272,7 +1528,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             totalText: compactTexts.total,
             referenceTotalText: compactTexts.totalReference,
             ringProgress: ringProgress,
-            accessories: accessories
+            accessories: accessories,
+            alignment: rateAlignment
         )
 
         let targetLength = MenuBarRatesView.preferredWidth(for: model)
@@ -1284,13 +1541,38 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         updateHighlightPlaceholder(width: targetLength, button: button)
         ratesView.update(model: model)
         layoutRatesView(in: button)
+        describeForAccessibility(button, up: fullUpText, down: fullDownText)
+    }
+
+    /// The rates are drawn, not text, so VoiceOver has nothing to read otherwise.
+    /// The tooltip gives the link state in words for anyone who can't tell the
+    /// indicator's colours apart.
+    private func describeForAccessibility(_ button: NSStatusBarButton, up: String, down: String) {
+        button.setAccessibilityLabel("NetFluss")
+        button.setAccessibilityValue("\(L10n.text("Download")) \(down), \(L10n.text("Upload")) \(up)")
+
+        guard UserDefaults.standard.bool(forKey: "menuBarLinkIndicator") else {
+            button.toolTip = nil
+            return
+        }
+        let status = monitor.linkStatus
+        let state: String
+        switch status.health {
+        case .online: state = L10n.text("Online")
+        case .limited: state = L10n.text("Limited connection")
+        case .offline: state = L10n.text("Offline")
+        }
+        let name = status.ssid ?? status.interfaceName
+        button.toolTip = name.isEmpty ? state : "\(name): \(state)"
     }
 
     /// Builds the optional VPN indicator + country flag shown right of the
     /// rates, plus a key describing them for render-state deduplication.
+    /// The menu bar VPN indicator styles that draw something ("off" draws nothing).
+    static let vpnIndicatorStyles: Set<String> = ["dot", "shield", "globe", "bars"]
+
     private func menuBarAccessories(
         style: MenuBarDisplayStyle,
-        fontSize: Double,
         defaultTextColor: NSColor,
         secondaryTextColor: NSColor,
         isDarkAppearance: Bool
@@ -1299,11 +1581,13 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
         let indicator = defaults.string(forKey: "menuBarVPNIndicator") ?? "off"
         let showWhenOff = defaults.bool(forKey: "menuBarVPNShowWhenOff")
         let showFlag = defaults.bool(forKey: "menuBarShowCountryFlag")
+        let flagOnlyWithVPN = defaults.bool(forKey: "menuBarCountryFlagOnlyWithVPN")
+        let markSize = Self.indicatorSize(from: defaults)
         let vpnActive = monitor.vpnActive
 
         var vpnMark: MenuBarAccessories.VPNMark?
         var vpnKey = "none"
-        if indicator == "dot" || indicator == "shield", vpnActive || showWhenOff {
+        if Self.vpnIndicatorStyles.contains(indicator), vpnActive || showWhenOff {
             let colorName = defaults.string(forKey: "menuBarVPNIndicatorColor") ?? "green"
             let colorHex = defaults.string(forKey: "menuBarVPNIndicatorColorHex") ?? ""
             var activeColor = resolvedAccentNSColor(selection: colorName, customHex: colorHex, fallback: .systemGreen)
@@ -1312,31 +1596,155 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             if colorName == "system", style == .dashboard || style == .dashboardBasic {
                 activeColor = defaultTextColor
             }
-            let color = vpnActive ? activeColor : secondaryTextColor
+            // The chosen colour applies in both states, dimmed while the tunnel
+            // is down: the slashed shield / hollow dot already carries "off",
+            // and tying the swatch to the active state alone made it look
+            // broken to anyone configuring it without a VPN up.
+            let color = vpnActive ? activeColor : activeColor.withAlphaComponent(0.45)
 
             if indicator == "dot" {
-                let diameter = max(5, (CGFloat(fontSize) * 0.6).rounded())
+                let diameter = max(5, (markSize * 0.6).rounded())
                 vpnMark = .dot(active: vpnActive, color: color, diameter: diameter)
-            } else {
-                let symbolName = vpnActive ? "lock.shield.fill" : "shield.slash"
-                let configuration = NSImage.SymbolConfiguration(pointSize: CGFloat(fontSize) + 1, weight: .medium)
-                    .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-                if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "VPN")?
-                    .withSymbolConfiguration(configuration) {
+            } else if indicator == "bars" {
+                let key = "bars|\(vpnActive)|\(colorName)|\(colorHex)|\(style.rawValue)|\(isDarkAppearance)|\(markSize)"
+                if let image = accessoryImage(key, build: {
+                    VPNBarsGlyph.image(height: markSize, color: color, active: vpnActive)
+                }) {
                     vpnMark = .symbol(image)
                 }
+            } else {
+                // `shield.slash` is the shape from the issue's mockup; the lock
+                // inside `lock.shield.fill` turns to mush below ~16 pt, so the
+                // Shield style's active state is the plain filled shield. Globe
+                // is the network with a shield badge (issue #68).
+                let symbolName: String
+                if indicator == "globe" {
+                    symbolName = vpnActive ? "network.badge.shield.half.filled" : "network.slash"
+                } else {
+                    symbolName = vpnActive ? "shield.fill" : "shield.slash"
+                }
+                let key = "\(symbolName)|\(colorName)|\(colorHex)|\(style.rawValue)|\(isDarkAppearance)|\(markSize)"
+                let image = accessoryImage(key) {
+                    let configuration = NSImage.SymbolConfiguration(pointSize: markSize, weight: .semibold)
+                        .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+                    return NSImage(systemSymbolName: symbolName, accessibilityDescription: "VPN")?
+                        .withSymbolConfiguration(configuration)
+                }
+                if let image { vpnMark = .symbol(image) }
             }
             vpnKey = [indicator, vpnActive ? "on" : "off", colorName, colorHex, isDarkAppearance ? "dark" : "light"]
                 .joined(separator: ":")
         }
 
-        let flag = showFlag ? CountryFlag.emoji(for: monitor.externalIPCountryCode) : nil
+        var linkImage: NSImage?
+        var linkKey = "none"
+        if defaults.bool(forKey: "menuBarLinkIndicator") {
+            let status = monitor.linkStatus
+            let (colorName, colorHex, fallback) = Self.linkColorSetting(for: status.health, defaults: defaults)
+            var color = resolvedAccentNSColor(selection: colorName, customHex: colorHex, fallback: fallback)
+            if colorName == "system", style == .dashboard || style == .dashboardBasic {
+                color = defaultTextColor
+            }
+            let key = "\(status.medium)|\(status.health)|\(colorName)|\(colorHex)|\(style.rawValue)|\(isDarkAppearance)|\(markSize)"
+            linkImage = accessoryImage(key) {
+                LinkHealthGlyph.image(medium: status.medium, health: status.health, pointSize: markSize, color: color)
+            }
+            linkKey = [status.medium.rawValue, status.health.rawValue, colorName, colorHex].joined(separator: ":")
+        }
+
+        // The flag reads as the VPN's exit country, so it can be limited to the
+        // times a tunnel is actually up.
+        let wantsFlag = showFlag && (vpnActive || !flagOnlyWithVPN)
+        let flag = wantsFlag ? CountryFlag.emoji(for: monitor.externalIPCountryCode) : nil
+        // The resolver name only appears when it is not the system default:
+        // quiet on the network you trust, informative on the one you don't.
+        var resolver: String?
+        var resolverColor = secondaryTextColor
+        if defaults.bool(forKey: "menuBarShowResolver"),
+           let presetID = monitor.activeDNSPresetID,
+           presetID != "system",
+           let name = resolverName(for: presetID) {
+            resolver = name
+            let colorName = defaults.string(forKey: "menuBarResolverColor") ?? "system"
+            let colorHex = defaults.string(forKey: "menuBarResolverColorHex") ?? ""
+            if colorName != "system" {
+                resolverColor = resolvedAccentNSColor(
+                    selection: colorName,
+                    customHex: colorHex,
+                    fallback: secondaryTextColor
+                )
+            }
+        }
+
         let accessories = MenuBarAccessories(
+            link: linkImage,
             vpn: vpnMark,
             flag: flag,
-            flagFont: .systemFont(ofSize: CGFloat(fontSize) + 2)
+            // Emoji render a good bit smaller than their point size, so the flag
+            // needs a nudge to match the shield next to it.
+            flagFont: .systemFont(ofSize: markSize + 2),
+            resolver: resolver,
+            resolverFont: .systemFont(ofSize: max(9, markSize - 4), weight: .medium),
+            resolverColor: resolverColor
         )
-        return (accessories, "\(vpnKey)|\(flag ?? "")")
+        return (
+            accessories,
+            "\(linkKey)|\(vpnKey)|\(flag ?? "")|\(resolver ?? "")"
+                + "|\(defaults.string(forKey: "menuBarResolverColor") ?? "")"
+                + "|\(defaults.string(forKey: "menuBarResolverColorHex") ?? "")"
+                + "|\(String(format: "%.1f", markSize))"
+        )
+    }
+
+    private func accessoryImage(_ key: String, build: () -> NSImage?) -> NSImage? {
+        if let cached = accessoryImages[key] { return cached }
+        let image = build()
+        accessoryImages[key] = image
+        return image
+    }
+
+    private func resolverName(for presetID: String) -> String? {
+        if let resolverLabel, resolverLabel.presetID == presetID { return resolverLabel.name }
+        guard let preset = NetworkMonitor.allDNSPresets().first(where: { $0.id == presetID }) else { return nil }
+        resolverLabel = (presetID, preset.name)
+        return preset.name
+    }
+
+    /// Colour preference for one link state, with the traffic-light defaults.
+    private static func linkColorSetting(
+        for health: LinkHealth,
+        defaults: UserDefaults
+    ) -> (name: String, hex: String, fallback: NSColor) {
+        switch health {
+        case .online:
+            return (
+                defaults.string(forKey: "menuBarLinkColorOnline") ?? "green",
+                defaults.string(forKey: "menuBarLinkColorOnlineHex") ?? "",
+                .systemGreen
+            )
+        case .limited:
+            return (
+                defaults.string(forKey: "menuBarLinkColorLimited") ?? "orange",
+                defaults.string(forKey: "menuBarLinkColorLimitedHex") ?? "",
+                .systemOrange
+            )
+        case .offline:
+            return (
+                defaults.string(forKey: "menuBarLinkColorOffline") ?? "red",
+                defaults.string(forKey: "menuBarLinkColorOfflineHex") ?? "",
+                .systemRed
+            )
+        }
+    }
+
+    /// Menu bar VPN indicator / flag size, clamped to what fits the menu bar.
+    /// A symbol's image box runs about a third taller than its point size, so
+    /// 18 pt is the largest that still clears a 22 pt menu bar unclipped.
+    private static func indicatorSize(from defaults: UserDefaults) -> CGFloat {
+        let raw = defaults.double(forKey: "menuBarVPNIndicatorSize")
+        let size = CGFloat(raw > 0 ? raw : 14)
+        let maxSize = max(10, NSStatusBar.system.thickness - 4)
+        return min(max(size, 10), min(18, maxSize))
     }
 
     private func menuBarFont(size: Double, design: String, weight: NSFont.Weight) -> NSFont {
@@ -1599,5 +2007,65 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
             button.image = highlightPlaceholderImage
             button.imagePosition = .imageOnly
         }
+    }
+}
+
+
+/// The "Bars" VPN indicator: macOS's own VPN menu bar artwork (all four bars
+/// when connected, none when not), tinted with the chosen colour like the
+/// other styles. It is read from the system's VPN menu extra at run time, not
+/// shipped; if a macOS release moves it, a drawn copy of the shape stands in.
+enum VPNBarsGlyph {
+    private static let systemArtwork = "/System/Library/CoreServices/Menu Extras/VPN.menu/Contents/Resources"
+    /// VPN0 … VPN4 are the system's connecting animation; 4 is connected.
+    private static let connected = NSImage(contentsOfFile: systemArtwork + "/VPN4.pdf")
+    private static let disconnected = NSImage(contentsOfFile: systemArtwork + "/VPN0.pdf")
+
+    static func image(height: CGFloat, color: NSColor, active: Bool) -> NSImage {
+        guard let artwork = active ? connected : disconnected, artwork.size.height > 0 else {
+            return drawn(height: height, color: color, active: active)
+        }
+        let size = NSSize(width: (height * artwork.size.width / artwork.size.height).rounded(), height: height)
+        let image = NSImage(size: size, flipped: false) { rect in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            // The artwork is a black template; recolour it, then apply the
+            // colour's own transparency (the dimmed "off" state) to the result.
+            context.setAlpha(color.alphaComponent)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            artwork.draw(in: rect)
+            color.withAlphaComponent(1).set()
+            rect.fill(using: .sourceAtop)
+            context.endTransparencyLayer()
+            return true
+        }
+        image.accessibilityDescription = "VPN"
+        return image
+    }
+
+    /// The same shape, drawn: a frame with four bars cut into it.
+    private static func drawn(height: CGFloat, color: NSColor, active: Bool) -> NSImage {
+        let size = NSSize(width: (height * 18 / 14).rounded(), height: height)
+        let image = NSImage(size: size, flipped: false) { rect in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.setAlpha(color.alphaComponent)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            let frame = rect.insetBy(dx: 0, dy: height * 0.07)
+            color.withAlphaComponent(1).setFill()
+            NSBezierPath(roundedRect: frame, xRadius: frame.height * 0.3, yRadius: frame.height * 0.3).fill()
+            let inner = frame.insetBy(dx: frame.width * 0.2, dy: frame.height * 0.28)
+            let gap = inner.width * 0.12
+            let barWidth = (inner.width - gap * 3) / 4
+            for index in 0..<4 {
+                let bar = NSRect(x: inner.minX + CGFloat(index) * (barWidth + gap), y: inner.minY,
+                                 width: barWidth, height: inner.height)
+                // Connected cuts the bars out completely; off only part-way.
+                NSColor(white: 0, alpha: active ? 1 : 0.6).set()
+                bar.fill(using: .destinationOut)
+            }
+            context.endTransparencyLayer()
+            return true
+        }
+        image.accessibilityDescription = "VPN"
+        return image
     }
 }

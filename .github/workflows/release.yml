@@ -67,7 +67,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "ci" build.keychain
 
       # Universal (arm64 + x86_64) VPN toolchain. The Intel slice is assembled
-      # from pinned x86_64 *ventura* Homebrew bottles downloaded straight from
+      # from pinned x86_64 *sonoma* Homebrew bottles downloaded straight from
       # ghcr.io (see build-vpn-bundle.sh) — no Intel runner needed. Hard-gated:
       # the build fails if either slice is missing, so a release can never ship
       # arm64-only VPN by accident (issue #48).

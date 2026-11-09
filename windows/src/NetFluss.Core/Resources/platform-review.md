@@ -28,6 +28,21 @@ were left alone and want a human decision.
 | `en` | `Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About.` | needs review | Once a day, NetFluss looks for a new version on GitHub and asks whether to download and install it. You can also check any time from the menu bar icon's right-click menu or in About. |
 | `en` | `macOS blocks unencrypted HTTP to %@. Use the router's IP address or HTTPS.` | auto-rewritten | Windows blocks unencrypted HTTP to %@. Use the router's IP address or HTTPS. |
 | `en` | `The VPN password isn't stored in the Keychain — remove the profile and add it again.` | auto-rewritten | The VPN password isn't stored in the Credential Manager — remove the profile and add it again. |
+| `en` | `Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing.` | auto-rewritten | Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one Windows itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing. |
+| `en` | `Show active resolver in menu bar` | needs review | Show active resolver in menu bar |
+| `en` | `Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden.` | needs review | Appears only while the resolver is not the system default, so the menu bar stays quiet on a network you have not overridden. |
+| `en` | `No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.` | auto-rewritten | No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — Windows withholds the network name without it. |
+| `en` | `macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.` | auto-rewritten | Windows is waiting for you to allow NetFluss under Settings → General → Login Items & Extensions. |
+| `en` | `macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.` | auto-rewritten | Windows only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again. |
+| `en` | `Approve the Netfluss helper in System Settings, then try again.` | auto-rewritten | Approve the Netfluss helper in Settings, then try again. |
+| `en` | `Approve the Netfluss helper in System Settings → General → Login Items.` | auto-rewritten | Approve the Netfluss helper in Settings → General → Login Items. |
+| `en` | `The privileged helper did not respond. Approve it in System Settings → General → Login Items, or remove and re-add the Netfluss entry.` | auto-rewritten | The privileged helper did not respond. Approve it in Settings → General → Login Items, or remove and re-add the Netfluss entry. |
+| `en` | `macOS could not reach Service Management.` | auto-rewritten | Windows could not reach Service Management. |
+| `en` | `Copy` | windows override | Copy |
+| `en` | `Privacy` | windows override | Privacy |
+| `en` | `Look up public IP addresses and countries` | windows override | Look up public IP addresses and countries |
+| `en` | `Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more.` | needs review | Your live network speed is now in the menu bar. Click it for the details. The gear button there opens Preferences, Statistics, Speed Test and more. |
+| `en` | `OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work.` | auto-rewritten | OpenVPN and WireGuard need Windows 14 or later. IKEv2 and system VPNs still work. |
 | `de` | `System Default follows the language selected in macOS.` | auto-rewritten | Systemsprache folgt der in Windows ausgewählten Sprache. |
 | `de` | `DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.` | auto-rewritten | DNS-Änderungen und Ethernet-Neuverbindungen installieren beim ersten Mal ein privilegiertes Hilfsprogramm. Windows kann nach Administratorfreigabe und auf manchen Systemen nach zusätzlicher Freigabe in den Systemeinstellungen fragen. |
 | `de` | `Recent results saved on this Mac. Add notes to remember the exact place.` | needs review | Aktuelle Ergebnisse, die auf diesem Mac gespeichert sind. Füge Notizen hinzu, um den genauen Ort festzuhalten. |
@@ -44,6 +59,15 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
 | `de` | `When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list.` | needs review | Wenn aktiviert, werden VPN-/Tunnel-Adapter (utun, tun, tap, ipsec, ppp) aus den Summen ausgeschlossen. Loopback und AirDrop werden immer ausgeschlossen, da sie keinen Internetverkehr führen. Alle Adapter bleiben in der Adapterliste sichtbar. |
 | `de` | `Who your Mac is talking to right now.` | needs review | Mit wem dein Mac gerade spricht. |
 | `de` | `macOS blocks unencrypted HTTP to %@. Use the router's IP address or HTTPS.` | auto-rewritten | Windows blockiert unverschlüsseltes HTTP zu %@. Verwende die IP-Adresse des Routers oder HTTPS. |
+| `de` | `Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing.` | auto-rewritten | Ohne diese Prüfung zeigt das Symbol nur, ob die Schnittstelle aktiv ist. Mit ihr fragt NetFluss die Captive-Portal-Adresse von Apple ab — dieselbe, die Windows selbst verwendet — oft genug, um eine Hotel-Anmeldeseite oder eine tote Leitung zu bemerken, und selten genug, dass es nichts kostet. |
+| `de` | `No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.` | auto-rewritten | Es ist kein WLAN-Name verfügbar. Verbinde dich mit einem WLAN oder erlaube unten den Ortungszugriff — ohne ihn gibt Windows den Netzwerknamen nicht preis. |
+| `de` | `macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.` | auto-rewritten | Windows wartet darauf, dass du NetFluss unter Systemeinstellungen → Allgemein → Anmeldeobjekte & Erweiterungen erlaubst. |
+| `de` | `macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.` | auto-rewritten | Windows öffnet NetFluss beim Anmelden nur, wenn es aus dem Ordner „Programme“ gestartet wird. Verschiebe es dorthin und öffne es erneut. |
+| `de` | `macOS could not reach Service Management.` | auto-rewritten | Windows konnte Service Management nicht erreichen. |
+| `de` | `Copy` | windows override | Kopieren |
+| `de` | `Privacy` | windows override | Datenschutz |
+| `de` | `Look up public IP addresses and countries` | windows override | Öffentliche IP-Adressen und Länder abfragen |
+| `de` | `OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work.` | auto-rewritten | OpenVPN und WireGuard benötigen Windows 14 oder neuer. IKEv2 und System-VPNs funktionieren weiterhin. |
 | `zh-Hans` | `System Default follows the language selected in macOS.` | auto-rewritten | 系统默认会跟随 Windows 中选择的语言。 |
 | `zh-Hans` | `DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.` | auto-rewritten | 首次更改 DNS 或重新连接以太网时会安装特权辅助工具。Windows 可能会要求管理员批准，在某些系统上还需要在系统设置中额外批准。 |
 | `zh-Hans` | `Recent results saved on this Mac. Add notes to remember the exact place.` | needs review | 保存在这台 Mac 上的最近结果。添加备注以记住具体地点。 |
@@ -54,6 +78,15 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
 | `zh-Hans` | `When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list.` | needs review | 启用后，VPN/隧道适配器（utun、tun、tap、ipsec、ppp）将从总计中排除。回环和 AirDrop 始终被排除，因为它们不承载互联网流量。所有适配器仍会显示在适配器列表中。 |
 | `zh-Hans` | `Who your Mac is talking to right now.` | needs review | 你的 Mac 此刻正在与谁通信。 |
 | `zh-Hans` | `macOS blocks unencrypted HTTP to %@. Use the router's IP address or HTTPS.` | auto-rewritten | Windows 阻止了到 %@ 的未加密 HTTP 连接。请使用路由器的 IP 地址或 HTTPS。 |
+| `zh-Hans` | `Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing.` | auto-rewritten | 不启用此检查时，图标仅表示接口是否启用。启用后，NetFluss 会访问 Apple 的强制门户地址（Windows 自身也使用该地址），频率足以发现酒店登录页或上游中断，又低到几乎没有开销。 |
+| `zh-Hans` | `No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.` | auto-rewritten | 没有可用的 Wi-Fi 网络名称。请加入 Wi-Fi 网络，或在下方允许位置访问——没有它 Windows 不会提供网络名称。 |
+| `zh-Hans` | `macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.` | auto-rewritten | Windows 正在等待你在“系统设置 → 通用 → 登录项与扩展”中允许 NetFluss。 |
+| `zh-Hans` | `macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.` | auto-rewritten | 只有从“应用程序”文件夹运行时，Windows 才会在登录时打开 NetFluss。请将其移到那里后重新打开。 |
+| `zh-Hans` | `macOS could not reach Service Management.` | auto-rewritten | Windows 无法访问 Service Management。 |
+| `zh-Hans` | `Copy` | windows override | 复制 |
+| `zh-Hans` | `Privacy` | windows override | 隐私 |
+| `zh-Hans` | `Look up public IP addresses and countries` | windows override | 查询公网 IP 地址和国家/地区 |
+| `zh-Hans` | `OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work.` | auto-rewritten | OpenVPN 和 WireGuard 需要 Windows 14 或更高版本。IKEv2 和系统 VPN 仍可使用。 |
 | `zh-Hant` | `System Default follows the language selected in macOS.` | auto-rewritten | 系統預設會跟隨 Windows 中選擇的語言。 |
 | `zh-Hant` | `DNS changes and Ethernet reconnects install a privileged helper the first time. macOS may ask for administrator approval and, on some systems, additional approval in System Settings.` | auto-rewritten | 首次變更 DNS 或重新連接乙太網路時會安裝特權輔助工具。Windows 可能會要求管理員批准，在某些系統上還需要在系統設定中額外批准。 |
 | `zh-Hant` | `Recent results saved on this Mac. Add notes to remember the exact place.` | needs review | 保存在這台 Mac 上的最近結果。加入備註以記住具體地點。 |
@@ -65,3 +98,12 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
 | `zh-Hant` | `When enabled, VPN/tunnel adapters (utun, tun, tap, ipsec, ppp) are excluded from totals. Loopback and AirDrop are always excluded, since they never carry internet traffic. All adapters remain visible in the adapter list.` | needs review | 啟用後，VPN/通道介面（utun、tun、tap、ipsec、ppp）將從總計中排除。回送與 AirDrop 一律排除，因為它們不承載網際網路流量。所有介面仍會顯示在介面清單中。 |
 | `zh-Hant` | `Who your Mac is talking to right now.` | needs review | 你的 Mac 此刻正在與誰通訊。 |
 | `zh-Hant` | `macOS blocks unencrypted HTTP to %@. Use the router's IP address or HTTPS.` | auto-rewritten | Windows 封鎖了到 %@ 的未加密 HTTP 連線。請使用路由器的 IP 位址或 HTTPS。 |
+| `zh-Hant` | `Without this check the symbol only reports whether the interface is up. With it, NetFluss asks Apple's captive-portal address — the one macOS itself uses — often enough to notice a hotel login page or a dead upstream, and rarely enough to cost nothing.` | auto-rewritten | 不啟用此檢查時，圖示僅表示介面是否啟用。啟用後，NetFluss 會存取 Apple 的強制網路門戶位址（Windows 本身也使用該位址），頻率足以發現飯店登入頁或上游中斷，又低到幾乎沒有開銷。 |
+| `zh-Hant` | `No Wi-Fi network name is available. Join a Wi-Fi network, or allow Location access below — macOS withholds the network name without it.` | auto-rewritten | 沒有可用的 Wi-Fi 網路名稱。請加入 Wi-Fi 網路，或在下方允許位置存取——沒有它 Windows 不會提供網路名稱。 |
+| `zh-Hant` | `macOS is waiting for you to allow NetFluss under System Settings → General → Login Items & Extensions.` | auto-rewritten | Windows 正在等待你在「系統設定 → 一般 → 登入項目與延伸功能」中允許 NetFluss。 |
+| `zh-Hant` | `macOS only opens NetFluss at login when it runs from the Applications folder. Move it there and open it again.` | auto-rewritten | 只有從「應用程式」檔案夾執行時，Windows 才會在登入時打開 NetFluss。請將其移到那裡後重新打開。 |
+| `zh-Hant` | `macOS could not reach Service Management.` | auto-rewritten | Windows 無法連線至 Service Management。 |
+| `zh-Hant` | `Copy` | windows override | 複製 |
+| `zh-Hant` | `Privacy` | windows override | 隱私 |
+| `zh-Hant` | `Look up public IP addresses and countries` | windows override | 查詢公用 IP 位址和國家/地區 |
+| `zh-Hant` | `OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work.` | auto-rewritten | OpenVPN 和 WireGuard 需要 Windows 14 或更新版本。IKEv2 和系統 VPN 仍可使用。 |

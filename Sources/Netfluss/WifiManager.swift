@@ -41,6 +41,7 @@ final class WifiManager: NSObject, ObservableObject {
 
     private let interface: CWInterface?
     private let locationManager = CLLocationManager()
+    private var locationPromptFallback: DispatchWorkItem?
     private var cwNetworksByID: [String: CWNetwork] = [:]
     private var refreshTimer: DispatchSourceTimer?
     private var isActive = false
@@ -77,9 +78,35 @@ final class WifiManager: NSObject, ObservableObject {
     /// user can grant access when they previously denied or when system-wide
     /// Location is disabled.
     func openLocationSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
-            NSWorkspace.shared.open(url)
+        // System Settings (macOS 13+) moved the anchor; the old System
+        // Preferences one is still accepted on some releases and ignored on
+        // others, which is how this button ended up doing nothing at all.
+        // Try the current identifier first, then the legacy one, then the
+        // pane root — anywhere the user can finish the job by hand.
+        let candidates = [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_LocationServices",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices",
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension"
+        ]
+        for candidate in candidates {
+            if let url = URL(string: candidate), NSWorkspace.shared.open(url) {
+                return
+            }
         }
+    }
+
+    /// If the TCC prompt never appears, send the user to System Settings rather
+    /// than leaving a button that looks like it did nothing.
+    private var locationPromptFallbackDelay: TimeInterval { 3 }
+
+    private func scheduleLocationPromptFallback() {
+        locationPromptFallback?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.locationStatus == .notDetermined else { return }
+            self.openLocationSettings()
+        }
+        locationPromptFallback = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + locationPromptFallbackDelay, execute: work)
     }
 
     /// Triggered from the Preferences "Grant Location Access" button.
@@ -88,9 +115,14 @@ final class WifiManager: NSObject, ObservableObject {
     func requestLocationAccess() {
         switch locationStatus {
         case .notDetermined:
+            // tccd shows the prompt for the *active* application. A menu-bar app
+            // driving this from its Preferences window is not reliably frontmost,
+            // and without this the request is swallowed in silence.
+            NSApp.activate(ignoringOtherApps: true)
             locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
             locationManager.requestWhenInUseAuthorization()
             locationManager.startUpdatingLocation()
+            scheduleLocationPromptFallback()
         case .denied:
             openLocationSettings()
         case .authorized:
@@ -290,7 +322,7 @@ final class WifiManager: NSObject, ObservableObject {
         }
 
         self.networks = collected.map(\.net)
-        self.cwNetworksByID = Dictionary(uniqueKeysWithValues: collected.map { ($0.net.id, $0.cw) })
+        self.cwNetworksByID = Dictionary(collected.map { ($0.net.id, $0.cw) }, uniquingKeysWith: { first, _ in first })
     }
 
     func connect(to network: WifiNetwork) {
@@ -344,21 +376,21 @@ final class WifiManager: NSObject, ObservableObject {
 
     private func promptForPasswordAndConnect(interface: CWInterface, network: WifiNetwork) {
         let alert = NSAlert()
-        alert.messageText = String(format: NSLocalizedString("Connect to %@", comment: ""), network.ssid)
+        alert.messageText = String(format: L10n.text("Connect to %@"), network.ssid)
         if let security = network.security {
             alert.informativeText = String(
-                format: NSLocalizedString("Enter the password for this %@ network.", comment: ""),
+                format: L10n.text("Enter the password for this %@ network."),
                 security
             )
         } else {
-            alert.informativeText = NSLocalizedString("Enter the network password.", comment: "")
+            alert.informativeText = L10n.text("Enter the network password.")
         }
         alert.alertStyle = .informational
-        alert.addButton(withTitle: NSLocalizedString("Join", comment: ""))
-        alert.addButton(withTitle: NSLocalizedString("Cancel", comment: ""))
+        alert.addButton(withTitle: L10n.text("Join"))
+        alert.addButton(withTitle: L10n.text("Cancel"))
 
         let secureField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 22))
-        secureField.placeholderString = NSLocalizedString("Password", comment: "")
+        secureField.placeholderString = L10n.text("Password")
         alert.accessoryView = secureField
         alert.window.initialFirstResponder = secureField
 
@@ -389,7 +421,7 @@ final class WifiManager: NSObject, ObservableObject {
                 guard let self else { return }
                 guard let found else {
                     self.connectingTo = nil
-                    self.lastError = NSLocalizedString("Network is not in range right now.", comment: "")
+                    self.lastError = L10n.text("Network is not in range right now.")
                     return
                 }
                 // Splice the discovered CWNetwork into the lookup map and
@@ -418,7 +450,7 @@ final class WifiManager: NSObject, ObservableObject {
 
     private func attemptAssociate(interface: CWInterface, network: WifiNetwork, password: String?) {
         guard let cwNetwork = cwNetworksByID[network.id] else {
-            lastError = NSLocalizedString("Network is no longer in range.", comment: "")
+            lastError = L10n.text("Network is no longer in range.")
             return
         }
         connectingTo = network.ssid
@@ -592,6 +624,8 @@ extension WifiManager: CLLocationManagerDelegate {
         let status = manager.authorizationStatus
         Task { @MainActor [weak self] in
             guard let self else { return }
+            self.locationPromptFallback?.cancel()
+            self.locationPromptFallback = nil
             self.updateLocationStatus(from: status)
             // We only kicked off updates to trigger the prompt; once we have a
             // decision (either way) the location stream is no longer needed.
