@@ -6,7 +6,7 @@
 
 A native macOS menubar app showing real-time upload and download rates, router-wide bandwidth, historical traffic statistics, and built-in speed testing.
 
-Latest release: **NetFluss 2.6**
+Latest release: **NetFluss 2.7.2**
 
 ## NetFluss for Windows — public beta
 
