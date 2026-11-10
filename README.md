@@ -12,7 +12,7 @@ Latest release: **NetFluss 2.7.2**
 
 NetFluss now runs on Windows too: a native Windows 10 and 11 app with the same feature set as NetFluss 2.7.2 for Mac — live rates on the taskbar, the popover, Bandwidth Statistics, Speed Test, Network Slice, router monitoring, automatic DNS and the built-in VPN client.
 
-**[Download NetFluss 2.7.2 Beta for Windows](https://github.com/rana-gmbh/NetFluss/releases/tag/win-v2.7.2-beta.1)** — the installer needs no administrator rights and keeps itself up to date. The beta is not yet code-signed with a trusted certificate, so SmartScreen asks you to confirm the first start (**More info → Run anyway**). Feedback is very welcome: [open an issue](https://github.com/rana-gmbh/NetFluss/issues/new) and mention Windows. Building it yourself is described in [windows/README.md](windows/README.md).
+**[Download NetFluss 2.7.2 Beta 2 for Windows](https://github.com/rana-gmbh/NetFluss/releases/tag/win-v2.7.2-beta.2)** — the installer needs no administrator rights and keeps itself up to date. It is code-signed by Rana GmbH; while the new publisher builds up a reputation, SmartScreen may still ask you to confirm the first start (**More info → Run anyway**). Feedback is very welcome: [open an issue](https://github.com/rana-gmbh/NetFluss/issues/new) and mention Windows. Building it yourself is described in [windows/README.md](windows/README.md).
 
 ### New in Windows 2.7.2 Beta
 
@@ -23,17 +23,13 @@ NetFluss now runs on Windows too: a native Windows 10 and 11 app with the same f
 - **Imported WireGuard configs are checked:** script lines that could run with administrator rights are refused, naming the line. Unreadable statistics are restored from a daily backup.
 - **Updates like on the Mac:** a found update opens a window with its release notes and **Install Update**, **Remind Me Later** and **Skip This Version** — already downloaded and verified, so installing is quick. Or let updates install themselves while NetFluss isn't in use.
 - **M-Lab speed test measures upload again** ([#64](https://github.com/rana-gmbh/NetFluss/issues/64)).
+- **Code-signed by Rana GmbH** (Beta 2): Windows shows the publisher, and Smart App Control no longer blocks NetFluss.
 
-Updating from Beta 2: the installed version offers this update by itself (About → Install and Relaunch). NetFluss then asks once to update the helper, which needs administrator approval.
+Updating: 2.7.2 Beta 1 offers Beta 2 in its update window; 2.6 Beta 2 offers it under About → Install and Relaunch, and NetFluss then asks once to update the helper, which needs administrator approval.
 
 ### Code signing
 
-From the next Windows release on, NetFluss for Windows is signed by Rana GmbH with Microsoft's Azure Artifact Signing; the macOS app is signed and notarized with Rana GmbH's Apple Developer ID.
-
-- **Committers and reviewers:** [Robert Rudolph](https://github.com/rana-gmbh) (Rana GmbH)
-- **Approvers:** [Robert Rudolph](https://github.com/rana-gmbh) (Rana GmbH)
-
-Every release is built from this repository by [GitHub Actions](.github/workflows/windows-release.yml) and signed only after a manual approval.
+NetFluss for Windows is signed by Rana GmbH with Microsoft's Azure Artifact Signing; the macOS app is signed and notarized with Rana GmbH's Apple Developer ID. Every Windows release is built from this repository by [GitHub Actions](.github/workflows/windows-release.yml) and signed there, from a release tag only.
 
 **Privacy:** see the privacy policy for [Windows](PRIVACY.md) or [Mac](PRIVACY-macOS.md). NetFluss sends no telemetry. The few online lookups it makes on its own — the daily update check and the public IP and country lookups — are listed there, and each can be switched off in Preferences, and on Windows in the installer too.
 
