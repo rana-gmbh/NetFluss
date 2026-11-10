@@ -1101,7 +1101,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     /// country (api.ipify.org, ipwho.is) and the countries of the servers in Network Slice
     /// (api.country.is). Those services see the address asked about. Off, the public address,
     /// the VPN exit country and the country badges stay empty — a choice the installer offers
-    /// too, as SignPath Foundation's privacy rules require.
+    /// too, so it can be made before NetFluss first runs.
     /// </summary>
     public bool AllowIpLookups
     {

@@ -71,8 +71,8 @@ internal static class GeneralPage
             Kit.L("Installs a verified update without asking, while no NetFluss window is open and no NetFluss VPN is connected, then restarts NetFluss."),
             Kit.Switch(settings, nameof(AppSettings.AutomaticallyInstallUpdates))));
 
-        // The installer asks about the same two things; SignPath Foundation's privacy rules
-        // want every lookup the user did not ask for to be described and to be switchable off.
+        // The installer asks about the same two things: every lookup the user did not ask for
+        // is described and can be switched off.
         page.Children.Add(Kit.Header(Kit.L("Privacy")));
         var policy = Kit.Button(Kit.L("Privacy Policy"), () => Open(PrivacyPolicyUrl));
         policy.Margin = new Thickness(0, 0, 12, 0);

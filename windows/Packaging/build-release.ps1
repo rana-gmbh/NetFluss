@@ -11,7 +11,7 @@
 # refuses an installer it cannot match against a correctly signed list.
 #
 # Code signing happens between stages, because an installer has to be built from binaries
-# that are already signed — SignPath cannot sign files inside an Inno Setup installer:
+# that are already signed — files inside an Inno Setup installer cannot be signed afterwards:
 #
 #   Publish    builds both architectures and gathers the executables to sign into
 #              artifacts\sign\binaries\<arch>\  (NetFluss.exe, NetFluss.Service.exe)
@@ -47,7 +47,7 @@ function Invoke-Checked([string] $File, [string[]] $Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "$File exited with $LASTEXITCODE" }
 }
 
-# Optional local Authenticode signing with a .pfx; CI signs through SignPath instead.
+# Optional local Authenticode signing with a .pfx; CI signs with Azure Artifact Signing instead.
 $signtool = if ($env:NETFLUSS_SIGN_PFX) {
     Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
         Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
@@ -68,16 +68,12 @@ function Use-Signed([string] $From, [string] $To) {
     Write-Host "signed: $To"
 }
 
-# Inno Setup pads its version strings with spaces to fixed widths, and SignPath's metadata
-# check compares the exact text: signpath/installers.xml expects the product name padded to 60
-# characters, as Inno Setup 6.7.1 writes it. A different Inno Setup could change the width;
-# failing here says why. The product version is checked here only — SignPath cannot check it
-# on the installers (see installers.xml) — trimmed, so its padding does not matter.
+# The installer's version resource must name the release, or Windows (and the in-app updater's
+# users) see the wrong version. Inno Setup pads these strings with spaces, hence the trimming.
 function Assert-InstallerVersionInfo([string] $Setup) {
     $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($Setup)
-    if ($info.ProductName.TrimEnd() -ne 'NetFluss' -or $info.ProductName.Length -ne 60) {
-        throw ("$Setup has product name '$($info.ProductName)' ($($info.ProductName.Length) characters); " +
-            "signpath/installers.xml expects 'NetFluss' padded to 60. Update the configuration in SignPath for this Inno Setup version.")
+    if ($info.ProductName.Trim() -ne 'NetFluss') {
+        throw "$Setup has product name '$($info.ProductName.Trim())', not 'NetFluss'."
     }
 
     if ($info.ProductVersion.Trim() -ne $Version) {
@@ -102,8 +98,7 @@ function Publish {
         if (-not (Test-Path (Join-Path $publish 'SpeedTest'))) { throw "The speed test assets are missing from the $arch publish." }
         Sign @((Join-Path $publish 'NetFluss.exe'), (Join-Path $publish 'Helper\NetFluss.Service.exe'))
 
-        # NetFluss's own executables, flat per architecture: the layout the SignPath artifact
-        # configuration "binaries" (windows/Packaging/signpath/binaries.xml) describes.
+        # NetFluss's own executables, flat per architecture, for the CI signing step.
         $batch = Join-Path $toSign "binaries\$arch"
         New-Item -ItemType Directory -Force $batch | Out-Null
         Copy-Item (Join-Path $publish 'NetFluss.exe') $batch
@@ -140,7 +135,7 @@ function Package {
         Assert-InstallerVersionInfo $setup
         Sign @($setup)
 
-        # The layout the SignPath artifact configuration "installers" describes.
+        # Gathered for the CI signing step.
         $batch = Join-Path $toSign 'installers'
         New-Item -ItemType Directory -Force $batch | Out-Null
         Copy-Item $setup $batch

@@ -68,8 +68,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.19041
 
 [Languages]
-; The privacy page comes before the installation, as SignPath Foundation's rules require for
-; an app that contacts services on its own; the tasks page then lets the user switch them off.
+; The privacy page comes before the installation, because the app contacts services on its
+; own; the tasks page then lets the user switch them off.
 Name: "english"; MessagesFile: "compiler:Default.isl"; InfoBeforeFile: "privacy.txt"
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"; InfoBeforeFile: "privacy.de.txt"
 

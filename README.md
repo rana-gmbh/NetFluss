@@ -26,9 +26,9 @@ NetFluss now runs on Windows too: a native Windows 10 and 11 app with the same f
 
 Updating from Beta 2: the installed version offers this update by itself (About → Install and Relaunch). NetFluss then asks once to update the helper, which needs administrator approval.
 
-### Code signing policy
+### Code signing
 
-Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). This covers NetFluss for Windows; the macOS app is signed and notarized with Rana GmbH's Apple Developer ID.
+From the next Windows release on, NetFluss for Windows is signed by Rana GmbH with Microsoft's Azure Artifact Signing; the macOS app is signed and notarized with Rana GmbH's Apple Developer ID.
 
 - **Committers and reviewers:** [Robert Rudolph](https://github.com/rana-gmbh) (Rana GmbH)
 - **Approvers:** [Robert Rudolph](https://github.com/rana-gmbh) (Rana GmbH)

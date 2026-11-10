@@ -19,21 +19,24 @@ on:
 
 permissions:
   contents: write
-  # SignPath fetches the uploaded artifacts with this workflow's token.
-  actions: read
+  # Signing logs in to Azure with GitHub's OIDC token: no Azure secret is stored here.
+  id-token: write
 
 jobs:
   release:
     runs-on: windows-latest
+    # The Azure app registration trusts this environment, not individual tags, so its
+    # federated credential never has to change. Restrict the environment to win-v* tags
+    # (Settings → Environments → windows-release) so no branch can sign with it.
+    environment: windows-release
     env:
-      # Secrets cannot appear in an if: condition; a flag derived from one can.
-      # Code signing through SignPath, once its secret and repository variables are set:
-      # secret SIGNPATH_API_TOKEN; variables SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG,
-      # SIGNPATH_SIGNING_POLICY_SLUG (the test policy first, the release policy later).
-      # Public releases are signed only with the release policy: a test certificate is no
-      # better than none for users, and every signing request waits for manual approval.
-      # Alpha tags (win-vX.Y.Z-alpha.N) still go through whichever policy is set, to test it.
-      HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' && (vars.SIGNPATH_SIGNING_POLICY_SLUG == 'release-signing' || contains(github.ref_name, '-alpha.')) }}
+      # Code signing with Azure Artifact Signing, as Rana GmbH, once the repository variables
+      # AZURE_CLIENT_ID and AZURE_TENANT_ID are set (identifiers, not secrets). Without them,
+      # releases are built unsigned.
+      HAS_AZURE_SIGNING: ${{ vars.AZURE_CLIENT_ID != '' && vars.AZURE_TENANT_ID != '' }}
+      SIGNING_ENDPOINT: https://neu.codesigning.azure.net/
+      SIGNING_ACCOUNT: ranagmbh
+      SIGNING_PROFILE: rana-public
 
     steps:
       - uses: actions/checkout@v4
@@ -59,74 +62,85 @@ jobs:
         run: dotnet test windows/NetFluss.sln --configuration Release
 
       - name: Install Inno Setup
-        # Pinned: the signing configuration expects this version's padding of the installer's
-        # version strings, and build-release.ps1 checks it.
         run: choco install innosetup --version 6.7.1 --allow-downgrade --no-progress -y
 
-      # Code signing through SignPath (SignPath Foundation's free certificate for open source).
-      # In two rounds, because SignPath cannot sign inside an Inno Setup installer: first
-      # NetFluss.exe and the helper, then the installers built from those signed files. Each
-      # round waits for an approver to approve it in SignPath — the Foundation requires a manual
-      # approval for every release. Until the secret and variables named in the job env are set,
-      # releases are built unsigned. The artifact configurations: windows/Packaging/signpath/*.xml.
+      # Code signing in two rounds, because an installer has to be built from executables that
+      # are already signed: first NetFluss.exe and the helper, then the installers. Each round
+      # signs the files gathered under windows/artifacts/sign in place and hands them on through
+      # windows/artifacts/signed, where build-release.ps1 checks that each one carries a signature.
       - name: Publish
         shell: pwsh
         run: ./windows/Packaging/build-release.ps1 -Version ${{ steps.version.outputs.version }} -Stage Publish
 
-      - name: Upload the executables for signing
-        id: upload-binaries
-        if: env.HAS_SIGNPATH == 'true'
-        uses: actions/upload-artifact@v4
+      # A login per round: the GitHub token behind it is short-lived, and packaging takes minutes.
+      - name: Azure login for the executables
+        if: env.HAS_AZURE_SIGNING == 'true'
+        uses: azure/login@v3
         with:
-          name: netfluss-${{ steps.version.outputs.version }}-binaries-unsigned
-          path: windows/artifacts/sign/binaries
-          if-no-files-found: error
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          # The app may only sign: it has a role on the signing account, none on the subscription.
+          allow-no-subscriptions: true
 
       - name: Sign the executables
-        if: env.HAS_SIGNPATH == 'true'
-        uses: signpath/github-action-submit-signing-request@v3
+        if: env.HAS_AZURE_SIGNING == 'true'
+        uses: azure/artifact-signing-action@v2
         with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: binaries
-          github-artifact-id: ${{ steps.upload-binaries.outputs.artifact-id }}
-          wait-for-completion: true
-          # Time for the approver to approve the request.
-          wait-for-completion-timeout-in-seconds: 14400
-          output-artifact-directory: windows/artifacts/signed/binaries
-          parameters: |
-            version: ${{ toJSON(steps.version.outputs.version) }}
+          endpoint: ${{ env.SIGNING_ENDPOINT }}
+          signing-account-name: ${{ env.SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ env.SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\windows\artifacts\sign\binaries
+          files-folder-filter: exe
+          files-folder-recurse: true
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: NetFluss
+          description-url: https://github.com/rana-gmbh/NetFluss
+          exclude-environment-credential: true
+          exclude-azure-cli-credential: false
+
+      - name: Hand on the signed executables
+        if: env.HAS_AZURE_SIGNING == 'true'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force windows/artifacts/signed | Out-Null
+          Copy-Item windows/artifacts/sign/binaries windows/artifacts/signed/binaries -Recurse -Force
 
       - name: Package
         shell: pwsh
         run: ./windows/Packaging/build-release.ps1 -Version ${{ steps.version.outputs.version }} -Stage Package
 
-      - name: Upload the installers for signing
-        id: upload-installers
-        if: env.HAS_SIGNPATH == 'true'
-        uses: actions/upload-artifact@v4
+      - name: Azure login for the installers
+        if: env.HAS_AZURE_SIGNING == 'true'
+        uses: azure/login@v3
         with:
-          name: netfluss-${{ steps.version.outputs.version }}-installers-unsigned
-          path: windows/artifacts/sign/installers
-          if-no-files-found: error
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          # The app may only sign: it has a role on the signing account, none on the subscription.
+          allow-no-subscriptions: true
 
       - name: Sign the installers
-        if: env.HAS_SIGNPATH == 'true'
-        uses: signpath/github-action-submit-signing-request@v3
+        if: env.HAS_AZURE_SIGNING == 'true'
+        uses: azure/artifact-signing-action@v2
         with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: installers
-          github-artifact-id: ${{ steps.upload-installers.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 14400
-          output-artifact-directory: windows/artifacts/signed/installers
-          parameters: |
-            version: ${{ toJSON(steps.version.outputs.version) }}
+          endpoint: ${{ env.SIGNING_ENDPOINT }}
+          signing-account-name: ${{ env.SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ env.SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\windows\artifacts\sign\installers
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: NetFluss Setup
+          description-url: https://github.com/rana-gmbh/NetFluss
+          exclude-environment-credential: true
+          exclude-azure-cli-credential: false
+
+      - name: Hand on the signed installers
+        if: env.HAS_AZURE_SIGNING == 'true'
+        shell: pwsh
+        run: Copy-Item windows/artifacts/sign/installers windows/artifacts/signed/installers -Recurse -Force
 
       - name: Checksums and update signature
         shell: pwsh
