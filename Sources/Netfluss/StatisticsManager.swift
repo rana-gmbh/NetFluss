@@ -22,13 +22,15 @@ import Foundation
 @MainActor
 final class StatisticsManager: ObservableObject {
     private enum Constants {
-        // App sampling spawns `netstat` and parses its (~185 KB) output, so it is
-        // the main background cost. Sample infrequently — these are historical
-        // rollups, not live data (the popover's live Top Apps uses its own path).
+        // App bytes come from the kernel-statistics client, which adds them up
+        // continuously; this is how often they are collected and stored. Only
+        // when the client is unavailable does a sample spawn `netstat` and parse
+        // its (~185 KB) output. These are historical rollups, not live data.
         static let appSamplingInterval: TimeInterval = 20
         static let lowPowerAppSamplingInterval: TimeInterval = 60
         /// Skip an app sample unless at least this many bytes moved since the last
-        /// one, so idle periods spawn no netstat at all.
+        /// one, so idle periods spawn no netstat and write nothing. The client
+        /// keeps adding up meanwhile, so skipped bytes are collected later.
         static let appSampleByteThreshold: UInt64 = 256 * 1024
         /// Clash API poll cadence (issue #61). Short, because a connection that
         /// opens and closes between two polls can only be counted in the
@@ -114,7 +116,9 @@ final class StatisticsManager: ObservableObject {
     var sampleDataControlsEnabled: Bool { Self.sampleDataEnabledForLaunch }
 
     func applyPreferences() {
-        if statisticsEnabled && appStatisticsEnabled {
+        let collectApps = statisticsEnabled && appStatisticsEnabled
+        monitor.flowStatistics.setDemand(.statistics, collectApps)
+        if collectApps {
             startAppSampling()
         } else {
             stopAppSampling()
@@ -483,10 +487,18 @@ final class StatisticsManager: ObservableObject {
         bytesSinceLastAppSample = 0
         appSamplingInFlight = true
 
+        // On macOS 27.2.1 netstat reports TCP downloads at twice their size,
+        // so it only stands in when the kernel-statistics client can't
+        // attribute flows to apps.
+        let client = monitor.flowStatistics
+        let useClient = client.canAttributeApps
         Task { [weak self] in
             let sampleTime = Date()
-            let sample = await ProcessRunner.offloaded {
-                ProcessNetworkSampler.sampleStatisticsAppTraffic()
+            let sample: ProcessStatisticsSample = await ProcessRunner.offloaded {
+                if useClient {
+                    return .directDeltas(client.takeAppTotals().mapValues { (rx: $0.rx, tx: $0.tx) })
+                }
+                return ProcessNetworkSampler.sampleStatisticsAppTraffic()
             }
 
             guard let self else { return }

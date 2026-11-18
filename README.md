@@ -266,7 +266,7 @@ OpenVPN and WireGuard now need macOS 14 or later; IKEv2 and system VPNs still wo
 - **⚡ live / Σ accumulated toggle** per column — the last sample interval only, or the running total since the window was opened
 - **Drill-down** — click any host, service, or app to see its individual connections with app, local port, remote port, protocol, service, and per-connection download/upload
 - **Pause** — freeze the view to read a burst of traffic
-- **No packet capture** — built on the same lightweight `netstat` diffing used elsewhere in NetFluss; no `nettop` daemon, no extra privileges, and sampling stops when the window closes
+- **No packet capture** — reads the per-connection byte counters macOS already keeps, the same source as Top Apps and app statistics; no `nettop`, no extra privileges, and sampling stops when the window closes
 
 <p align="center">
   <img src="Screenshots/NetFluss%20Network%20Slice.webp" width="820" alt="NetFluss Network Slice window">

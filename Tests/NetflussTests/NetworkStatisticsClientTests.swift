@@ -102,4 +102,103 @@ struct NetworkStatisticsClientTests {
         // A reused srcref starts again from zero.
         #expect(NetworkStatisticsClient.flowDelta(current: C(rx: 10, tx: 5), previous: C(rx: 900, tx: 900)) == C(rx: 10, tx: 5))
     }
+
+    // MARK: - Endpoints
+
+    private func sockaddr4(_ a: UInt8, _ b: UInt8, _ c: UInt8, _ d: UInt8, port: UInt16) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: 28)
+        bytes[0] = 16; bytes[1] = UInt8(AF_INET)
+        bytes[2] = UInt8(port >> 8); bytes[3] = UInt8(port & 0xff)
+        bytes[4] = a; bytes[5] = b; bytes[6] = c; bytes[7] = d
+        return bytes
+    }
+
+    @Test func ipv4EndpointIsDecoded() {
+        let endpoint = NetworkStatisticsClient.endpoint(sockaddr4(1, 1, 1, 1, port: 443), at: 0)
+        #expect(endpoint == .init(host: "1.1.1.1", port: 443))
+    }
+
+    @Test func ipv6EndpointIsDecoded() {
+        var bytes = [UInt8](repeating: 0, count: 28)
+        bytes[0] = 28; bytes[1] = UInt8(AF_INET6)
+        bytes[2] = 0xc0; bytes[3] = 0x01
+        bytes[8] = 0xfe; bytes[9] = 0x80; bytes[23] = 1
+        #expect(NetworkStatisticsClient.endpoint(bytes, at: 0) == .init(host: "fe80::1", port: 49153))
+    }
+
+    @Test func unboundAndUnknownEndpoints() {
+        // A listening or unconnected socket: address all zero.
+        #expect(NetworkStatisticsClient.endpoint(sockaddr4(0, 0, 0, 0, port: 5353), at: 0) == .init(host: nil, port: 5353))
+        // A moved layout reads as no address, not a wrong one.
+        var garbage = sockaddr4(1, 2, 3, 4, port: 80)
+        garbage[1] = 99
+        #expect(NetworkStatisticsClient.endpoint(garbage, at: 0) == nil)
+        garbage = sockaddr4(1, 2, 3, 4, port: 80)
+        garbage[0] = 200
+        #expect(NetworkStatisticsClient.endpoint(garbage, at: 0) == nil)
+        #expect(NetworkStatisticsClient.endpoint([1, 2, 3], at: 0) == nil)
+    }
+
+    @Test func descriptorsCarryTheirEndpoints() throws {
+        var tcp = descriptor(provider: 2, length: 400, ifindex: (112, 13), pid: (156, 85115), name: (236, "Python"))
+        tcp.replaceSubrange(164..<192, with: sockaddr4(192, 168, 1, 94, port: 63033))
+        tcp.replaceSubrange(192..<220, with: sockaddr4(1, 1, 1, 1, port: 443))
+        let parsedTCP = try #require(NetworkStatisticsClient.parseDescriptor(tcp, length: tcp.count))
+        #expect(parsedTCP.local == .init(host: "192.168.1.94", port: 63033))
+        #expect(parsedTCP.remote == .init(host: "1.1.1.1", port: 443))
+        #expect(parsedTCP.protocolName == "TCP")
+        #expect(NetworkStatisticsClient.flowID(parsedTCP) == "TCP|192.168.1.94.63033|1.1.1.1.443|85115")
+
+        var udp = descriptor(provider: 4, length: 320, ifindex: (152, 13), pid: (168, 85142), name: (172, "Python"))
+        udp.replaceSubrange(96..<124, with: sockaddr4(192, 168, 1, 94, port: 60907))
+        udp.replaceSubrange(124..<152, with: sockaddr4(1, 1, 1, 1, port: 53))
+        let parsedUDP = try #require(NetworkStatisticsClient.parseDescriptor(udp, length: udp.count))
+        #expect(parsedUDP.remote == .init(host: "1.1.1.1", port: 53))
+        #expect(parsedUDP.protocolName == "UDP")
+    }
+
+    @Test func loopbackNeedsBothEnds() {
+        let loop = NetworkStatisticsClient.Endpoint(host: "127.0.0.1", port: 8080)
+        #expect(NetworkStatisticsClient.isLoopback(loop))
+        #expect(NetworkStatisticsClient.isLoopback(.init(host: "::1", port: 631)))
+        let lan = NetworkStatisticsClient.Endpoint(host: "192.168.1.2", port: 80)
+        #expect(NetworkStatisticsClient.isLoopback(lan) == false)
+        #expect(!NetworkStatisticsClient.isLoopback(nil))
+    }
+}
+
+@Suite
+struct NetworkSliceFlowTests {
+    private typealias Flow = NetworkStatisticsClient.FlowSample
+    private typealias Endpoint = NetworkStatisticsClient.Endpoint
+
+    @Test func flowsAggregateIntoHostsServicesAndApps() {
+        let flows = [
+            Flow(id: "a", appName: "Safari", protocolName: "TCP",
+                 local: Endpoint(host: "192.168.1.94", port: 50000), remote: Endpoint(host: "17.253.1.1", port: 443),
+                 rx: 1_000, tx: 100),
+            Flow(id: "b", appName: "Safari", protocolName: "UDP",
+                 local: Endpoint(host: "192.168.1.94", port: 50001), remote: Endpoint(host: "17.253.1.1", port: 443),
+                 rx: 500, tx: 50),
+            Flow(id: "c", appName: "Plex", protocolName: "TCP",
+                 local: Endpoint(host: "192.168.1.94", port: 32400), remote: Endpoint(host: "192.168.1.20", port: 51000),
+                 rx: 10, tx: 9_000),
+            // Unconnected UDP (mDNS): no remote end.
+            Flow(id: "d", appName: "mDNSResponder", protocolName: "UDP",
+                 local: Endpoint(host: nil, port: 5353), remote: nil, rx: 40, tx: 40),
+            Flow(id: "idle", appName: "Idle", protocolName: "TCP", local: nil, remote: nil, rx: 0, tx: 0),
+        ]
+        let result = NetworkSliceSampler.aggregate(flows: flows)
+        #expect(result.programDeltas["Safari"]?.rx == 1_500)
+        #expect(result.programDeltas["Plex"]?.tx == 9_000)
+        #expect(result.programDeltas["Idle"] == nil)
+        #expect(result.hostDeltas["17.253.1.1"]?.rx == 1_500)
+        #expect(result.hostDeltas.count == 2)
+        #expect(result.privateHosts == ["192.168.1.20"])
+        #expect(result.serviceDeltas["https"]?.rx == 1_500)
+        #expect(result.serviceDeltas["zeroconf"]?.rx == 40)
+        #expect(result.connectionDeltas.count == 4)
+        #expect(result.connectionDeltas.first { $0.id == "d" }?.host == "*")
+        #expect(result.connectionDeltas.first { $0.id == "d" }?.localAddress == "*")
+    }
 }

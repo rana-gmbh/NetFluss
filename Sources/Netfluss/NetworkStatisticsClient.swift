@@ -55,14 +55,47 @@ final class NetworkStatisticsClient {
         var tx: UInt64
     }
 
+    struct Endpoint: Equatable, Sendable {
+        /// Numeric address; nil while unbound or unconnected (`*`).
+        let host: String?
+        let port: Int
+    }
+
     struct FlowDescriptor: Equatable, Sendable {
         let provider: UInt32
         let ifindex: UInt32
         let pid: pid_t
         let processName: String
+        var local: Endpoint? = nil
+        var remote: Endpoint? = nil
         /// Resolved while the process is still alive: a short-lived flow's
         /// owner has often exited by the time its final counts are summed.
         var appName: String? = nil
+
+        var protocolName: String { provider == NetworkStatisticsClient.providerUDPKernel ? "UDP" : "TCP" }
+    }
+
+    /// One connection's bytes in one poll interval, for the Network Slice.
+    struct FlowSample: Equatable, Sendable {
+        /// Stable across polls and client restarts: protocol, endpoints, PID.
+        let id: String
+        let appName: String
+        let protocolName: String
+        let local: Endpoint?
+        let remote: Endpoint?
+        let rx: UInt64
+        let tx: UInt64
+    }
+
+    /// Who needs the client. It runs while anyone does, polls every second for
+    /// the live consumers, and every 10 s when only the statistics need it:
+    /// closed flows deliver their final counts themselves, so a slow poll
+    /// loses no bytes.
+    enum Demand: Hashable, Sendable {
+        case rxFallback, topApps, statistics, networkSlice
+
+        var isLive: Bool { self != .statistics }
+        var needsOwners: Bool { self != .rxFallback }
     }
 
     /// Where a flow descriptor keeps its fields, by provider. Offsets are from
@@ -72,11 +105,16 @@ final class NetworkStatisticsClient {
         let pid: Int
         let processName: Int
         let processNameLength: Int
+        /// sockaddr_in / sockaddr_in6 unions, 28 bytes each.
+        let localAddress: Int
+        let remoteAddress: Int
 
         /// nstat_tcp_descriptor, kernel and user-space TCP (400-byte message on 27.2.1).
-        static let tcp = Layout(ifindex: 112, pid: 156, processName: 236, processNameLength: 64)
+        static let tcp = Layout(ifindex: 112, pid: 156, processName: 236, processNameLength: 64,
+                                localAddress: 164, remoteAddress: 192)
         /// nstat_udp_descriptor (320-byte message on 27.2.1).
-        static let udp = Layout(ifindex: 152, pid: 168, processName: 172, processNameLength: 64)
+        static let udp = Layout(ifindex: 152, pid: 168, processName: 172, processNameLength: 64,
+                                localAddress: 96, remoteAddress: 124)
 
         static func forProvider(_ provider: UInt32) -> Layout? {
             switch provider {
@@ -86,7 +124,7 @@ final class NetworkStatisticsClient {
             }
         }
 
-        var minimumLength: Int { processName + 16 }
+        var minimumLength: Int { max(processName + 16, remoteAddress + 28) }
     }
 
     /// Called on the main queue once per poll with the total inbound rate
@@ -95,10 +133,14 @@ final class NetworkStatisticsClient {
     /// been resolved yet are absent from the breakdown but still in the total.
     var onSample: ((_ totalRxRateBps: Double, _ ratesByInterface: [String: Double], _ at: Date) -> Void)?
 
-    /// Called on the main queue once per poll while `appSamplingEnabled`, with
+    /// Called on the main queue once per poll while Top Apps is a demand, with
     /// per-app rates sorted by total traffic. Flows whose owner isn't known
     /// yet are left out until their descriptor arrives.
     var onAppSample: ((_ apps: [AppTraffic], _ at: Date) -> Void)?
+
+    /// Called on the main queue once per poll while the Network Slice is a
+    /// demand, with every connection that moved bytes and the interval length.
+    var onFlowSample: ((_ flows: [FlowSample], _ elapsed: TimeInterval, _ at: Date) -> Void)?
 
     /// `true` if the kernel rejected a subscription or counts query (e.g. the
     /// private message layout changed). The caller should fall back to
@@ -116,12 +158,16 @@ final class NetworkStatisticsClient {
     private var layoutVerified = false
     private static let layoutCheckCount = 10
 
-    /// Whether to resolve flow owners and deliver `onAppSample`. Thread-safe.
-    var appSamplingEnabled: Bool {
-        get { queue.sync { _appSamplingEnabled } }
-        set { queue.async { [weak self] in self?._appSamplingEnabled = newValue } }
-    }
-    private var _appSamplingEnabled = false
+    /// False once the client can't serve per-app data: the subscription
+    /// failed, or descriptors don't carry the owner on this macOS. Consumers
+    /// then use `netstat`. Thread-safe.
+    var canAttributeApps: Bool { queue.sync { !_subscriptionFailed && !_attributionFailed } }
+
+    private var demands: Set<Demand> = []
+    private var needsOwners: Bool { !_attributionFailed && demands.contains { $0.needsOwners } }
+    /// Per-app bytes since the statistics last collected them.
+    private var pendingAppTotals: [String: FlowCounts] = [:]
+    private var pollIntervalInUse: TimeInterval = 0
 
     private let queue = DispatchQueue(label: "com.local.netfluss.netstat", qos: .utility)
     private var fd: Int32 = -1
@@ -152,10 +198,15 @@ final class NetworkStatisticsClient {
     /// Flows the kernel reported closed since the last poll. Their final counts
     /// are still folded in once before they are forgotten.
     private var removedSrcrefs: Set<UInt64> = []
+    /// Network Slice bytes of TCP flows whose descriptor has no remote address
+    /// yet, emitted once it has one: otherwise a connection would show up as
+    /// one row under "*" and another under its host.
+    private var heldFlowBytes: [UInt64: FlowCounts] = [:]
     private var ifNameCache: [UInt32: String] = [:]
     private let loopbackIndex = if_nametoindex("lo0")
     private static let descriptorRequestsPerPoll = 64
     private static let descriptorRetryInterval: TimeInterval = 3
+    private static let addresslessRetryInterval: TimeInterval = 0.9
 
     // MARK: ntstat protocol constants
     private static let controlName = "com.apple.network.statistics"
@@ -164,7 +215,6 @@ final class NetworkStatisticsClient {
     private static let MSG_ADD_ALL_SRCS: UInt32 = 1002
     private static let MSG_QUERY_SRC: UInt32 = 1004
     private static let MSG_GET_SRC_DESC: UInt32 = 1005
-    private static let MSG_SRC_ADDED: UInt32 = 10001
     private static let MSG_SRC_REMOVED: UInt32 = 10002
     private static let MSG_SRC_DESC: UInt32 = 10003
     private static let MSG_SRC_COUNTS: UInt32 = 10004
@@ -174,24 +224,44 @@ final class NetworkStatisticsClient {
     static let providerTCPUserland: UInt32 = 3
     static let providerUDPKernel: UInt32 = 4
     private static let srcRefAll: UInt64 = .max
-    private static let pollInterval: TimeInterval = 1.0
+    private static let livePollInterval: TimeInterval = 1
+    private static let statisticsPollInterval: TimeInterval = 10
     private static let receiveBufferSize: Int32 = 1 << 20
 
     var isRunning: Bool { queue.sync { running } }
 
-    func start() {
-        queue.async { [weak self] in self?.startLocked() }
+    /// Registers or withdraws a consumer; starts or stops the client to match.
+    func setDemand(_ demand: Demand, _ active: Bool) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            let changed = active ? self.demands.insert(demand).inserted : self.demands.remove(demand) != nil
+            guard changed else { return }
+            if demand == .statistics, !active { self.pendingAppTotals.removeAll() }
+            if self.demands.isEmpty {
+                self.stopLocked()
+            } else if self.fd < 0 {
+                self.startLocked()
+            } else {
+                self.schedulePolls()
+            }
+        }
     }
 
-    func stop() {
-        queue.async { [weak self] in self?.stopLocked() }
+    /// Per-app bytes since the last call, for the app statistics.
+    func takeAppTotals() -> [String: FlowCounts] {
+        queue.sync {
+            let totals = pendingAppTotals
+            pendingAppTotals.removeAll(keepingCapacity: true)
+            return totals
+        }
     }
 
     // MARK: - Lifecycle
 
     private func startLocked() {
-        guard fd < 0 else { return }
-        _subscriptionFailed = false
+        // A rejected subscription stays rejected for the session; consumers
+        // have switched to netstat by then.
+        guard fd < 0, !_subscriptionFailed else { return }
 
         let sock = socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL)
         guard sock >= 0 else { _subscriptionFailed = true; return }
@@ -242,17 +312,30 @@ final class NetworkStatisticsClient {
         // Ask for counts now, so the first poll can take its baseline from them.
         query()
 
+        running = true
+        schedulePolls()
+    }
+
+    /// Fast polls until the baseline stands and while a live consumer needs
+    /// them; slow ones when only the statistics do.
+    private func schedulePolls() {
+        guard fd >= 0 else { return }
+        let live = !baselined || demands.contains { $0.isLive }
+        let interval = live ? Self.livePollInterval : Self.statisticsPollInterval
+        guard pollTimer == nil || interval != pollIntervalInUse else { return }
+        pollTimer?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + Self.pollInterval, repeating: Self.pollInterval, leeway: .milliseconds(200))
+        let leeway = DispatchTimeInterval.milliseconds(Int(interval * 200))
+        timer.schedule(deadline: .now() + interval, repeating: interval, leeway: leeway)
         timer.setEventHandler { [weak self] in self?.pollLocked() }
         timer.resume()
         pollTimer = timer
-
-        running = true
+        pollIntervalInUse = interval
     }
 
     private func stopLocked() {
         pollTimer?.cancel(); pollTimer = nil
+        pollIntervalInUse = 0
         readSource?.cancel(); readSource = nil
         if fd >= 0 { close(fd); fd = -1 }
         resetFlowState()
@@ -266,6 +349,7 @@ final class NetworkStatisticsClient {
         descRequestedAt.removeAll(keepingCapacity: false)
         unattributed.removeAll(keepingCapacity: false)
         removedSrcrefs.removeAll(keepingCapacity: false)
+        heldFlowBytes.removeAll(keepingCapacity: false)
         baselined = false
         warmupPolls = 0
         lastPollAt = nil
@@ -367,13 +451,11 @@ final class NetworkStatisticsClient {
                     )
                     requestDescriptorIfNew(srcref)
                 }
-            case Self.MSG_SRC_ADDED:
-                if len >= 24 { requestDescriptorIfNew(readU64(readBuffer, off + 16)) }
             case Self.MSG_SRC_DESC:
                 if var descriptor = Self.parseDescriptor(readBuffer, at: off, length: len) {
                     let srcref = readU64(readBuffer, off + 16)
                     verifyLayout(with: descriptor)
-                    if _appSamplingEnabled, !_attributionFailed, descriptor.pid > 0 {
+                    if needsOwners, descriptor.pid > 0 {
                         descriptor.appName = descriptors[srcref]?.appName ?? appName(for: descriptor)
                     }
                     descriptors[srcref] = descriptor
@@ -397,8 +479,10 @@ final class NetworkStatisticsClient {
         }
     }
 
-    /// Once the baseline stands, a new flow's owner is asked for right away, so
-    /// it is known by the next poll. Before that, the flows that were already
+    /// Once the baseline stands, a new flow's owner is asked for as soon as its
+    /// first counts arrive, so it is known by the next poll. (Asking when the
+    /// flow is added is too early: a TCP client has no addresses before it
+    /// connects.) Before that, the flows that were already
     /// open are requested a batch per poll; all at once, most replies would be
     /// dropped.
     private func requestDescriptorIfNew(_ srcref: UInt64) {
@@ -420,8 +504,41 @@ final class NetworkStatisticsClient {
             provider: provider,
             ifindex: readU32(bytes, offset + layout.ifindex),
             pid: pid_t(bitPattern: readU32(bytes, offset + layout.pid)),
-            processName: String(decoding: nameBytes, as: UTF8.self)
+            processName: String(decoding: nameBytes, as: UTF8.self),
+            local: endpoint(bytes, at: offset + layout.localAddress),
+            remote: endpoint(bytes, at: offset + layout.remoteAddress)
         )
+    }
+
+    /// Decodes a sockaddr_in / sockaddr_in6. Nil for anything else (a moved
+    /// layout reads as no address rather than a wrong one).
+    static func endpoint(_ bytes: [UInt8], at offset: Int) -> Endpoint? {
+        guard offset >= 0, offset + 28 <= bytes.count else { return nil }
+        let length = Int(bytes[offset])
+        let family = Int32(bytes[offset + 1])
+        let port = Int(bytes[offset + 2]) << 8 | Int(bytes[offset + 3])
+        var text = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+        let address: [UInt8]
+        switch family {
+        case AF_INET where length == MemoryLayout<sockaddr_in>.size:
+            address = Array(bytes[(offset + 4)..<(offset + 8)])
+        case AF_INET6 where length == MemoryLayout<sockaddr_in6>.size:
+            address = Array(bytes[(offset + 8)..<(offset + 24)])
+        default:
+            return nil
+        }
+        guard address.withUnsafeBytes({ inet_ntop(family, $0.baseAddress, &text, socklen_t(text.count)) }) != nil else {
+            return nil
+        }
+        let unbound = address.allSatisfy { $0 == 0 }
+        return Endpoint(host: unbound ? nil : String(cString: text), port: port)
+    }
+
+    /// Both ends on 127.0.0.0/8 or ::1, as a fallback when a flow's
+    /// interface isn't known.
+    static func isLoopback(_ endpoint: Endpoint?) -> Bool {
+        guard let host = endpoint?.host else { return false }
+        return host.hasPrefix("127.") || host == "::1"
     }
 
     /// Whether a descriptor's process name agrees with what the kernel reports
@@ -458,13 +575,16 @@ final class NetworkStatisticsClient {
 
     private func pollLocked() {
         let now = Date()
-        let wantApps = _appSamplingEnabled && !_attributionFailed
+        let resolveOwners = needsOwners
+        let wantFlows = resolveOwners && demands.contains(.networkSlice) && onFlowSample != nil
         var intervalRx: UInt64 = 0
         var intervalRxByIf: [UInt32: UInt64] = [:]
         var appDeltas: [String: (rx: UInt64, tx: UInt64)] = [:]
+        var flows: [FlowSample] = []
         var unresolved: [(srcref: UInt64, bytes: UInt64)] = []
+        var addressless: [(srcref: UInt64, bytes: UInt64)] = []
 
-        if wantApps { ProcessNetworkSampler.clearNameCacheIfNeeded() }
+        if resolveOwners { ProcessNetworkSampler.clearNameCacheIfNeeded() }
         for (ref, counts) in currentCounts {
             let delta = Self.flowDelta(current: counts, previous: lastCounts[ref])
             guard let descriptor = descriptors[ref] else {
@@ -479,16 +599,39 @@ final class NetworkStatisticsClient {
             }
             let held = unattributed.removeValue(forKey: ref) ?? FlowCounts(rx: 0, tx: 0)
             // Local IPC is not network traffic, and lo0 is not in the totals (#54).
-            if descriptor.ifindex == loopbackIndex { continue }
+            if descriptor.ifindex == loopbackIndex
+                || (Self.isLoopback(descriptor.local) && Self.isLoopback(descriptor.remote)) { continue }
             guard delta.rx > 0 || delta.tx > 0 || held.rx > 0 || held.tx > 0 else { continue }
             intervalRx &+= delta.rx
             if delta.rx > 0 {
                 intervalRxByIf[descriptor.ifindex, default: 0] &+= delta.rx
             }
-            if wantApps, descriptor.pid > 0 {
-                let name = descriptor.appName ?? appName(for: descriptor)
-                let existing = appDeltas[name] ?? (rx: 0, tx: 0)
-                appDeltas[name] = (existing.rx &+ delta.rx &+ held.rx, existing.tx &+ delta.tx &+ held.tx)
+            guard resolveOwners, descriptor.pid > 0 else { continue }
+            let name = descriptor.appName ?? appName(for: descriptor)
+            let rx = delta.rx &+ held.rx
+            let tx = delta.tx &+ held.tx
+            let existing = appDeltas[name] ?? (rx: 0, tx: 0)
+            appDeltas[name] = (existing.rx &+ rx, existing.tx &+ tx)
+            if descriptor.protocolName == "TCP", descriptor.remote?.host == nil {
+                // Described before it connected: ask again for the addresses.
+                addressless.append((ref, rx &+ tx))
+                if wantFlows {
+                    let flowHeld = heldFlowBytes[ref] ?? FlowCounts(rx: 0, tx: 0)
+                    heldFlowBytes[ref] = FlowCounts(rx: flowHeld.rx &+ rx, tx: flowHeld.tx &+ tx)
+                }
+                continue
+            }
+            if wantFlows {
+                let flowHeld = heldFlowBytes.removeValue(forKey: ref) ?? FlowCounts(rx: 0, tx: 0)
+                flows.append(FlowSample(
+                    id: Self.flowID(descriptor),
+                    appName: name,
+                    protocolName: descriptor.protocolName,
+                    local: descriptor.local,
+                    remote: descriptor.remote,
+                    rx: rx &+ flowHeld.rx,
+                    tx: tx &+ flowHeld.tx
+                ))
             }
         }
         lastCounts = currentCounts
@@ -498,6 +641,7 @@ final class NetworkStatisticsClient {
             descriptors.removeValue(forKey: ref)
             descRequestedAt.removeValue(forKey: ref)
             unattributed.removeValue(forKey: ref)
+            heldFlowBytes.removeValue(forKey: ref)
         }
         removedSrcrefs.removeAll(keepingCapacity: true)
 
@@ -509,12 +653,21 @@ final class NetworkStatisticsClient {
                 guard let name = interfaceName(for: ifindex) else { continue }
                 ratesByName[name] = Double(bytes) / elapsed
             }
-            if let onSample {
+            if demands.contains(.rxFallback), let onSample {
                 DispatchQueue.main.async { onSample(totalRate, ratesByName, now) }
             }
-            if wantApps, let onAppSample {
+            if resolveOwners, demands.contains(.topApps), let onAppSample {
                 let apps = ProcessNetworkSampler.rates(from: appDeltas, elapsed: elapsed, limit: .max)
                 DispatchQueue.main.async { onAppSample(apps, now) }
+            }
+            if wantFlows, let onFlowSample {
+                DispatchQueue.main.async { onFlowSample(flows, elapsed, now) }
+            }
+            if resolveOwners, demands.contains(.statistics) {
+                for (name, delta) in appDeltas {
+                    let total = pendingAppTotals[name] ?? FlowCounts(rx: 0, tx: 0)
+                    pendingAppTotals[name] = FlowCounts(rx: total.rx &+ delta.rx, tx: total.tx &+ delta.tx)
+                }
             }
         } else if !currentCounts.isEmpty {
             // The first polls with counts only establish per-flow baselines
@@ -524,12 +677,23 @@ final class NetworkStatisticsClient {
             // one-off spike of 100+ MB/s that went into the statistics.
             warmupPolls += 1
             baselined = warmupPolls >= Self.warmupPollCount
+            if baselined { schedulePolls() }
         }
         lastPollAt = now
 
         // Request fresh counts for the next interval.
         query()
-        requestDescriptors(for: unresolved, at: now)
+        requestDescriptors(for: unresolved, retryAfter: Self.descriptorRetryInterval, at: now)
+        requestDescriptors(for: addressless, retryAfter: Self.addresslessRetryInterval, at: now)
+    }
+
+    static func flowID(_ descriptor: FlowDescriptor) -> String {
+        func text(_ endpoint: Endpoint?) -> String {
+            guard let endpoint else { return "?" }
+            return "\(endpoint.host ?? "*").\(endpoint.port)"
+        }
+        return [descriptor.protocolName, text(descriptor.local), text(descriptor.remote), String(descriptor.pid)]
+            .joined(separator: "|")
     }
 
     /// The app a flow belongs to, as Top Apps names it; the descriptor's own
@@ -544,11 +708,15 @@ final class NetworkStatisticsClient {
 
     /// Asks for the descriptors still missing, busiest flows first, a bounded
     /// number per poll.
-    private func requestDescriptors(for unresolved: [(srcref: UInt64, bytes: UInt64)], at now: Date) {
+    private func requestDescriptors(
+        for unresolved: [(srcref: UInt64, bytes: UInt64)],
+        retryAfter retryInterval: TimeInterval,
+        at now: Date
+    ) {
         guard !unresolved.isEmpty else { return }
         var sent = 0
         for flow in unresolved.sorted(by: { $0.bytes > $1.bytes }) {
-            if let at = descRequestedAt[flow.srcref], now.timeIntervalSince(at) < Self.descriptorRetryInterval {
+            if let at = descRequestedAt[flow.srcref], now.timeIntervalSince(at) < retryInterval {
                 continue
             }
             descRequestedAt[flow.srcref] = now

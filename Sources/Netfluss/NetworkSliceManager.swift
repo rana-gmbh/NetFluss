@@ -70,11 +70,12 @@ struct NetworkSliceRatePoint: Identifiable, Equatable {
 
 // MARK: - Manager
 
-/// Drives the "Network Slice" window: while the window is open it snapshots
-/// `netstat -n -b -v` every couple of seconds, diffs per-connection byte
-/// counters into interval deltas, and aggregates them into remote hosts,
-/// services (well-known ports), and apps. Uses the same cheap one-shot
-/// netstat approach as the statistics sampler — never `nettop` on a timer.
+/// Drives the "Network Slice" window: while the window is open it takes each
+/// connection's bytes per interval from the kernel-statistics client and
+/// aggregates them into remote hosts, services (well-known ports), and apps.
+/// Only when the client can't attribute flows does it fall back to diffing
+/// `netstat -n -b -v` snapshots every couple of seconds (on macOS 27.2.1
+/// netstat reports TCP downloads at twice their size). Never `nettop`.
 @MainActor
 final class NetworkSliceManager: ObservableObject {
     @Published private(set) var hosts: [NetworkSliceEntry] = []
@@ -95,6 +96,8 @@ final class NetworkSliceManager: ObservableObject {
 
     private let monitor: NetworkMonitor
     private var timer: Timer?
+    /// True while the kernel-statistics client feeds the window.
+    private var usingFlowStatistics = false
     private var totalsCancellable: AnyCancellable?
     private var sampleInFlight = false
     /// nil → the next snapshot only establishes the diff baseline.
@@ -167,6 +170,21 @@ final class NetworkSliceManager: ObservableObject {
                 }
             }
 
+        let client = monitor.flowStatistics
+        usingFlowStatistics = client.canAttributeApps
+        if usingFlowStatistics {
+            client.onFlowSample = { [weak self] flows, elapsed, _ in
+                guard let self, self.usingFlowStatistics, self.timer != nil, !self.isPaused else { return }
+                // The client polls every second; the first interval has no
+                // previous apply to measure against.
+                if self.lastApplyDate == nil { self.lastIntervalSeconds = max(elapsed, 0.5) }
+                self.apply(NetworkSliceSampler.aggregate(flows: flows))
+            }
+            client.setDemand(.networkSlice, true)
+        }
+
+        // Also the netstat fallback's clock: it samples only while the client
+        // isn't serving, which it notices on each tick.
         let timer = Timer.scheduledTimer(withTimeInterval: Self.sampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.sampleTick()
@@ -178,6 +196,11 @@ final class NetworkSliceManager: ObservableObject {
     }
 
     func stop() {
+        if usingFlowStatistics {
+            monitor.flowStatistics.setDemand(.networkSlice, false)
+            monitor.flowStatistics.onFlowSample = nil
+            usingFlowStatistics = false
+        }
         timer?.invalidate()
         timer = nil
         totalsCancellable = nil
@@ -195,6 +218,15 @@ final class NetworkSliceManager: ObservableObject {
     }
 
     private func sampleTick() {
+        if usingFlowStatistics {
+            guard !monitor.flowStatistics.canAttributeApps else { return }
+            // The client stopped serving mid-session: netstat takes over,
+            // starting from a fresh baseline.
+            usingFlowStatistics = false
+            monitor.flowStatistics.setDemand(.networkSlice, false)
+            monitor.flowStatistics.onFlowSample = nil
+            previousSnapshot = nil
+        }
         guard timer != nil, !isPaused, !sampleInFlight else { return }
         sampleInFlight = true
         let previous = previousSnapshot
@@ -507,6 +539,48 @@ enum NetworkSliceSampler {
             )
         }
         return connections
+    }
+
+    /// Aggregates one interval of the kernel-statistics client's per-connection
+    /// deltas. Loopback flows are already left out by the client.
+    static func aggregate(flows: [NetworkStatisticsClient.FlowSample]) -> IntervalAggregate {
+        var result = IntervalAggregate()
+        for flow in flows where flow.rx > 0 || flow.tx > 0 {
+            let program = result.programDeltas[flow.appName] ?? (rx: 0, tx: 0)
+            result.programDeltas[flow.appName] = (rx: program.rx &+ flow.rx, tx: program.tx &+ flow.tx)
+
+            let remoteHost = flow.remote?.host
+            if let host = remoteHost {
+                let hostExisting = result.hostDeltas[host] ?? (rx: 0, tx: 0)
+                result.hostDeltas[host] = (rx: hostExisting.rx &+ flow.rx, tx: hostExisting.tx &+ flow.tx)
+                if isPrivateHost(host) {
+                    result.privateHosts.insert(host)
+                }
+            }
+
+            let localPort = flow.local.map(\.port).flatMap { $0 > 0 ? $0 : nil }
+            let remotePort = flow.remote.map(\.port).flatMap { $0 > 0 ? $0 : nil }
+            let service = serviceKey(localPort: localPort, remotePort: remotePort)
+            // Unconnected UDP sockets (mDNS, SSDP, …) have no remote end; they
+            // are listed under "*" in the detail tables, not as a host.
+            result.connectionDeltas.append(ConnectionDelta(
+                id: flow.id,
+                host: remoteHost ?? "*",
+                localAddress: flow.local?.host ?? "*",
+                localPort: localPort,
+                remotePort: remotePort,
+                protocolName: flow.protocolName,
+                serviceKey: service,
+                processName: flow.appName,
+                rx: flow.rx,
+                tx: flow.tx
+            ))
+            if let service {
+                let serviceExisting = result.serviceDeltas[service] ?? (rx: 0, tx: 0)
+                result.serviceDeltas[service] = (rx: serviceExisting.rx &+ flow.rx, tx: serviceExisting.tx &+ flow.tx)
+            }
+        }
+        return result
     }
 
     /// Diff two snapshots into per-host / per-service / per-app interval deltas.

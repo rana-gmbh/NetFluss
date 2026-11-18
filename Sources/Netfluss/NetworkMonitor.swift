@@ -89,9 +89,10 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var adapterLastActiveTime: [String: Date] = [:]
     private var topAppLastActiveTime: [String: (lastSeen: Date, rxRate: Double, txRate: Double)] = [:]
     private var allAppLastSeen: [String: Date] = [:]
-    // Preferred inbound-rate source for the rx fallback (issues #31/#45): polls
-    // the kernel's per-flow counters directly at ~0% CPU.
+    // Per-flow kernel counters at ~0% CPU: the rx fallback's inbound rate
+    // (issues #31/#45), Top Apps, app statistics and the Network Slice.
     private let netStatClient = NetworkStatisticsClient()
+    var flowStatistics: NetworkStatisticsClient { netStatClient }
     let diagnostics = NetworkDiagnostics()
 
     // Rx fallback for the macOS 26.5 ifi_ibytes-frozen bug. `rxDetector` flags
@@ -258,7 +259,6 @@ final class NetworkMonitor: NSObject, ObservableObject {
     /// Re-baselines counters on wake so the first tick doesn't diff them
     /// across the whole sleep.
     @objc private func handleDidWake() {
-        netStatClient.stop()
         lastSample = [:]
         lastUpdate = nil
         processSnapshot = [:]
@@ -790,12 +790,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
         }
 
         let appsFromClient = topAppsVisible && clientUsable && !netStatClient.processAttributionFailed
-        netStatClient.appSamplingEnabled = appsFromClient
-        if source == .kernelStatistics || appsFromClient {
-            netStatClient.start()
-        } else {
-            netStatClient.stop()
-        }
+        netStatClient.setDemand(.rxFallback, source == .kernelStatistics)
+        netStatClient.setDemand(.topApps, appsFromClient)
 
         if source != fallbackSource {
             fallbackSource = source

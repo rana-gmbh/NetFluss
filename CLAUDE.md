@@ -94,7 +94,7 @@ Netfluss is a pure-SwiftPM macOS menu bar app. Its only third-party dependency i
 
 `DispatchSourceTimer` (main queue) → `NetworkMonitor.refresh()` every N seconds →
 - `InterfaceSampler` (BSD `getifaddrs` + CoreWLAN) → updates `adapters` and `totals`
-- `NetworkStatisticsClient` (polls the `com.apple.network.statistics` kernel control, ~0% CPU) → updates `topApps` while the popover is open, and feeds the rx fallback; `ProcessNetworkSampler` (`netstat -n -b -v`) only stands in if the client is unavailable
+- `NetworkStatisticsClient` (polls the `com.apple.network.statistics` kernel control, ~0% CPU) → Top Apps, app statistics, the Network Slice and the rx fallback. Consumers register with `setDemand(_:_:)`; it polls every 1 s for live consumers and every 10 s when only statistics need it (closed flows push their final counts, so slow polling loses nothing). `netstat -n -b -v` only stands in when the client can't attribute flows (`canAttributeApps`)
 - `InterfaceSampler` (SCDynamicStore + `api.ipify.org`) → updates IP addresses
 
 `StatusBarController` subscribes to `monitor.$totals` via Combine and calls `updateLabel()` on every tick.
@@ -105,7 +105,7 @@ Preferences changes are propagated via `UserDefaults.didChangeNotification` → 
 
 ### Top Apps — platform notes
 
-Top Apps comes from `NetworkStatisticsClient`: per-flow byte counts plus each flow's owning PID from its `SRC_DESC` descriptor (offsets in `NetworkStatisticsClient.Layout`, read on macOS 27.2.1; TCP and UDP differ). The client checks the first descriptors' process names against `proc_name` and reports `processAttributionFailed` if the layout moved, in which case Top Apps falls back to `netstat` diffs.
+Top Apps, app statistics and the Network Slice come from `NetworkStatisticsClient`: per-flow byte counts plus each flow's owning PID and local/remote addresses from its `SRC_DESC` descriptor (offsets in `NetworkStatisticsClient.Layout`, read on macOS 27.2.1; TCP and UDP differ). The client checks the first descriptors' process names against `proc_name` and reports `processAttributionFailed` if the layout moved, in which case all three fall back to `netstat` diffs. A TCP flow described before it connected has no addresses yet; the client asks again and holds its Network Slice bytes until it has them.
 
 - **Never run `nettop`.** It costs >100% CPU on macOS 27 however it is invoked; a test fails if `/usr/bin/nettop` appears in `Sources/`.
 - **Don't trust `netstat` rxbytes for download volumes:** on macOS 27.2.1 every TCP socket's rxbytes is twice the real value (txbytes are right).
