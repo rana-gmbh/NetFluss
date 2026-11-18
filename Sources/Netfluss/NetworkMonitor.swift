@@ -85,67 +85,61 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var lastNetworkFingerprint: String?
     private var processSnapshot: [String: ProcessConnectionSnapshot] = [:]
     private var processSnapshotTime: Date?
-    private var topAppsTaskInFlight = false
+    private var processSampleInFlight = false
     private var adapterLastActiveTime: [String: Date] = [:]
     private var topAppLastActiveTime: [String: (lastSeen: Date, rxRate: Double, txRate: Double)] = [:]
     private var allAppLastSeen: [String: Date] = [:]
-    private let liveTopAppsCollector = LiveNettopCollector()
-    // Low-overhead inbound-rate source for the rx fallback (issues #31/#45).
-    // Replaces the continuously-running nettop subprocess when available.
+    // Preferred inbound-rate source for the rx fallback (issues #31/#45): polls
+    // the kernel's per-flow counters directly at ~0% CPU.
     private let netStatClient = NetworkStatisticsClient()
-    // True while `netStatClient` is the active fallback inbound-rate source, so
-    // the nettop collector (running for Top Apps) doesn't also drive the rate.
-    private var statsClientActive = false
     let diagnostics = NetworkDiagnostics()
 
-    // Per-process rx fallback for the macOS 26.5 ifi_ibytes-frozen bug.
-    // Detection latches per adapter for the session; once `kernelRxBroken` is non-empty
-    // we keep nettop running and substitute its summed rx for the default-route adapter.
-    private var rxLastBytes: [String: UInt64] = [:]
-    private var rxLastChange: [String: Date] = [:]
-    private var txLastBytes: [String: UInt64] = [:]
-    // tx byte count captured when rx last moved, to measure tx volume accrued
-    // while rx is frozen (gates broken-rx detection — see applyRxFallbackIfNeeded).
-    private var txBytesAtRxStuck: [String: UInt64] = [:]
-    private var kernelRxBroken: Set<String> = []
-    private var nettopTotalRxRate: Double = 0
+    // Rx fallback for the macOS 26.5 ifi_ibytes-frozen bug. `rxDetector` flags
+    // adapters whose kernel rx counter froze, and clears them again once the
+    // counter moves. While any adapter is flagged, its rx rate comes from
+    // per-flow counters instead: the kernel-statistics client, or `netstat`
+    // diffs if that client is unavailable. Never `nettop`: it costs >100% CPU
+    // on macOS 27 however it is invoked.
+    private enum FallbackSource: String {
+        case off
+        case kernelStatistics = "kernel statistics"
+        case netstat
+    }
+    private var rxDetector = RxFallbackDetector()
+    private var kernelRxBroken: Set<String> { rxDetector.broken }
+    private var fallbackSource: FallbackSource = .off
+    private var fallbackTotalRxRate: Double = 0
     // Per-interface (BSD name) inbound rate from the kernel-stats client, used
     // to attribute the fallback rx to the correct adapter (issue #45). Empty
-    // when the nettop fallback is the source (total only).
+    // when netstat is the source (total only).
     private var fallbackRxByInterface: [String: Double] = [:]
-    private var nettopLastSampleAt: Date?
-    // Auto-pause the nettop fallback when the popover is closed and there's
-    // no real traffic. Avoids burning CPU 24/7 just to maintain a synthetic
-    // rxBytes counter when nothing is being received anyway. The grace
-    // counter is refreshed by any tick whose tx rate exceeds the threshold
-    // and decremented otherwise — so a burst keeps nettop alive for the
-    // full grace window even if the very next tick is quiet, while a
-    // sustained idle period still pauses the subprocess.
-    private var nettopActivityCounter: Int = 0
-    private static let nettopIdleThresholdBps: Double = 65_536       // 64 KB/s tx (filters background chatter)
-    private static let nettopActivityGraceTicks: Int = 20            // ~20 s grace after the last active tick
+    private var fallbackLastSampleAt: Date?
+    // Park the netstat fallback when the popover is closed and there's no real
+    // traffic. The grace counter is refreshed by any tick whose tx rate exceeds
+    // the threshold and decremented otherwise, so a burst keeps sampling alive
+    // for the full grace window while a sustained idle period pauses it.
+    private var fallbackActivityCounter: Int = 0
+    private static let fallbackIdleThresholdBps: Double = 65_536     // 64 KB/s tx (filters background chatter)
+    private static let fallbackActivityGraceTicks: Int = 20          // ~20 s grace after the last active tick
     // Monotonic synthetic rxBytes counter per broken adapter — keeps
     // StatisticsManager's byte diffs sensible even though the kernel counter
-    // is frozen. Seeded with the kernel value on first observation and then
-    // advanced by `nettopTotalRxRate * elapsed` each tick that nettop is fresh.
+    // is frozen. Seeded with the reported value when the adapter is flagged and
+    // advanced by the substituted rate each tick.
     private var syntheticRxBytes: [String: UInt64] = [:]
+    // Added (wrapping) to the kernel counter of an adapter that recovered, so
+    // its reported rxBytes continues from the synthetic value instead of
+    // jumping and booking a phantom spike (or gap) in the statistics.
+    private var rxContinuityOffset: [String: UInt64] = [:]
     private var lastFallbackTickAt: Date?
-    private static let rxStuckThreshold: TimeInterval = 20
-    // Minimum tx bytes that must accrue while rx is frozen before flagging an
-    // adapter's rx counter as broken (filters idle adapters — issue #45).
-    private static let minActiveTxBytes: UInt64 = 128 * 1024
-    private static let nettopFreshness: TimeInterval = 3
-    // Slower nettop cadence (`-s`) when the live collector runs only for the
-    // background rx-fallback (popover closed). Halving the sample rate roughly
-    // halves nettop's CPU cost in the steady state (issue #45).
-    private static let fallbackSampleSeconds: Int = 3
+    // The netstat source samples every 2 s, the kernel-stats client every 1 s.
+    private static let fallbackFreshness: TimeInterval = 4.5
     private var refreshInFlight = false
     private var detailMonitoringEnabled = false
     private var forceDetailRefresh = false
     private var detailMonitoringGeneration: UInt64 = 0
     private var lastInterfaceInfoRefresh: Date?
     private var lastWiFiDetailsRefresh: Date?
-    private var lastTopAppsRefresh: Date?
+    private var lastProcessSample: Date?
     private var lastAddressDetailsRefresh: Date?
     private var lastDNSRefresh: Date?
     private var lastRouterRefresh: Date?
@@ -158,7 +152,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
     private static let interfaceInfoRefreshInterval: TimeInterval = 30
     private static let wifiDetailsRefreshInterval: TimeInterval = 15
-    private static let topAppsRefreshInterval: TimeInterval = 1
+    /// `netstat` diffs feed Top Apps and the netstat fallback. Each call takes
+    /// ~30 ms; a 2 s window also smooths the per-socket counters.
+    private static let processSampleInterval: TimeInterval = 2
     private static let addressDetailsRefreshInterval: TimeInterval = 15
     private static let dnsRefreshInterval: TimeInterval = 5
     /// Nobody reads the rates while the displays sleep, and the byte counters are
@@ -232,33 +228,18 @@ final class NetworkMonitor: NSObject, ObservableObject {
     override init() {
         super.init()
         wifiClient.delegate = self
-        liveTopAppsCollector.onSample = { [weak self] apps, sampleTime in
-            guard let self else { return }
-            // Drive the fallback rate from nettop only when the kernel-stats
-            // client isn't the active source (it is preferred — far cheaper).
-            // nettop yields only a system-wide total, so clear the per-interface
-            // breakdown (the fallback then uses the subtract rule).
-            if !self.statsClientActive {
-                self.nettopTotalRxRate = apps.reduce(0) { $0 + $1.rxRateBps }
-                self.fallbackRxByInterface = [:]
-                self.nettopLastSampleAt = sampleTime
-            }
-            self.applyTopAppsSample(apps, sampledAt: sampleTime)
+        netStatClient.onAppSample = { [weak self] apps, at in
+            guard let self, self.topAppsVisible, !self.topAppsUseNetstat else { return }
+            self.applyTopAppsSample(apps, sampledAt: at)
         }
         netStatClient.onSample = { [weak self] total, byInterface, at in
-            guard let self else { return }
-            self.nettopTotalRxRate = total
+            guard let self, self.fallbackSource == .kernelStatistics else { return }
+            self.fallbackTotalRxRate = total
             self.fallbackRxByInterface = byInterface
-            self.nettopLastSampleAt = at
+            self.fallbackLastSampleAt = at
         }
         startListeningForWiFiEvents()
         let workspaceCenter = NSWorkspace.shared.notificationCenter
-        workspaceCenter.addObserver(
-            self,
-            selector: #selector(handleWillSleep),
-            name: NSWorkspace.willSleepNotification,
-            object: nil
-        )
         workspaceCenter.addObserver(
             self,
             selector: #selector(handleDidWake),
@@ -274,39 +255,28 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
     // MARK: - Sleep / wake
 
-    /// Tear the streaming nettop collector down before the machine sleeps so it
-    /// can't survive into a post-wake high-CPU spin (issue #45).
-    @objc private func handleWillSleep() {
-        liveTopAppsCollector.stop()
-    }
-
-    /// Recycle the collector and re-baseline counters on wake. A PTY-wrapped
-    /// `nettop` left alive across sleep is the suspected cause of the runaway
-    /// CPU load in issue #45; restarting it on wake does what a manual app
-    /// relaunch did previously.
+    /// Re-baselines counters on wake so the first tick doesn't diff them
+    /// across the whole sleep.
     @objc private func handleDidWake() {
-        liveTopAppsCollector.stop()
         netStatClient.stop()
-        statsClientActive = false
-        // Re-baseline rate computation so the first post-wake tick doesn't
-        // diff byte counters across the entire sleep interval.
         lastSample = [:]
         lastUpdate = nil
-        // Reset the live nettop rx state so a stale pre-sleep sample isn't
-        // treated as fresh while the new collector warms up.
-        nettopTotalRxRate = 0
-        nettopLastSampleAt = nil
-        // Restart the rx-stuck detection clocks: kernel counters can jump on
-        // wake, and we don't want that to register as movement or staleness.
-        rxLastBytes = [:]
-        rxLastChange = [:]
-        txLastBytes = [:]
-        // Keep a latched fallback alive through its grace window so it isn't
-        // immediately idle-parked before any post-wake traffic is observed.
+        processSnapshot = [:]
+        processSnapshotTime = nil
+        // Drop the pre-sleep fallback rate so it isn't served as fresh while
+        // the source warms up again.
+        fallbackTotalRxRate = 0
+        fallbackRxByInterface = [:]
+        fallbackLastSampleAt = nil
+        // Kernel counters can jump on wake, which must not read as movement
+        // or as staleness.
+        rxDetector.resetClocks()
+        // Keep a flagged fallback alive through its grace window so it isn't
+        // parked before any post-wake traffic is seen.
         if !kernelRxBroken.isEmpty {
-            nettopActivityCounter = Self.nettopActivityGraceTicks
+            fallbackActivityCounter = Self.fallbackActivityGraceTicks
         }
-        updateTopAppsCollectionState()
+        updateFallbackSource()
     }
 
     func start(interval: Double) {
@@ -343,16 +313,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
             // Poll routers immediately on open, regardless of any prior backoff.
             routerNextPoll.removeAll()
             routerFailCount.removeAll()
-            updateTopAppsCollectionState()
             refresh()
         } else {
             forceDetailRefresh = false
-            // Re-evaluate via the central state machine so the fallback
-            // collector either stops (no bug latched, or idle-parked) or
-            // keeps running (bug latched and recent traffic seen).
-            updateTopAppsCollectionState()
-            processSnapshot = [:]
-            processSnapshotTime = nil
+            updateFallbackSource()
+            // The process snapshot stays: the netstat fallback may still diff
+            // against it. A stale one is treated as a baseline.
             topAppLastActiveTime.removeAll()
             if !topApps.isEmpty {
                 topApps = []
@@ -363,7 +329,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private func refresh() {
         guard !refreshInFlight else { return }
         refreshInFlight = true
-        updateTopAppsCollectionState()
+        updateFallbackSource()
 
         let now = Date()
         let forcedDetailRefresh = forceDetailRefresh
@@ -377,10 +343,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
             _cachedWifiInfo.isEmpty ||
             shouldRefresh(lastWiFiDetailsRefresh, at: now, interval: Self.wifiDetailsRefreshInterval)
         )
-        let shouldRefreshTopApps = detailMonitoringEnabled &&
-            UserDefaults.standard.bool(forKey: "showTopApps") &&
-            !liveTopAppsCollector.isRunning &&
-            (forcedDetailRefresh || shouldRefresh(lastTopAppsRefresh, at: now, interval: Self.topAppsRefreshInterval))
+        let shouldSampleProcesses = ((topAppsVisible && topAppsUseNetstat) || netstatFallbackActive) &&
+            (forcedDetailRefresh || shouldRefresh(lastProcessSample, at: now, interval: Self.processSampleInterval))
         let shouldRefreshAddressDetails = detailMonitoringEnabled &&
             (forcedDetailRefresh || shouldRefresh(lastAddressDetailsRefresh, at: now, interval: Self.addressDetailsRefreshInterval))
         let shouldRefreshRouters = detailMonitoringEnabled &&
@@ -410,7 +374,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 self?.applyRefresh(
                     result: result,
                     now: now,
-                    shouldRefreshTopApps: shouldRefreshTopApps,
+                    shouldSampleProcesses: shouldSampleProcesses,
                     forcedDetailRefresh: forcedDetailRefresh,
                     shouldRefreshAddressDetails: shouldRefreshAddressDetails,
                     shouldRefreshRouters: shouldRefreshRouters
@@ -504,7 +468,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private func applyRefresh(
         result: RefreshResult,
         now: Date,
-        shouldRefreshTopApps: Bool,
+        shouldSampleProcesses: Bool,
         forcedDetailRefresh: Bool,
         shouldRefreshAddressDetails: Bool,
         shouldRefreshRouters: Bool
@@ -536,7 +500,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
         diagnostics.record(adapters: adjustedAdapters, at: now)
 
-        updateNettopIdleStreak(totals: adjustedTotals)
+        updateFallbackActivity(totals: adjustedTotals)
 
         let updatedAdapters = adjustedAdapters
 
@@ -575,11 +539,9 @@ final class NetworkMonitor: NSObject, ObservableObject {
         // Clean up tracking for adapters no longer returned by getifaddrs
         adapterLastActiveTime = adapterLastActiveTime.filter { currentAdapterIDs.contains($0.key) }
 
-        // Top Apps: refresh on a slower cadence because `nettop` is significantly
-        // heavier than `netstat`, but it captures Safari/WebKit traffic reliably.
-        if shouldRefreshTopApps {
-            lastTopAppsRefresh = now
-            updateTopApps()
+        if shouldSampleProcesses {
+            lastProcessSample = now
+            sampleProcessTraffic()
         }
 
         applyVPNSnapshot(result.vpnSnapshot)
@@ -627,78 +589,54 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
     // MARK: - Rx fallback (macOS 26.5 ifi_ibytes-frozen workaround)
 
-    /// Detects adapters whose kernel `ifi_ibytes` counter is stuck (see issue #31),
-    /// activates the `LiveNettopCollector` when needed, and substitutes the
-    /// per-process rx sum for the default-route adapter when interface counters
-    /// are unreliable.
+    /// Flags adapters whose kernel `ifi_ibytes` counter is stuck (issue #31) and
+    /// clears them once it moves again, then substitutes the per-flow inbound
+    /// rate for the flagged adapters.
     private func applyRxFallbackIfNeeded(
         adapters: [AdapterStatus],
         totals: RateTotals,
         now: Date
     ) -> (adapters: [AdapterStatus], totals: RateTotals) {
         let forceFallback = UserDefaults.standard.bool(forKey: "NetfluseForceRxFallback")
-        var newlyBroken = false
+        var stateChanged = false
 
         for adapter in adapters {
             guard adapter.type == .wifi || adapter.type == .ethernet else { continue }
             guard adapter.isUp else { continue }
-
-            // Track byte-counter movement timestamps. Treat first observation as
-            // movement so the threshold clock starts from "now" rather than zero.
-            // Capture the tx byte count at the moment rx last moved so we can
-            // measure how much tx has accrued while rx stayed frozen.
-            let prevRx = rxLastBytes[adapter.id]
-            if prevRx == nil || adapter.rxBytes != prevRx {
-                rxLastChange[adapter.id] = now
-                rxLastBytes[adapter.id] = adapter.rxBytes
-                txBytesAtRxStuck[adapter.id] = adapter.txBytes
-            }
-            let prevTx = txLastBytes[adapter.id]
-            if prevTx == nil || adapter.txBytes != prevTx {
-                txLastBytes[adapter.id] = adapter.txBytes
-            }
-
-            if kernelRxBroken.contains(adapter.id) { continue }
-
-            if forceFallback {
-                kernelRxBroken.insert(adapter.id)
-                newlyBroken = true
-                continue
-            }
-
-            // Flag only if rx hasn't moved for ≥ rxStuckThreshold seconds AND a
-            // *meaningful* amount of tx has accrued in that window. Requiring
-            // real tx volume (not just any movement) avoids flagging a
-            // connected-but-idle secondary adapter whose only tx is background
-            // chatter (ARP/mDNS/keepalives) — that previously mis-attributed
-            // another adapter's download to it (issue #45). A genuinely active
-            // link with a frozen rx counter still emits plenty of tx (ACKs).
-            let txSinceStuck = adapter.txBytes &- (txBytesAtRxStuck[adapter.id] ?? adapter.txBytes)
-            if let rxChanged = rxLastChange[adapter.id],
-               now.timeIntervalSince(rxChanged) >= Self.rxStuckThreshold,
-               txSinceStuck >= Self.minActiveTxBytes {
-                kernelRxBroken.insert(adapter.id)
-                newlyBroken = true
+            switch rxDetector.observe(
+                id: adapter.id,
+                rxBytes: adapter.rxBytes,
+                txBytes: adapter.txBytes,
+                at: now,
+                force: forceFallback
+            ) {
+            case .latched(let id):
+                // Continue from what was reported so far, not the raw counter.
+                syntheticRxBytes[id] = reportedRxBytes(adapter)
+                rxContinuityOffset[id] = nil
+                diagnostics.noteEvent("Rx counter of \(id) frozen: fallback on", at: now)
+                stateChanged = true
+            case .recovered(let id):
+                let synthetic = syntheticRxBytes.removeValue(forKey: id) ?? adapter.rxBytes
+                rxContinuityOffset[id] = synthetic &- adapter.rxBytes
+                diagnostics.noteEvent("Rx counter of \(id) moving again: fallback off", at: now)
+                stateChanged = true
+            case nil:
+                break
             }
         }
 
-        if newlyBroken {
-            // Seed the grace window so the very first tick after detection
-            // doesn't immediately park the collector.
-            nettopActivityCounter = Self.nettopActivityGraceTicks
-            updateTopAppsCollectionState()
+        if stateChanged {
+            // Seed the grace window so the first tick after detection doesn't
+            // park the netstat source straight away.
+            fallbackActivityCounter = kernelRxBroken.isEmpty ? 0 : Self.fallbackActivityGraceTicks
+            updateFallbackSource()
         }
 
         guard !kernelRxBroken.isEmpty else {
-            return (adapters, totals)
-        }
-
-        // Seed synthetic rx-byte baselines for any newly broken adapter so
-        // statistics diffs start from the current kernel value rather than 0.
-        for adapter in adapters where kernelRxBroken.contains(adapter.id) {
-            if syntheticRxBytes[adapter.id] == nil {
-                syntheticRxBytes[adapter.id] = adapter.rxBytes
-            }
+            lastFallbackTickAt = nil
+            guard !rxContinuityOffset.isEmpty else { return (adapters, totals) }
+            return (adapters.map { $0.with(rxBytes: reportedRxBytes($0)) }, totals)
         }
 
         // Pick the substitution target: prefer the default-route adapter; fall
@@ -711,13 +649,13 @@ final class NetworkMonitor: NSObject, ObservableObject {
             return adapters.first { kernelRxBroken.contains($0.id) }?.id
         }()
 
-        // Substitute only when the inbound source is fresh (the stats client's
-        // first poll is a baseline, so there's a ~1 s warm-up).
+        // Substitute only when the inbound source is fresh (both sources need
+        // one sample as a baseline first).
         let sourceFresh: Bool = {
-            guard let at = nettopLastSampleAt else { return false }
-            return now.timeIntervalSince(at) <= Self.nettopFreshness
+            guard let at = fallbackLastSampleAt else { return false }
+            return now.timeIntervalSince(at) <= Self.fallbackFreshness
         }()
-        let totalInbound = sourceFresh ? nettopTotalRxRate : 0
+        let totalInbound = sourceFresh ? fallbackTotalRxRate : 0
         let elapsed = now.timeIntervalSince(lastFallbackTickAt ?? now)
         lastFallbackTickAt = now
 
@@ -727,12 +665,16 @@ final class NetworkMonitor: NSObject, ObservableObject {
         // the kernel-stats per-interface breakdown is available, each broken
         // adapter gets its own attributed share and the primary target also
         // absorbs any not-yet-attributed remainder. With only a system total
-        // (nettop fallback), the breakdown is empty so the target gets
+        // (netstat source), the breakdown is empty so the target gets
         // `total − (real rx of everything else)`.
         var assignedRx: [String: Double] = [:]
         if sourceFresh {
             var accounted: Double = 0
             for adapter in adapters {
+                // Both sources leave loopback flows out of the total, so lo0's
+                // rate must not be subtracted from it either. (AirDrop and
+                // other link-local flows are in the total, so they stay.)
+                if adapter.id.hasPrefix("lo") { continue }
                 if !kernelRxBroken.contains(adapter.id) {
                     accounted += adapter.rxRateBps
                 } else if adapter.id != targetID {
@@ -751,10 +693,14 @@ final class NetworkMonitor: NSObject, ObservableObject {
         var newTotalTx: Double = 0
         for index in adjusted.indices {
             let adapter = adjusted[index]
-            newTotalTx += adapter.txRateBps
+            let countsInTotals = !AdapterClassifier.isNonInternetInterface(named: adapter.id)
+            if countsInTotals { newTotalTx += adapter.txRateBps }
 
             guard kernelRxBroken.contains(adapter.id) else {
-                newTotalRx += adapter.rxRateBps
+                if countsInTotals { newTotalRx += adapter.rxRateBps }
+                if rxContinuityOffset[adapter.id] != nil {
+                    adjusted[index] = adapter.with(rxBytes: reportedRxBytes(adapter))
+                }
                 continue
             }
 
@@ -763,37 +709,30 @@ final class NetworkMonitor: NSObject, ObservableObject {
             // backward relative to the frozen kernel value.
             let rate = assignedRx[adapter.id] ?? 0
             if elapsed > 0, rate > 0 {
-                syntheticRxBytes[adapter.id, default: 0] &+= UInt64((rate * elapsed).rounded())
+                syntheticRxBytes[adapter.id, default: adapter.rxBytes] &+= UInt64((rate * elapsed).rounded())
             }
             let synthetic = syntheticRxBytes[adapter.id] ?? adapter.rxBytes
             adjusted[index] = adapter.with(rxRateBps: rate, rxBytes: synthetic)
-            newTotalRx += rate
+            if countsInTotals { newTotalRx += rate }
         }
-        _ = totals
         return (adjusted, RateTotals(rxRateBps: newTotalRx, txRateBps: newTotalTx))
     }
 
-    /// Drives the nettop-fallback grace counter from the most recent tx rate.
-    /// Crosses the pause/resume boundary by re-evaluating the collector state,
-    /// so an idle Mac that's been quiet for the full grace window pauses the
-    /// nettop subprocess and the first tick of real traffic restarts it.
-    private func updateNettopIdleStreak(totals: RateTotals) {
+    private func reportedRxBytes(_ adapter: AdapterStatus) -> UInt64 {
+        adapter.rxBytes &+ (rxContinuityOffset[adapter.id] ?? 0)
+    }
+
+    /// Drives the grace counter that parks the netstat fallback source on an
+    /// idle Mac and wakes it on the first tick of real traffic.
+    private func updateFallbackActivity(totals: RateTotals) {
         guard !kernelRxBroken.isEmpty else {
-            if nettopActivityCounter != 0 { nettopActivityCounter = 0 }
+            if fallbackActivityCounter != 0 { fallbackActivityCounter = 0 }
             return
         }
-        let active = totals.txRateBps >= Self.nettopIdleThresholdBps
-        if active {
-            let wasParked = nettopActivityCounter == 0
-            nettopActivityCounter = Self.nettopActivityGraceTicks
-            if wasParked {
-                updateTopAppsCollectionState()
-            }
-        } else if nettopActivityCounter > 0 {
-            nettopActivityCounter -= 1
-            if nettopActivityCounter == 0 {
-                updateTopAppsCollectionState()
-            }
+        if totals.txRateBps >= Self.fallbackIdleThresholdBps {
+            fallbackActivityCounter = Self.fallbackActivityGraceTicks
+        } else if fallbackActivityCounter > 0 {
+            fallbackActivityCounter -= 1
         }
     }
 
@@ -814,84 +753,111 @@ final class NetworkMonitor: NSObject, ObservableObject {
 
     // MARK: - Top Apps
 
-    private func updateTopAppsCollectionState() {
-        let topAppsEnabled = detailMonitoringEnabled &&
-            UserDefaults.standard.bool(forKey: "showTopApps")
-        let fallbackLatched = !kernelRxBroken.isEmpty
+    private var topAppsVisible: Bool {
+        detailMonitoringEnabled && UserDefaults.standard.bool(forKey: "showTopApps")
+    }
 
-        // Preferred fallback inbound-rate source: the kernel-statistics client.
-        // It costs ~0% CPU, so when it's available we run it continuously while
-        // the fallback is latched and never run nettop just to feed the rate
-        // (issue #45 — nettop pegged the CPU during browsing).
-        let statsAvailable = fallbackLatched && !netStatClient.subscriptionFailed
-        if statsAvailable {
-            netStatClient.start()
-            statsClientActive = true
+    /// Top Apps come from the kernel-statistics client; `netstat` only stands
+    /// in when the client can't subscribe or its flow descriptors don't carry
+    /// the owning process on this macOS. (On macOS 27.2.1 netstat reports TCP
+    /// downloads at twice their size.)
+    private var topAppsUseNetstat: Bool {
+        netStatClient.subscriptionFailed || netStatClient.processAttributionFailed
+    }
+
+    /// The netstat fallback samples while the popover is open or traffic was
+    /// seen recently; on an idle Mac there is nothing to measure.
+    private var netstatFallbackActive: Bool {
+        fallbackSource == .netstat && (detailMonitoringEnabled || fallbackActivityCounter > 0)
+    }
+
+    /// Picks the fallback's inbound-rate source and runs the kernel-statistics
+    /// client while the fallback or a visible Top Apps list needs it. The client
+    /// is preferred; once it reports a failed subscription (its private protocol
+    /// changed on some macOS release), `netstat` diffs take over for the rest
+    /// of the session. `NetfluseForceNetstatFallback` (debug) keeps the fallback
+    /// off the client, to test the netstat path on a Mac where the client works.
+    private func updateFallbackSource() {
+        let clientUsable = !netStatClient.subscriptionFailed
+        let source: FallbackSource
+        if kernelRxBroken.isEmpty {
+            source = .off
+        } else if clientUsable,
+                  !UserDefaults.standard.bool(forKey: "NetfluseForceNetstatFallback") {
+            source = .kernelStatistics
         } else {
-            netStatClient.stop()
-            statsClientActive = false
+            source = .netstat
         }
 
-        // nettop collector: required for Top Apps (per-process attribution), and
-        // as the fallback inbound source only when the stats client is
-        // unavailable (e.g. its private kernel protocol changed on a future
-        // macOS). The idle-park still applies to that nettop fallback path.
-        let fallbackIdleParked = fallbackLatched &&
-            !detailMonitoringEnabled &&
-            nettopActivityCounter == 0
-        let nettopForFallback = fallbackLatched && !statsAvailable && !fallbackIdleParked
-        let shouldRunLiveCollector = topAppsEnabled || nettopForFallback
-
-        if shouldRunLiveCollector {
-            // Sample at 1 s while the popover is open (fresh Top Apps / rate),
-            // but back off to a slower cadence when the collector is only
-            // feeding the background rx-fallback.
-            let sampleSeconds = detailMonitoringEnabled ? 1 : Self.fallbackSampleSeconds
-            liveTopAppsCollector.start(sampleSeconds: sampleSeconds)
+        let appsFromClient = topAppsVisible && clientUsable && !netStatClient.processAttributionFailed
+        netStatClient.appSamplingEnabled = appsFromClient
+        if source == .kernelStatistics || appsFromClient {
+            netStatClient.start()
         } else {
-            liveTopAppsCollector.stop()
-            if !UserDefaults.standard.bool(forKey: "showTopApps"), !topApps.isEmpty {
-                topApps = []
-            }
+            netStatClient.stop()
+        }
+
+        if source != fallbackSource {
+            fallbackSource = source
+            fallbackTotalRxRate = 0
+            fallbackRxByInterface = [:]
+            fallbackLastSampleAt = nil
+            diagnostics.noteEvent("Rx fallback source: \(source.rawValue)", at: Date())
+        }
+        diagnostics.fallbackSummary = source == .off
+            ? "off"
+            : "\(kernelRxBroken.sorted().joined(separator: ", ")) via \(source.rawValue)"
+
+        if !topAppsVisible, !topApps.isEmpty {
+            topApps = []
         }
     }
 
-    private func updateTopApps() {
-        guard UserDefaults.standard.bool(forKey: "showTopApps") else {
-            if !topApps.isEmpty { topApps = [] }
-            return
-        }
-        guard !topAppsTaskInFlight else { return }
-        topAppsTaskInFlight = true
+    /// Diffs two `netstat -n -b -v` snapshots into per-app rates for Top Apps
+    /// and, when it is the fallback source, a system-wide inbound rate.
+    ///
+    /// `nettop` used to do this and cost >100% CPU on macOS 27 even at its
+    /// slowest cadence; one `netstat` call takes ~30 ms. Loopback sockets are
+    /// left out: local IPC (game launchers, dev servers) is not network traffic,
+    /// and the header totals skip `lo0` too (#54).
+    private func sampleProcessTraffic() {
+        guard !processSampleInFlight else { return }
+        processSampleInFlight = true
 
         let previousSnapshot = processSnapshot
         let previousTime = processSnapshotTime
         let generation = detailMonitoringGeneration
 
         Task { [weak self] in
-            let sampleTime = Date()
             let snapshot = await ProcessRunner.offloaded {
-                ProcessNetworkSampler.sampleConnections()
+                ProcessNetworkSampler.sampleConnections().filter { !$0.value.isLoopback }
             }
+            let sampleTime = Date()
 
             guard let self else { return }
-            self.topAppsTaskInFlight = false
-            guard self.detailMonitoringEnabled, self.detailMonitoringGeneration == generation else { return }
-
-            if let prevTime = previousTime, !previousSnapshot.isEmpty {
-                let elapsed = sampleTime.timeIntervalSince(prevTime)
-                if elapsed >= 0.1 {
-                    let allActive = ProcessNetworkSampler.rates(
-                        from: ProcessNetworkSampler.appDeltas(current: snapshot, previous: previousSnapshot),
-                        elapsed: elapsed,
-                        limit: Int.max
-                    )
-                    self.applyTopAppsSample(allActive, sampledAt: sampleTime)
-                }
-            }
-
+            self.processSampleInFlight = false
             self.processSnapshot = snapshot
             self.processSnapshotTime = sampleTime
+
+            // A snapshot older than a few intervals (popover was closed, the
+            // fallback was parked) only serves as a baseline.
+            guard let previousTime, !previousSnapshot.isEmpty else { return }
+            let elapsed = sampleTime.timeIntervalSince(previousTime)
+            guard elapsed >= 0.5, elapsed <= Self.processSampleInterval * 3 else { return }
+
+            let allActive = ProcessNetworkSampler.rates(
+                from: ProcessNetworkSampler.appDeltas(current: snapshot, previous: previousSnapshot),
+                elapsed: elapsed,
+                limit: Int.max
+            )
+            if self.fallbackSource == .netstat {
+                self.fallbackTotalRxRate = allActive.reduce(0) { $0 + $1.rxRateBps }
+                self.fallbackRxByInterface = [:]
+                self.fallbackLastSampleAt = sampleTime
+            }
+            if self.topAppsVisible, self.topAppsUseNetstat, self.detailMonitoringGeneration == generation {
+                self.applyTopAppsSample(allActive, sampledAt: sampleTime)
+            }
         }
     }
 
@@ -2176,21 +2142,13 @@ struct ProcessConnectionSnapshot: Equatable, Sendable {
     let source: ProcessTrafficSource
     let downloadBytes: UInt64
     let uploadBytes: UInt64
+    /// Both ends on 127.0.0.0/8 or ::1 — local IPC, not network traffic.
+    var isLoopback: Bool = false
 }
 
 enum ProcessTrafficSource: Hashable, Sendable {
-    case processSummary
     case internetSocket
     case networkSource
-
-    var countsInitialObservationAsDelta: Bool {
-        switch self {
-        case .processSummary:
-            return false
-        case .internetSocket, .networkSource:
-            return true
-        }
-    }
 }
 
 enum ProcessStatisticsSample: Sendable {
@@ -2202,19 +2160,14 @@ enum ProcessNetworkSampler {
 
     // PID→name cache: avoids repeated proc_pidpath + filesystem lookups.
     // Cleared every ~10 samples (caller resets via clearNameCache()).
-    // Guarded by nameCacheLock: the statistics sampler, the live nettop
-    // collector, and the Network Slice sampler all resolve names from
+    // Guarded by nameCacheLock: the statistics sampler, the Top Apps sampler,
+    // and the Network Slice sampler all resolve names from
     // different background threads — unsynchronized Dictionary mutation
     // corrupts its storage and crashes (seen in the wild as EXC_BAD_ACCESS
     // in Dictionary.setValue). The lock also serializes pathBuffer use.
     private static let nameCacheLock = NSLock()
     private static var pidNameCache: [pid_t: String] = [:]
     private static var pidNameCacheAge: UInt64 = 0
-    private static let sampleCondition = NSCondition()
-    private static let snapshotReuseInterval: TimeInterval = 2
-    private static var cachedSnapshot: [String: ProcessConnectionSnapshot] = [:]
-    private static var cachedSnapshotTime: Date?
-    private static var sampleInFlight = false
 
     static func clearNameCacheIfNeeded() {
         nameCacheLock.lock()
@@ -2223,13 +2176,6 @@ enum ProcessNetworkSampler {
         if pidNameCacheAge % 10 == 0 {
             pidNameCache.removeAll(keepingCapacity: true)
         }
-    }
-
-    static func pid(from rawIdentifier: String) -> pid_t? {
-        guard let separatorIndex = rawIdentifier.lastIndex(of: ".") else { return nil }
-        let pidSuffix = rawIdentifier[rawIdentifier.index(after: separatorIndex)...]
-        guard let pid = Int32(pidSuffix), pid > 0 else { return nil }
-        return pid
     }
 
     static func cachedProcessName(for pid: pid_t) -> String {
@@ -2244,54 +2190,22 @@ enum ProcessNetworkSampler {
         return resolved
     }
 
-    /// Snapshot: cumulative bytes per process at a point in time.
-    /// Primary source is `nettop -P`, which exposes per-process byte totals and
-    /// captures Safari/WebKit traffic more reliably than per-socket `netstat`.
-    /// Falls back to `netstat -n -b -v` if `nettop` is unavailable.
+    /// Snapshot for Top Apps and the rx fallback: cumulative bytes per live
+    /// socket from `netstat -n -b -v`.
     static func sampleConnections() -> [String: ProcessConnectionSnapshot] {
         clearNameCacheIfNeeded()
-        while true {
-            sampleCondition.lock()
-            let now = Date()
-            if let cachedSnapshotTime,
-               now.timeIntervalSince(cachedSnapshotTime) < snapshotReuseInterval {
-                let snapshot = cachedSnapshot
-                sampleCondition.unlock()
-                return snapshot
-            }
-            if !sampleInFlight {
-                sampleInFlight = true
-                sampleCondition.unlock()
-                break
-            }
-            sampleCondition.wait()
-            sampleCondition.unlock()
-        }
-
-        var snapshot = sampleConnectionsFromNettop()
-        if snapshot.isEmpty {
-            snapshot = sampleConnectionsFromNetstat()
-        }
-
-        sampleCondition.lock()
-        cachedSnapshot = snapshot
-        cachedSnapshotTime = Date()
-        sampleInFlight = false
-        sampleCondition.broadcast()
-        sampleCondition.unlock()
-
-        return snapshot
+        return sampleConnectionsFromNetstat()
     }
 
     /// Historical app statistics are sampled from `netstat -n -b -v` socket
     /// snapshots, which the StatisticsManager diffs per connection into interval
     /// deltas.
     ///
-    /// We deliberately do NOT use `nettop` here. `nettop` subscribes to the
-    /// kernel's per-flow statistics firehose on every invocation; running it in
-    /// the background every few seconds (for app statistics, which is on by
-    /// default) pegged NetFluss's energy impact at ~100 in Activity Monitor —
-    /// child `nettop` processes are grouped under the app. `netstat` is a cheap
+    /// NetFluss never runs `nettop`. It subscribes to the kernel's per-flow
+    /// statistics firehose on every invocation; running it in the background
+    /// every few seconds pegged NetFluss's energy impact at ~100 in Activity
+    /// Monitor, and on macOS 27 it costs >100% CPU even at its slowest cadence.
+    /// `netstat` is a cheap
     /// one-shot socket-table dump. Per-connection diffing stays accurate because
     /// the first snapshot establishes a baseline, so only genuinely new (short-
     /// lived, opened-within-the-interval) connections count their full bytes.
@@ -2300,10 +2214,16 @@ enum ProcessNetworkSampler {
         return .snapshot(sampleConnectionsFromNetstat())
     }
 
-    /// Fallback snapshot: cumulative inet bytes per live socket at a point in time.
-    /// Uses `netstat -n -b -v` which exposes per-connection rxbytes/txbytes with process:pid.
     private static func sampleConnectionsFromNetstat() -> [String: ProcessConnectionSnapshot] {
-        let output = runNetstat()
+        parseNetstat(runNetstat(), processName: cachedProcessName(for:))
+    }
+
+    /// Parses `netstat -n -b -v` into cumulative bytes per live socket and per
+    /// `com.apple.netsrc` control socket (how Safari/WebKit traffic shows up).
+    static func parseNetstat(
+        _ output: String,
+        processName: (pid_t) -> String
+    ) -> [String: ProcessConnectionSnapshot] {
         var connections: [String: ProcessConnectionSnapshot] = [:]
 
         for line in output.split(separator: "\n") {
@@ -2340,7 +2260,8 @@ enum ProcessNetworkSampler {
                   rx > 0 || tx > 0 else { continue }
 
             // Locate the PID. Two formats exist across macOS versions:
-            //   macOS 26+: "name:pid" token appended to the line
+            //   macOS 26+: "name:pid" token appended to the line (the name is
+            //              truncated and may contain spaces: "Browser Helper (:82406")
             //   macOS 15:  dedicated numeric column at rxIndex + 4
             //              (proto recv-q send-q local foreign [state] rx tx rhiwat shiwat pid …)
             // IPv6 address tokens (e.g. "2a02:810a:912:d5.57207") are excluded from the
@@ -2358,9 +2279,10 @@ enum ProcessNetworkSampler {
             }
             guard let pid, pid > 0 else { continue }
 
-            let name = cachedProcessName(for: pid)
+            let name = processName(pid)
 
             let connectionID: String
+            var isLoopback = false
             if isNetworkSource, parts.count >= 19 {
                 connectionID = [
                     proto,
@@ -2376,6 +2298,8 @@ enum ProcessNetworkSampler {
                     String(parts[4]),
                     String(pid)
                 ].joined(separator: "|")
+                isLoopback = !isNetworkSource &&
+                    isLoopbackEndpoint(parts[3]) && isLoopbackEndpoint(parts[4])
             }
 
             connections[connectionID] = ProcessConnectionSnapshot(
@@ -2383,43 +2307,17 @@ enum ProcessNetworkSampler {
                 name: name,
                 source: source,
                 downloadBytes: rx,
-                uploadBytes: tx
+                uploadBytes: tx,
+                isLoopback: isLoopback
             )
         }
         return connections
     }
 
-    private static func sampleConnectionsFromNettop() -> [String: ProcessConnectionSnapshot] {
-        let output = runNettop()
-        var connections: [String: ProcessConnectionSnapshot] = [:]
-
-        for line in output.split(whereSeparator: \.isNewline) {
-            let parts = line.split(separator: ",", omittingEmptySubsequences: false)
-            guard parts.count >= 3 else { continue }
-
-            let rawIdentifier = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !rawIdentifier.isEmpty else { continue } // CSV header row
-            guard let pid = pid(from: rawIdentifier) else { continue }
-
-            let rawDownload = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-            let rawUpload = String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let downloadBytes = UInt64(rawDownload),
-                  let uploadBytes = UInt64(rawUpload),
-                  downloadBytes > 0 || uploadBytes > 0 else { continue }
-
-            let name = cachedProcessName(for: pid)
-
-            let id = String(pid)
-            connections[id] = ProcessConnectionSnapshot(
-                id: id,
-                name: name,
-                source: .processSummary,
-                downloadBytes: downloadBytes,
-                uploadBytes: uploadBytes
-            )
-        }
-
-        return connections
+    /// `127.0.0.1.8080`, `::1.631`; a wildcard foreign end (`*.*`) of a
+    /// socket bound to loopback counts too.
+    private static func isLoopbackEndpoint(_ endpoint: Substring) -> Bool {
+        endpoint.hasPrefix("127.") || endpoint.hasPrefix("::1.") || endpoint == "*.*"
     }
 
     /// Aggregate per-connection deltas back to app names.
@@ -2436,11 +2334,10 @@ enum ProcessNetworkSampler {
             if let previousConnection {
                 rxDelta = delta(current: connection.downloadBytes, previous: previousConnection.downloadBytes)
                 txDelta = delta(current: connection.uploadBytes, previous: previousConnection.uploadBytes)
-            } else if connection.source.countsInitialObservationAsDelta {
+            } else {
+                // A socket opened since the last snapshot: all of its bytes are new.
                 rxDelta = connection.downloadBytes
                 txDelta = connection.uploadBytes
-            } else {
-                continue
             }
             guard rxDelta > 0 || txDelta > 0 else { continue }
 
@@ -2457,10 +2354,6 @@ enum ProcessNetworkSampler {
         selectedTotals.reserveCapacity(totals.count)
 
         for (name, sourceTotals) in totals {
-            if let processSummaryTotals = sourceTotals[.processSummary] {
-                selectedTotals[name] = processSummaryTotals
-                continue
-            }
             let socketTotals = sourceTotals[.internetSocket] ?? (rx: 0, tx: 0)
             let networkSourceTotals = sourceTotals[.networkSource] ?? (rx: 0, tx: 0)
             let socketBytes = socketTotals.rx + socketTotals.tx
@@ -2501,10 +2394,6 @@ enum ProcessNetworkSampler {
 
     private static func runNetstat() -> String {
         ProcessRunner.run("/usr/sbin/netstat", ["-n", "-b", "-v"]).stdoutText
-    }
-
-    private static func runNettop() -> String {
-        ProcessRunner.run("/usr/bin/nettop", ["-P", "-x", "-L", "1", "-J", "bytes_in,bytes_out"]).stdoutText
     }
 
     /// Best-effort process name: tries full path (for clean app names), falls back to proc_name.

@@ -94,7 +94,7 @@ Netfluss is a pure-SwiftPM macOS menu bar app. Its only third-party dependency i
 
 `DispatchSourceTimer` (main queue) → `NetworkMonitor.refresh()` every N seconds →
 - `InterfaceSampler` (BSD `getifaddrs` + CoreWLAN) → updates `adapters` and `totals`
-- `ProcessNetworkSampler` (`netstat -n -b -v`, async Task) → updates `topApps`
+- `NetworkStatisticsClient` (polls the `com.apple.network.statistics` kernel control, ~0% CPU) → updates `topApps` while the popover is open, and feeds the rx fallback; `ProcessNetworkSampler` (`netstat -n -b -v`) only stands in if the client is unavailable
 - `InterfaceSampler` (SCDynamicStore + `api.ipify.org`) → updates IP addresses
 
 `StatusBarController` subscribes to `monitor.$totals` via Combine and calls `updateLabel()` on every tick.
@@ -105,11 +105,13 @@ Preferences changes are propagated via `UserDefaults.didChangeNotification` → 
 
 ### Top Apps — platform notes
 
-`ProcessNetworkSampler.sample()` runs `netstat -n -b -v` and parses the output. **Two different column formats exist across macOS versions:**
-- macOS 15 (Sequoia): PID is a standalone numeric column at index `rxIndex + 4`
-- macOS 26+: PID appears as a `name:pid` token appended to each line
+Top Apps comes from `NetworkStatisticsClient`: per-flow byte counts plus each flow's owning PID from its `SRC_DESC` descriptor (offsets in `NetworkStatisticsClient.Layout`, read on macOS 27.2.1; TCP and UDP differ). The client checks the first descriptors' process names against `proc_name` and reports `processAttributionFailed` if the layout moved, in which case Top Apps falls back to `netstat` diffs.
 
-The parser tries the token format first and falls back to the column index. Top Apps requires two consecutive snapshots before rates appear — "Gathering data…" on first open is expected.
+- **Never run `nettop`.** It costs >100% CPU on macOS 27 however it is invoked; a test fails if `/usr/bin/nettop` appears in `Sources/`.
+- **Don't trust `netstat` rxbytes for download volumes:** on macOS 27.2.1 every TCP socket's rxbytes is twice the real value (txbytes are right).
+- `netstat -n -b -v` has two column formats: macOS 15 prints the PID as a column at `rxIndex + 4`, macOS 26+ appends a `name:pid` token. `ProcessNetworkSampler.parseNetstat` tries the token first.
+- A raw debug build's child `netstat` sees no inet sockets at all; test netstat paths from the shell or a signed build.
+- Rates need a baseline, so "Gathering data…" for a few seconds on first open is expected.
 
 ### Popover layout constraint
 

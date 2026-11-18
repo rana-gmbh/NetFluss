@@ -42,6 +42,20 @@ final class NetworkDiagnostics {
 
     var isCapturing: Bool { captureDeadline != nil }
 
+    /// Rx fallback state and its recent switches. Kept outside captures, since
+    /// the fallback can switch hours before anyone records diagnostics, and
+    /// after a restart nothing is left to tell what ran.
+    var fallbackSummary = "off"
+    private var events: [(date: Date, text: String)] = []
+    private let maxEvents = 30
+
+    func noteEvent(_ text: String, at date: Date) {
+        events.append((date, text))
+        if events.count > maxEvents {
+            events.removeFirst(events.count - maxEvents)
+        }
+    }
+
     func record(adapters: [AdapterStatus], at date: Date) {
         // Only accumulate while a capture is active — beginCapture() clears the
         // ring, so snapshots recorded outside a capture are never used. This was
@@ -104,6 +118,10 @@ final class NetworkDiagnostics {
         lines.append("NetFluss:  \(version) (build \(build))")
         lines.append("macOS:     \(osVersion)")
         lines.append("Arch:      \(arch)")
+        lines.append("Rx fallback: \(fallbackSummary)")
+        for event in events {
+            lines.append("  \(dateFormatter.string(from: event.date))  \(event.text)")
+        }
 
         if let start {
             let durationSeconds = now.timeIntervalSince(start)
