@@ -83,12 +83,9 @@ internal static class HelperSetup
             return bundled;
         }
 
-        var installed = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-            "NetFluss",
-            "Helper",
-            "NetFluss.Service.exe");
-
-        return File.Exists(installed) ? installed : null;
+        // Where the helper runs from, or ran from up to 2.7.2-beta.2.
+        var paths = HelperPaths.Current;
+        return new[] { paths.ServiceExecutable, Path.Combine(paths.LegacyBinaries, "NetFluss.Service.exe") }
+            .FirstOrDefault(File.Exists);
     }
 }

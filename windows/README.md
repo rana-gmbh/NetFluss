@@ -325,11 +325,20 @@ reading a file the caller could not read itself.
 An older helper keeps serving traffic after the app updates; only the VPN client, which
 needs protocol 2, asks for the helper to be updated.
 
+The helper runs from `Program Files\NetFluss Helper\Bin`: installing it copies its own files
+there (by name, never whatever else lies beside them), because a LocalSystem service must not
+run from a folder the user can write. It has that folder to itself. Up to 2.7.2-beta.2 it ran
+from `Program Files\NetFluss\Helper` — the app's own `Helper` folder for anyone who picked
+`Program Files\NetFluss` on Setup's folder page, so the next Setup could not replace the
+running service (#70). Setup now stops a helper it finds in the app folder, moves it with the
+new helper's `install`, and asks to run as administrator where the app folder needs it; the
+in-app updater asks for that approval itself.
+
 ## VPN client
 
 Port of the macOS 2.4 client. OpenVPN and WireGuard need administrator rights to create a
 tunnel, so the helper runs the user's installed OpenVPN Community and WireGuard for Windows:
-it writes the received files into a folder under `Program Files\NetFluss\VpnStaging` that
+it writes the received files into a folder under `Program Files\NetFluss Helper\VpnStaging` that
 only SYSTEM and Administrators can touch (not ProgramData, where a standard user could
 create — and so own — the folder first), checks them there so nothing can change them
 between the check and the launch, and starts the tool.

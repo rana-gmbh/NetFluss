@@ -35,10 +35,9 @@ internal static unsafe class Installer
     private const uint ErrorServiceDoesNotExist = 1060;
     private const uint ErrorServiceMarkedForDelete = 1072;
 
-    internal static string InstallDirectory => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-        "NetFluss",
-        "Helper");
+    private static HelperPaths Paths => HelperPaths.Current;
+
+    internal static string InstallDirectory => Paths.Binaries;
 
     internal static int Install()
     {
@@ -96,6 +95,7 @@ internal static unsafe class Installer
                 _ = CloseServiceHandle(service);
             }
 
+            RemoveLegacyFolders();
             return 0;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -139,19 +139,9 @@ internal static unsafe class Installer
                 Directory.Delete(InstallDirectory, recursive: true);
             }
 
-            var parent = Path.GetDirectoryName(InstallDirectory);
-
             // The VPN staging folder beside it: stopping the service removed every tunnel.
-            var staging = parent is null ? null : Path.Combine(parent, "VpnStaging");
-            if (staging is not null && Directory.Exists(staging) && !new DirectoryInfo(staging).Attributes.HasFlag(FileAttributes.ReparsePoint))
-            {
-                Directory.Delete(staging, recursive: true);
-            }
-
-            if (parent is not null && Directory.Exists(parent) && !Directory.EnumerateFileSystemEntries(parent).Any())
-            {
-                Directory.Delete(parent);
-            }
+            DeleteFolder(Paths.VpnStaging);
+            DeleteIfEmpty(Paths.Root);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -159,7 +149,49 @@ internal static unsafe class Installer
             // leftover folder harms nothing.
         }
 
+        RemoveLegacyFolders();
         return 0;
+    }
+
+    /// <summary>
+    /// What a helper up to 2.7.2-beta.2 left in <c>Program Files\NetFluss</c>, once the
+    /// service no longer runs from there. The old <c>Helper</c> folder stays when NetFluss
+    /// itself is installed in that folder: it is then the app's own, shipped by Setup.
+    /// </summary>
+    private static void RemoveLegacyFolders()
+    {
+        try
+        {
+            var app = Path.GetDirectoryName(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)) ?? AppContext.BaseDirectory;
+            if (Paths.MayRemoveLegacyBinaries(app, File.Exists))
+            {
+                DeleteFolder(Paths.LegacyBinaries);
+            }
+
+            DeleteFolder(Paths.LegacyVpnStaging);
+            DeleteIfEmpty(Paths.LegacyRoot);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine("could not remove the old helper folder: " + e.Message);
+        }
+    }
+
+    /// <summary>Deletes a folder and its contents, but never follows a link out of it.</summary>
+    private static void DeleteFolder(string folder)
+    {
+        if (Directory.Exists(folder) && !new DirectoryInfo(folder).Attributes.HasFlag(FileAttributes.ReparsePoint))
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    private static void DeleteIfEmpty(string folder)
+    {
+        if (Directory.Exists(folder) && !Directory.EnumerateFileSystemEntries(folder).Any())
+        {
+            Directory.Delete(folder);
+        }
     }
 
     private static void CopyFiles()

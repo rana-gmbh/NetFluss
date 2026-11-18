@@ -164,6 +164,10 @@ internal static class UpdateInstaller
     /// Starts a verified setup: silent, no reboot, and /LAUNCH asks it to start NetFluss again
     /// once it has replaced it. Null when it is running; the caller then quits, which the setup
     /// waits for. The file is hashed once more first, since it may have sat on disk a while.
+    ///
+    /// <para>A copy installed where the user cannot write — Program Files, chosen on Setup's
+    /// folder page — needs the setup elevated, so it asks for administrator approval; run
+    /// unelevated, the setup could replace nothing there (issue #70).</para>
     /// </summary>
     internal static string? Launch(VerifiedSetup setup)
     {
@@ -180,17 +184,40 @@ internal static class UpdateInstaller
                 return Localization.L("The update could not be verified, so it was not installed.");
             }
 
+            var elevate = !CanWriteTo(AppContext.BaseDirectory);
             Process.Start(new ProcessStartInfo
             {
                 FileName = setup.Path,
                 Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LAUNCH",
-                UseShellExecute = false,
+                UseShellExecute = elevate,
+                Verb = elevate ? "runas" : string.Empty,
             })?.Dispose();
             return null;
+        }
+        catch (System.ComponentModel.Win32Exception e) when (e.NativeErrorCode == 1223)
+        {
+            return Localization.L("Cancelled.");
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
             return Localization.L("The update could not be installed: {0}", e.Message);
+        }
+    }
+
+    /// <summary>Whether this user can create files in <paramref name="folder"/>, tried rather than read from its ACL.</summary>
+    private static bool CanWriteTo(string folder)
+    {
+        try
+        {
+            using (File.Create(Path.Combine(folder, $".netfluss-write-test-{Guid.NewGuid():N}"), 1, FileOptions.DeleteOnClose))
+            {
+            }
+
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 

@@ -42,7 +42,7 @@ internal sealed class VpnTunnels : IDisposable
     /// rewrite its permissions after the helper set them. Program Files admits only
     /// administrators.
     /// </summary>
-    private static string StagingRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "NetFluss", "VpnStaging");
+    private static string StagingRoot => HelperPaths.Current.VpnStaging;
 
     /// <summary>How long a finished tunnel's log stays readable before its folder (and keys) go.</summary>
     private static readonly TimeSpan LogGrace = TimeSpan.FromMinutes(2);
