@@ -3,8 +3,8 @@
 namespace NetFluss.Core;
 
 /// <summary>
-/// Where the helper service lives: its binaries and the VPN staging folder, both under
-/// Program Files, where only administrators can write.
+/// Where the helper service lives: its binaries, the VPN staging folder and its record of
+/// encrypted DNS, all under Program Files, where only administrators can write.
 ///
 /// <para><b>A folder of its own, never the app's.</b> Up to 2.7.2-beta.2 the helper ran from
 /// <c>Program Files\NetFluss\Helper</c>. NetFluss normally installs per user, but anyone
@@ -32,6 +32,13 @@ public sealed record HelperPaths(string ProgramFiles)
     /// deletes whatever the new helper does not ship.
     /// </summary>
     public string VpnStaging => Path.Combine(Root, "VpnStaging");
+
+    /// <summary>
+    /// What the helper changed in Windows' machine-wide DoT table, so it can take back exactly
+    /// that and nothing else. Beside <see cref="Binaries"/> so an update keeps it; readable and
+    /// writable by SYSTEM and Administrators only.
+    /// </summary>
+    public string EncryptedDnsState => Path.Combine(Root, "EncryptedDns.json");
 
     /// <summary>The folder that held both up to 2.7.2-beta.2.</summary>
     public string LegacyRoot => Path.Combine(ProgramFiles, "NetFluss");

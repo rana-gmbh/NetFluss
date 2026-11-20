@@ -351,8 +351,13 @@ public sealed class AppSettings : INotifyPropertyChanged
     /// </summary>
     public List<DnsPreset> CustomDnsPresets { get; set; } = [];
 
-    /// <summary>Built-ins followed by the user's own, which is the order the Mac shows them in.</summary>
-    public IReadOnlyList<DnsPreset> AllDnsPresets() => [.. DnsPreset.BuiltIn, .. CustomDnsPresets];
+    /// <summary>
+    /// Built-ins followed by the user's own, which is the order the Mac shows them in. A custom
+    /// encrypted preset that no longer validates — hand-edited, or a transport from a newer
+    /// NetFluss — is left out rather than offered: nothing could apply it.
+    /// </summary>
+    public IReadOnlyList<DnsPreset> AllDnsPresets()
+        => [.. DnsPreset.BuiltIn, .. CustomDnsPresets.Where(preset => preset.Transport is null || EncryptedDnsValidator.IsValid(preset))];
 
     /// <summary>
     /// User names for the built-in profiles — "Home" for Cloudflare, "Work" for Quad9 —
@@ -368,7 +373,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     public string DnsPresetDisplayName(DnsPreset preset)
         => preset.IsBuiltIn && DnsPresetCustomNames.TryGetValue(preset.Id, out var custom) && !string.IsNullOrWhiteSpace(custom)
             ? custom
-            : preset.IsBuiltIn ? Localization.L(preset.Name) : preset.Name;
+            : preset.IsBuiltIn && !preset.IsEncrypted ? Localization.L(preset.Name) : preset.Name;
 
     /// <summary>
     /// Renames a built-in profile, or restores its own name when given blank. Custom profiles
@@ -447,6 +452,14 @@ public sealed class AppSettings : INotifyPropertyChanged
 
     /// <summary>Adds a preset, rejecting anything that would not survive an elevated apply.</summary>
     public DnsValidation AddDnsPreset(string name, IReadOnlyList<string> servers)
+        => AddDnsPreset(name, servers, transport: null, endpoint: null);
+
+    /// <summary>
+    /// Adds a plain or encrypted preset. An encrypted one's endpoint is normalised first — a
+    /// DoT host lower-cased, surrounding spaces dropped — and then held to the same checks the
+    /// helper runs again before it touches the system.
+    /// </summary>
+    public DnsValidation AddDnsPreset(string name, IReadOnlyList<string> servers, DnsTransport? transport, string? endpoint)
     {
         var trimmed = name?.Trim();
         if (string.IsNullOrEmpty(trimmed))
@@ -465,6 +478,20 @@ public sealed class AppSettings : INotifyPropertyChanged
             return validation;
         }
 
+        string? normalized = null;
+        if (transport is { } kind)
+        {
+            normalized = kind == DnsTransport.Https
+                ? EncryptedDnsValidator.NormalizeDohUrl(endpoint) ?? endpoint?.Trim()
+                : EncryptedDnsValidator.NormalizeDotHost(endpoint) ?? endpoint?.Trim();
+
+            var encrypted = EncryptedDnsValidator.Validate(kind, normalized, servers);
+            if (!encrypted.IsValid)
+            {
+                return encrypted;
+            }
+        }
+
         if (AllDnsPresets().Any(preset => string.Equals(preset.Name, trimmed, StringComparison.OrdinalIgnoreCase)))
         {
             return DnsValidation.Fail(Localization.L("'{0}' already exists.", trimmed));
@@ -478,6 +505,8 @@ public sealed class AppSettings : INotifyPropertyChanged
                 Id = $"custom-{Guid.NewGuid():N}",
                 Name = trimmed,
                 Servers = servers,
+                Transport = transport,
+                Endpoint = normalized,
             },
         ];
 
@@ -1185,6 +1214,41 @@ public sealed class AppSettings : INotifyPropertyChanged
 
     /// <summary>Preset ids hidden from the popover switcher. Built-ins can be hidden, not deleted.</summary>
     public List<string> HiddenDnsPresets { get; set; } = [];
+
+    /// <summary>
+    /// Encrypted built-ins this install has already met, so each is hidden once and a later
+    /// "show" in Preferences sticks (macOS <c>dnsSeenEncryptedBuiltIns</c>).
+    /// </summary>
+    public List<string> DnsSeenEncryptedBuiltIns { get; set; } = [];
+
+    /// <summary>Whether <see cref="HideNewEncryptedDnsBuiltIns"/> has anything to do.</summary>
+    [JsonIgnore]
+    public bool HasUnseenEncryptedDnsBuiltIns
+        => DnsPreset.EncryptedBuiltIn.Any(preset => !DnsSeenEncryptedBuiltIns.Contains(preset.Id, StringComparer.Ordinal));
+
+    /// <summary>
+    /// Hides encrypted built-ins this install has not seen yet, once each. Fresh installs get
+    /// the same treatment: the popover starts with the plain five either way, and Preferences ›
+    /// DNS switches the encrypted ones on.
+    /// </summary>
+    public void HideNewEncryptedDnsBuiltIns()
+    {
+        var fresh = DnsPreset.EncryptedBuiltIn
+            .Select(preset => preset.Id)
+            .Where(id => !DnsSeenEncryptedBuiltIns.Contains(id, StringComparer.Ordinal))
+            .ToList();
+        if (fresh.Count == 0)
+        {
+            return;
+        }
+
+        // Replaced rather than mutated, like every list here: Set<T> and the store compare by
+        // reference.
+        HiddenDnsPresets = [.. HiddenDnsPresets, .. fresh.Where(id => !HiddenDnsPresets.Contains(id, StringComparer.Ordinal))];
+        DnsSeenEncryptedBuiltIns = [.. DnsSeenEncryptedBuiltIns, .. fresh];
+        OnPropertyChanged(nameof(HiddenDnsPresets));
+        OnPropertyChanged(nameof(DnsSeenEncryptedBuiltIns));
+    }
 
     /// <summary>User order of preset ids; presets not listed follow in their natural order.</summary>
     public List<string> DnsPresetOrder { get; set; } = [];

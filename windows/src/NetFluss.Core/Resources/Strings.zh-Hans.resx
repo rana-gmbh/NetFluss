@@ -2072,7 +2072,7 @@
     <value>加密 DNS</value>
   </data>
   <data name="{0} needs encrypted DNS, which this build of NetFluss can&apos;t set up." xml:space="preserve">
-    <value>{0} 需要加密 DNS，但此版本的 NetFluss 无法设置。</value>
+    <value>{0} 需要加密 DNS，但此电脑不支持。</value>
   </data>
   <data name="{0} needs encrypted DNS, but macOS wasn&apos;t allowed to add NetFluss&apos;s DNS settings. Choose the preset once by hand to be asked again." xml:space="preserve">
     <value>{0} 需要加密 DNS，但 Windows 未被允许添加 NetFluss 的 DNS 设置。请手动选择一次该配置，以便再次收到询问。</value>
@@ -2976,5 +2976,38 @@
   </data>
   <data name="NetFluss has been updated to {0}. Click for what&apos;s new." xml:space="preserve">
     <value>NetFluss 已更新到 {0}。点击查看新功能。</value>
+  </data>
+  <data name="Encrypted DNS needs the NetFluss helper. Installing it asks for approval once." xml:space="preserve">
+    <value>加密 DNS 需要 NetFluss 辅助工具。安装时只需批准一次。</value>
+  </data>
+  <data name="The NetFluss helper is out of date. Update it to use encrypted DNS." xml:space="preserve">
+    <value>NetFluss 辅助工具已过时。请更新后再使用加密 DNS。</value>
+  </data>
+  <data name="Needs Windows 11" xml:space="preserve">
+    <value>需要 Windows 11</value>
+  </data>
+  <data name="Needs Windows 11 24H2" xml:space="preserve">
+    <value>需要 Windows 11 24H2</value>
+  </data>
+  <data name="Turned off by your administrator" xml:space="preserve">
+    <value>已被管理员关闭</value>
+  </data>
+  <data name="Not available on this PC" xml:space="preserve">
+    <value>在此电脑上不可用</value>
+  </data>
+  <data name="DoH and DoT presets use the encrypted DNS built into Windows 11 and are set through the NetFluss helper, which also takes them back. DoT needs Windows 11 24H2 or later. The encrypted presets start hidden in the popover; switch them on in the list above." xml:space="preserve">
+    <value>DoH 和 DoT 配置使用 Windows 11 内置的加密 DNS，由 NetFluss 辅助工具进行设置，也由它负责撤销。DoT 需要 Windows 11 24H2 或更高版本。加密配置默认不在弹出窗口中显示，可在上方列表中打开。</value>
+  </data>
+  <data name="URL" xml:space="preserve">
+    <value>URL</value>
+  </data>
+  <data name="Server name" xml:space="preserve">
+    <value>服务器名称</value>
+  </data>
+  <data name="At least one server address is needed. Without an IPv6 address, IPv6 keeps the network&apos;s own resolver." xml:space="preserve">
+    <value>至少需要一个服务器地址。如果没有 IPv6 地址，IPv6 将继续使用网络自带的解析器。</value>
+  </data>
+  <data name="With an IP address in the URL, use that address as the only server." xml:space="preserve">
+    <value>如果 URL 中包含 IP 地址，请将该地址作为唯一的服务器。</value>
   </data>
 </root>

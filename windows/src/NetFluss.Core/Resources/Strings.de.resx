@@ -2072,7 +2072,7 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
     <value>Verschlüsseltes DNS</value>
   </data>
   <data name="{0} needs encrypted DNS, which this build of NetFluss can&apos;t set up." xml:space="preserve">
-    <value>{0} braucht verschlüsseltes DNS, das diese NetFluss-Version nicht einrichten kann.</value>
+    <value>{0} braucht verschlüsseltes DNS, das auf diesem PC nicht verfügbar ist.</value>
   </data>
   <data name="{0} needs encrypted DNS, but macOS wasn&apos;t allowed to add NetFluss&apos;s DNS settings. Choose the preset once by hand to be asked again." xml:space="preserve">
     <value>{0} braucht verschlüsseltes DNS, aber Windows durfte die DNS-Einstellungen von NetFluss nicht hinzufügen. Wähle das Profil einmal von Hand aus, um erneut gefragt zu werden.</value>
@@ -2976,5 +2976,38 @@ Es wird kein Netzwerkverkehr gesendet — nur lokale Zähler von Ihrem Mac werde
   </data>
   <data name="NetFluss has been updated to {0}. Click for what&apos;s new." xml:space="preserve">
     <value>NetFluss wurde auf {0} aktualisiert. Klicke hier für die Neuerungen.</value>
+  </data>
+  <data name="Encrypted DNS needs the NetFluss helper. Installing it asks for approval once." xml:space="preserve">
+    <value>Verschlüsseltes DNS benötigt den NetFluss-Helfer. Für die Installation wird einmal um Freigabe gebeten.</value>
+  </data>
+  <data name="The NetFluss helper is out of date. Update it to use encrypted DNS." xml:space="preserve">
+    <value>Der NetFluss-Helfer ist veraltet. Aktualisiere ihn, um verschlüsseltes DNS zu nutzen.</value>
+  </data>
+  <data name="Needs Windows 11" xml:space="preserve">
+    <value>Benötigt Windows 11</value>
+  </data>
+  <data name="Needs Windows 11 24H2" xml:space="preserve">
+    <value>Benötigt Windows 11 24H2</value>
+  </data>
+  <data name="Turned off by your administrator" xml:space="preserve">
+    <value>Von deinem Administrator ausgeschaltet</value>
+  </data>
+  <data name="Not available on this PC" xml:space="preserve">
+    <value>Auf diesem PC nicht verfügbar</value>
+  </data>
+  <data name="DoH and DoT presets use the encrypted DNS built into Windows 11 and are set through the NetFluss helper, which also takes them back. DoT needs Windows 11 24H2 or later. The encrypted presets start hidden in the popover; switch them on in the list above." xml:space="preserve">
+    <value>DoH- und DoT-Profile nutzen das in Windows 11 eingebaute verschlüsselte DNS und werden über den NetFluss-Helfer eingerichtet, der sie auch wieder entfernt. DoT benötigt Windows 11 24H2 oder neuer. Die verschlüsselten Profile sind im Popover zunächst ausgeblendet; schalte sie in der Liste oben ein.</value>
+  </data>
+  <data name="URL" xml:space="preserve">
+    <value>URL</value>
+  </data>
+  <data name="Server name" xml:space="preserve">
+    <value>Servername</value>
+  </data>
+  <data name="At least one server address is needed. Without an IPv6 address, IPv6 keeps the network&apos;s own resolver." xml:space="preserve">
+    <value>Mindestens eine Serveradresse ist nötig. Ohne IPv6-Adresse nutzt IPv6 weiterhin den Resolver des Netzwerks.</value>
+  </data>
+  <data name="With an IP address in the URL, use that address as the only server." xml:space="preserve">
+    <value>Steht eine IP-Adresse in der URL, gib genau diese Adresse als einzigen Server an.</value>
   </data>
 </root>
