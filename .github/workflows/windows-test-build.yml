@@ -1,0 +1,33 @@
+name: Windows Test Build
+
+# An unsigned test build of the Windows installer, for testing before a release. It lives
+# only on the windows-test-build branch: it publishes nothing and touches no release, and
+# the installer and portable zip are downloadable from the run's artifacts.
+
+on:
+  push:
+    branches: [windows-test-build]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install Inno Setup
+        run: choco install innosetup --version 6.7.1 --allow-downgrade --no-progress -y
+
+      - name: Build
+        shell: pwsh
+        run: ./windows/Packaging/build-release.ps1 -Version 2.7.3-alpha.1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NetFluss-Windows-test-build
+          path: windows/artifacts/release
+          if-no-files-found: error
