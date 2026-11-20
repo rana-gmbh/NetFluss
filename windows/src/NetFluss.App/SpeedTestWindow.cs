@@ -496,11 +496,26 @@ internal sealed class SpeedTestWindow : Window
         {
             // Its own user-data folder under LOCALAPPDATA: the default sits beside the exe,
             // which fails outright when the app is installed to Program Files.
+            //
+            // The engine is never shown, so Chromium treats its page as hidden and throttles its
+            // timers: setTimeout runs about once a second, and after five minutes once a minute.
+            // The M-Lab upload is driven by a setTimeout pump, so it sent a message a second and
+            // measured about 1 Mbit/s whatever the link; the download and the Cloudflare test
+            // are event-driven and were not affected. A measurement page must run at full speed.
             var environment = await CoreWebView2Environment.CreateAsync(
+                browserExecutableFolder: null,
                 userDataFolder: Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "NetFluss",
-                    "WebView2"));
+                    "WebView2"),
+                options: new CoreWebView2EnvironmentOptions
+                {
+                    AdditionalBrowserArguments = string.Join(' ',
+                        "--disable-background-timer-throttling",
+                        "--disable-renderer-backgrounding",
+                        "--disable-backgrounding-occluded-windows",
+                        "--disable-features=IntensiveWakeUpThrottling"),
+                });
 
             await _engine.EnsureCoreWebView2Async(environment);
 
