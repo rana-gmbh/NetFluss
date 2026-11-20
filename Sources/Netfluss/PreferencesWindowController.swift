@@ -116,7 +116,7 @@ final class AddDNSWindowController {
         panel.styleMask = [.titled, .closable, .nonactivatingPanel]
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = false
-        panel.setContentSize(NSSize(width: 340, height: nameOnly ? 190 : 270))
+        panel.setContentSize(NSSize(width: 380, height: nameOnly ? 190 : 330))
         panel.isReleasedWhenClosed = false
         panel.center()
         panel.makeKeyAndOrderFront(nil)
@@ -786,12 +786,21 @@ struct EditOPNsenseCredentialsPanelView: View {
 }
 
 struct AddDNSPanelView: View {
+    /// What kind of resolver a custom entry is. DNS-over-QUIC is absent on
+    /// purpose: macOS can't do it without a local proxy.
+    enum Kind: String, CaseIterable, Identifiable {
+        case plain, https, tls
+        var id: String { rawValue }
+    }
+
     let editingPreset: DNSPreset?
     let nameOnly: Bool
     let onSave: (DNSPreset) -> Void
     let onCancel: () -> Void
 
     @State private var name: String = ""
+    @State private var kind: Kind = .plain
+    @State private var endpoint: String = ""
     @State private var primary: String = ""
     @State private var secondary: String = ""
     @State private var tertiary: String = ""
@@ -809,9 +818,58 @@ struct AddDNSPanelView: View {
 
     private var isEditing: Bool { editingPreset != nil }
 
+    private var enteredServers: [String] {
+        [primary, secondary, tertiary, quaternary]
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    private var transport: DNSTransport? {
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch kind {
+        case .plain: return nil
+        case .https: return .https(url: trimmed)
+        case .tls: return .tls(serverName: trimmed.lowercased())
+        }
+    }
+
+    private var draft: DNSPreset {
+        DNSPreset(id: editingPreset?.id ?? UUID().uuidString,
+                  name: name.trimmingCharacters(in: .whitespaces),
+                  servers: enteredServers,
+                  isBuiltIn: false,
+                  transport: transport)
+    }
+
+    /// Why the entry can't be saved yet, or nil. Only shown once something has
+    /// been typed into the offending field.
+    private var problem: String? {
+        if !enteredServers.allSatisfy(DNSEntryValidator.isIPAddress) {
+            return L10n.text("Server addresses must be IP addresses, such as 1.1.1.1 or 2606:4700:4700::1111.")
+        }
+        switch kind {
+        case .plain:
+            return nil
+        case .https:
+            guard !endpoint.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            return DNSEntryValidator.normalizedDoHURL(endpoint) == nil
+                ? L10n.text("Enter an https:// address, such as https://dns.example.com/dns-query.")
+                : nil
+        case .tls:
+            guard !endpoint.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            return DNSEntryValidator.isValidServerName(endpoint)
+                ? nil
+                : L10n.text("Enter the server's host name, such as dns.example.com.")
+        }
+    }
+
     private var isValid: Bool {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        return nameOnly || !primary.trimmingCharacters(in: .whitespaces).isEmpty
+        if nameOnly { return true }
+        switch kind {
+        case .plain: return !enteredServers.isEmpty && problem == nil
+        case .https, .tls: return DNSEntryValidator.isValid(draft)
+        }
     }
 
     var body: some View {
@@ -822,9 +880,7 @@ struct AddDNSPanelView: View {
                 TextField("Name (e.g. My DNS)", text: $name)
                     .textFieldStyle(.roundedBorder)
                 if nameOnly {
-                    Text(editingPreset?.servers.isEmpty == false
-                         ? (editingPreset?.servers.joined(separator: ", ") ?? "")
-                         : L10n.text("Uses the servers from DHCP"))
+                    Text(renameSummary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     LText("Only the name changes — the servers stay as they are.")
@@ -832,14 +888,53 @@ struct AddDNSPanelView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    TextField("Primary DNS (e.g. 1.1.1.1)", text: $primary)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Secondary DNS (optional)", text: $secondary)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Tertiary DNS (optional)", text: $tertiary)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Quaternary DNS (optional)", text: $quaternary)
-                        .textFieldStyle(.roundedBorder)
+                    Picker("", selection: $kind) {
+                        LText("Plain DNS").tag(Kind.plain)
+                        Text("DNS-over-HTTPS").tag(Kind.https)
+                        Text("DNS-over-TLS").tag(Kind.tls)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+
+                    switch kind {
+                    case .plain:
+                        TextField("Primary DNS (e.g. 1.1.1.1)", text: $primary)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Secondary DNS (optional)", text: $secondary)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Tertiary DNS (optional)", text: $tertiary)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Quaternary DNS (optional)", text: $quaternary)
+                            .textFieldStyle(.roundedBorder)
+                    case .https:
+                        TextField("URL (e.g. https://dns.example.com/dns-query)", text: $endpoint)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Server IP (optional)", text: $primary)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Second server IP (optional)", text: $secondary)
+                            .textFieldStyle(.roundedBorder)
+                        LText("The IPs let macOS reach the server without looking up its name first.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    case .tls:
+                        TextField("Server name (e.g. dns.example.com)", text: $endpoint)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Server IP (e.g. 1.1.1.1)", text: $primary)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Second server IP (optional)", text: $secondary)
+                            .textFieldStyle(.roundedBorder)
+                        LText("macOS connects to the IP and checks the server name against its certificate.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let problem {
+                        Text(problem)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             HStack(spacing: 12) {
@@ -855,29 +950,44 @@ struct AddDNSPanelView: View {
         .onAppear {
             if let preset = editingPreset {
                 name = preset.name
+                switch preset.transport {
+                case nil: kind = .plain
+                case .https(let url): kind = .https; endpoint = url
+                case .tls(let serverName): kind = .tls; endpoint = serverName
+                }
                 primary = preset.servers.first ?? ""
                 secondary = preset.servers.count > 1 ? preset.servers[1] : ""
                 tertiary = preset.servers.count > 2 ? preset.servers[2] : ""
                 quaternary = preset.servers.count > 3 ? preset.servers[3] : ""
             }
         }
+        .onChange(of: kind) { newKind in
+            // Encrypted entries take two bootstrap IPs; don't keep hidden ones.
+            if newKind != .plain { tertiary = ""; quaternary = "" }
+        }
+    }
+
+    private var renameSummary: String {
+        guard let preset = editingPreset else { return "" }
+        if let transport = preset.transport { return "\(transport.shortName): \(transport.endpoint)" }
+        return preset.servers.isEmpty
+            ? L10n.text("Uses the servers from DHCP")
+            : preset.servers.joined(separator: ", ")
     }
 
     private func save() {
         let trimName = name.trimmingCharacters(in: .whitespaces)
-        let servers = [
-            primary.trimmingCharacters(in: .whitespaces),
-            secondary.trimmingCharacters(in: .whitespaces),
-            tertiary.trimmingCharacters(in: .whitespaces),
-            quaternary.trimmingCharacters(in: .whitespaces)
-        ].filter { !$0.isEmpty }
-        onSave(DNSPreset(
-            id: editingPreset?.id ?? UUID().uuidString,
-            name: trimName,
+        if nameOnly, let preset = editingPreset {
             // A rename must not quietly redefine what the preset points at, or
             // turn a built-in into a custom one.
-            servers: nameOnly ? (editingPreset?.servers ?? servers) : servers,
-            isBuiltIn: nameOnly ? (editingPreset?.isBuiltIn ?? false) : false
-        ))
+            onSave(preset.renamed(trimName))
+            return
+        }
+        var preset = draft
+        if case .https(let url) = preset.transport, let normalized = DNSEntryValidator.normalizedDoHURL(url) {
+            preset = DNSPreset(id: preset.id, name: preset.name, servers: preset.servers,
+                               isBuiltIn: false, transport: .https(url: normalized))
+        }
+        onSave(preset)
     }
 }

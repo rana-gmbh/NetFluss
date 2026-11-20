@@ -326,7 +326,7 @@ struct VPNProfileRow: View {
 
     /// DNS presets from NetFluss's DNS section, excluding "automatic" (no servers).
     private var dnsPresets: [DNSPreset] {
-        NetworkMonitor.allDNSPresets().filter { !$0.servers.isEmpty }
+        NetworkMonitor.allDNSPresets().filter { !$0.servers.isEmpty && !$0.isEncrypted }
     }
 
     /// This profile's position in the ordered list (for the move buttons).

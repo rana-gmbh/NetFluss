@@ -27,7 +27,11 @@ with `Netfluss-vpn.entitlements` **and** embeds a provisioning profile.
 ### One-time setup (Apple Developer portal, Rana GmbH account)
 
 1. **Identifiers → App IDs**: ensure an explicit App ID `com.local.netfluss`
-   exists, and enable the **Personal VPN** capability on it.
+   exists, and enable the **Personal VPN** and **Network Extensions**
+   capabilities on it. Network Extensions authorizes `dns-settings`
+   (`NEDNSSettingsManager`, the DoH/DoT presets), which
+   `Netfluss-vpn.entitlements` also requests — a profile without it means the
+   app won't launch, and `release.yml` refuses to sign with one.
 2. **Profiles → +**: create a **Developer ID** provisioning profile for that App
    ID (Profile Type: "Developer ID"). Download it (`Netfluss.provisionprofile`).
 

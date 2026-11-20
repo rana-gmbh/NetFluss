@@ -687,7 +687,7 @@ final class VPNManager: ObservableObject {
               profile.options.useProfileDNS,
               let presetID = profile.options.dnsPresetID,
               let preset = NetworkMonitor.allDNSPresets().first(where: { $0.id == presetID }),
-              !preset.servers.isEmpty else { return }
+              !preset.servers.isEmpty, !preset.isEncrypted else { return }
         networkMonitor?.applyVPNDNS(preset.servers)
     }
 
@@ -699,7 +699,7 @@ final class VPNManager: ObservableObject {
         if profile.options.useProfileDNS,
            let presetID = profile.options.dnsPresetID,
            let preset = NetworkMonitor.allDNSPresets().first(where: { $0.id == presetID }),
-           !preset.servers.isEmpty {
+           !preset.servers.isEmpty, !preset.isEncrypted {
             networkMonitor?.applyVPNDNS(preset.servers)
             return
         }

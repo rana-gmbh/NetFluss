@@ -98,6 +98,12 @@ jobs:
           echo "$PROFILE_BASE64" | base64 --decode > NetFluss.app/Contents/embedded.provisionprofile
           # Fail early if the secret didn't decode to a valid CMS-signed profile.
           security cms -D -i NetFluss.app/Contents/embedded.provisionprofile > /dev/null
+          # The app is also signed with the Network Extension `dns-settings`
+          # entitlement (encrypted DNS); a profile without it means no launch.
+          security cms -D -i NetFluss.app/Contents/embedded.provisionprofile \
+            | plutil -extract Entitlements.com\\.apple\\.developer\\.networking\\.networkextension xml1 -o - - \
+            | grep -q "<string>dns-settings</string>" \
+            || { echo "::error::The provisioning profile does not grant the Network Extension dns-settings entitlement. Enable Network Extensions on the App ID com.local.netfluss, regenerate the Developer ID profile and update VPN_PROVISIONING_PROFILE."; exit 1; }
           echo "Embedded provisioning profile ($(stat -f%z NetFluss.app/Contents/embedded.provisionprofile) bytes)"
 
       - name: Sign
@@ -129,6 +135,8 @@ jobs:
           # the profile, so a misconfigured build can never produce a broken release.
           codesign -d --entitlements - NetFluss.app 2>/dev/null | grep -q "allow-vpn" \
             || { echo "::error::allow-vpn entitlement missing from signed app"; exit 1; }
+          codesign -d --entitlements - NetFluss.app 2>/dev/null | grep -q "dns-settings" \
+            || { echo "::error::dns-settings entitlement missing from signed app"; exit 1; }
           test -f NetFluss.app/Contents/embedded.provisionprofile \
             || { echo "::error::embedded.provisionprofile missing from signed app"; exit 1; }
 

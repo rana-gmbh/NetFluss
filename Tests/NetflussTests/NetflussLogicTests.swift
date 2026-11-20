@@ -16,7 +16,7 @@ final class DNSRuleEngineTests: XCTestCase {
         DNSRuleEngine.Input(
             enabled: true, helperEnabled: true, ssid: ssid, bssid: nil, linkHealth: health,
             portalSignalAvailable: portal, vpnDNSActive: false, activePresetID: active,
-            currentServers: current, presetServers: servers,
+            currentServers: current, presetTargets: servers.mapValues { .plain($0) },
             rules: [DNSRule(ssid: "Home", presetID: target), DNSRule(ssid: "Office", presetID: target)],
             fallbackPresetID: nil
         )

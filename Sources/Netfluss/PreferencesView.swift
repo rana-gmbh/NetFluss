@@ -887,9 +887,19 @@ struct PreferencesView: View {
                                 .frame(width: 16)
                             Toggle("", isOn: dnsBindingFor(preset.id)).labelsHidden()
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(preset.name)
-                                    .lineLimit(1)
-                                if !preset.servers.isEmpty {
+                                HStack(spacing: 4) {
+                                    Text(preset.name)
+                                        .lineLimit(1)
+                                    if let transport = preset.transport, !preset.name.contains(transport.shortName) {
+                                        DNSTransportBadge(transport: transport)
+                                    }
+                                }
+                                if let transport = preset.transport {
+                                    Text(transport.endpoint)
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                        .lineLimit(1)
+                                } else if !preset.servers.isEmpty {
                                     Text(preset.servers.joined(separator: ", "))
                                         .font(.caption2)
                                         .foregroundStyle(.tertiary)
@@ -978,6 +988,12 @@ struct PreferencesView: View {
                 }
             } header: {
                 LText("DNS Switcher")
+            }
+
+                    Section {
+                encryptedDNSSettings
+            } header: {
+                LText("Encrypted DNS")
             }
 
                     Section {
@@ -1563,11 +1579,100 @@ struct PreferencesView: View {
         case .waitingForNetwork(let ssid):
             return L10n.format("Waiting for a connection to %@ before changing DNS.", ssid)
         case .applied(let ssid, let presetID):
-            let name = NetworkMonitor.allDNSPresets().first { $0.id == presetID }?.name ?? presetID
+            let name = presetName(presetID)
             return ssid.isEmpty
                 ? L10n.format("Using %@ on this network.", name)
                 : L10n.format("Using %@ on %@.", name, ssid)
+        case .encryptedDNSUnavailable(let presetID):
+            return monitor.encryptedDNSStatus == .unavailable
+                ? L10n.format("%@ needs encrypted DNS, which this build of NetFluss can't set up.", presetName(presetID))
+                : L10n.format("%@ needs encrypted DNS, but macOS wasn't allowed to add NetFluss's DNS settings. Choose the preset once by hand to be asked again.", presetName(presetID))
+        case .manualOverride(let ssid):
+            return ssid.isEmpty
+                ? L10n.text("Chosen by hand on this network. The rules apply again on the next network you join.")
+                : L10n.format("Chosen by hand on %@. The rules apply again on the next network you join.", ssid)
+        case .waitingForEncryptedDNS(let presetID):
+            return L10n.format("%1$@ is set up. Switch on NetFluss in %2$@ to use it.", presetName(presetID), EncryptedDNSController.settingsPath)
         }
+    }
+
+    private func presetName(_ presetID: String) -> String {
+        NetworkMonitor.allDNSPresets(includeHidden: true).first { $0.id == presetID }?.name ?? presetID
+    }
+
+    /// Status of macOS's encrypted-DNS configuration and the one thing the user
+    /// may have to do about it.
+    @ViewBuilder
+    private var encryptedDNSSettings: some View {
+        Text(L10n.format("DoH and DoT presets use the encrypted DNS built into macOS — no helper and no background service. The first time, macOS asks whether to allow NetFluss's DNS settings; then switch NetFluss on in %@. The encrypted presets start hidden in the popover; switch them on in the DNS switcher list.", EncryptedDNSController.settingsPath))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+        let status = monitor.encryptedDNSStatus
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: encryptedDNSStatusSymbol(status))
+                .foregroundStyle(encryptedDNSStatusColor(status))
+            Text(encryptedDNSStatusText(status))
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+
+        if status.awaitingUser != nil || status.isInstalled {
+            HStack(spacing: 8) {
+                if status.awaitingUser != nil {
+                    Button {
+                        EncryptedDNSController.openSystemSettings()
+                    } label: {
+                        LText("Open System Settings")
+                    }
+                }
+                Spacer()
+                Button(role: .destructive) {
+                    monitor.removeEncryptedDNS()
+                } label: {
+                    LText("Remove DNS Configuration")
+                }
+                .disabled(monitor.removingEncryptedDNS)
+            }
+        }
+        if let error = monitor.encryptedDNSRemoveError {
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+    }
+
+    private func encryptedDNSStatusText(_ status: EncryptedDNSStatus) -> String {
+        switch status {
+        case .unknown:
+            return L10n.text("Checking…")
+        case .unavailable:
+            return L10n.text("Not available in this build. Encrypted DNS needs the signed NetFluss app from the Releases page.")
+        case .notInstalled:
+            return L10n.text("Not set up yet. Choose a DoH or DoT preset to set it up.")
+        case .installed(let config, let enabled):
+            if config.paused {
+                return L10n.text("Off: a plain DNS preset is in use.")
+            }
+            let name = allDNSPresets.first { $0.target == config.target }?.name ?? config.transport.endpoint
+            return enabled
+                ? L10n.format("On: %@", name)
+                : L10n.format("%1$@ is set up. Switch on NetFluss in %2$@ to use it.", name, EncryptedDNSController.settingsPath)
+        }
+    }
+
+    private func encryptedDNSStatusSymbol(_ status: EncryptedDNSStatus) -> String {
+        if status.isActive { return "lock.fill" }
+        if status.awaitingUser != nil { return "exclamationmark.triangle.fill" }
+        return "lock.open"
+    }
+
+    private func encryptedDNSStatusColor(_ status: EncryptedDNSStatus) -> Color {
+        if status.isActive { return .green }
+        if status.awaitingUser != nil { return .orange }
+        return .secondary
     }
 
     @ViewBuilder
@@ -1841,7 +1946,7 @@ struct PreferencesView: View {
         let names = NetworkMonitor.dnsPresetCustomNames()
         let builtIn = DNSPreset.builtIn.map { preset -> DNSPreset in
             guard let name = names[preset.id], !name.isEmpty else { return preset }
-            return DNSPreset(id: preset.id, name: name, servers: preset.servers, isBuiltIn: true)
+            return preset.renamed(name)
         }
         return builtIn + customDNSPresets
     }

@@ -54,8 +54,12 @@ codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" --opt
 codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" --options=runtime --timestamp NetFluss.app/Contents/Frameworks/Sparkle.framework
 codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
   --options=runtime --timestamp NetFluss.app/Contents/Library/HelperTools/NetflussPrivilegedHelper
+# Releases sign with Netfluss-vpn.entitlements (IKEv2 `allow-vpn` + encrypted-DNS
+# `dns-settings`), which only launch with the Developer ID profile embedded. That
+# profile must grant both (Personal VPN + Network Extensions on the App ID).
+cp NetFluss_Developer_ID_VPN.provisionprofile NetFluss.app/Contents/embedded.provisionprofile
 codesign --force --sign "Developer ID Application: Rana GmbH (D6P24X5377)" \
-  --options=runtime --timestamp --entitlements Netfluss.entitlements NetFluss.app
+  --options=runtime --timestamp --entitlements Netfluss-vpn.entitlements NetFluss.app
 ditto -c -k --sequesterRsrc --keepParent NetFluss.app Netfluss-1.x.x.zip
 xcrun notarytool submit Netfluss-1.x.x.zip --apple-id <id> --password <pwd> --team-id D6P24X5377 --wait
 xcrun stapler staple NetFluss.app
@@ -88,6 +92,7 @@ Netfluss is a pure-SwiftPM macOS menu bar app. Its only third-party dependency i
 | `Models.swift` | Value types: `AdapterStatus`, `RateTotals`, `AppTraffic`, `InterfaceSample`, `DNSPreset` |
 | `Themes.swift` | `AppTheme` struct + Dracula/Nord/Solarized presets; `Color(hex:)` extension |
 | `Formatters.swift` | `RateFormatter.formatRate()` — bits vs bytes, auto-scaling |
+| `EncryptedDNS.swift` | DoH/DoT via `NEDNSSettingsManager` (no helper, no proxy): one per-app system config; switching to plain DNS *pauses* it by limiting it to the dummy match domain `paused.netfluss.invalid` instead of removing it, so the user's approval survives (an on-demand Disconnect rule does NOT stop a running config). The user must switch it on in System Settings › Network › VPN & Filters — apps can't. Needs the `dns-settings` entitlement (raw builds report it unavailable). No DNS-over-QUIC: macOS has no native support |
 | `AppUpdater.swift` | Sparkle 2 wrapper: feed = `appcast.xml` on the latest GitHub release (`SUFeedURL`), EdDSA key `SUPublicEDKey` in `Info.plist`; only starts inside a bundled `.app` with that key, otherwise "Check for Updates" opens the releases page |
 
 ### Data flow

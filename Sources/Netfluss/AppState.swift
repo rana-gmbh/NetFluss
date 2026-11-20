@@ -119,6 +119,8 @@ final class AppState {
             "networkSliceServicesLive": false,
             "networkSliceAppsLive": false
         ])
+        // The encrypted (DoH/DoT) built-ins start out of the popover.
+        DNSPreset.hideNewEncryptedBuiltIns()
         let monitor = NetworkMonitor()
         self.monitor = monitor
         let statisticsManager = StatisticsManager(monitor: monitor)

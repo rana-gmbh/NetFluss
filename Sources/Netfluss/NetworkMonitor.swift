@@ -16,6 +16,7 @@
 // along with Netfluss. If not, see <https://www.gnu.org/licenses/>.
 
 import CoreWLAN
+import NetworkExtension
 import AppKit
 import Foundation
 import PrivilegedExecution
@@ -50,6 +51,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
     /// What the automatic, SSID-based DNS switcher is doing, so the UI can
     /// explain a resolver it changed without being asked.
     @Published var dnsAutoSwitchState: DNSAutoSwitchState = .off
+    /// NetFluss's system encrypted-DNS (DoH/DoT) configuration.
+    @Published var encryptedDNSStatus: EncryptedDNSStatus = .unknown
     @Published var fritzBox: FritzBoxBandwidth?
     @Published var fritzBoxMaxDown: UInt64 = 0
     @Published var fritzBoxMaxUp: UInt64 = 0
@@ -240,6 +243,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
             self.fallbackLastSampleAt = at
         }
         startListeningForWiFiEvents()
+        encryptedDNS.onChange = { [weak self] in
+            guard let self else { return }
+            self.setIfChanged(\.encryptedDNSStatus, to: self.encryptedDNS.status)
+            self.setIfChanged(\.activeDNSPresetID, to: self.matchPreset(servers: self.currentDNSServers))
+        }
+        encryptedDNS.start()
         let workspaceCenter = NSWorkspace.shared.notificationCenter
         workspaceCenter.addObserver(
             self,
@@ -1050,6 +1059,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
     // MARK: - DNS
 
     private func updateCurrentDNS() {
+        encryptedDNS.refreshIfStale()
         // A round trip to configd — never on the main thread.
         Task { [weak self] in
             guard let servers = await ProcessRunner.offloaded({ Self.currentDNSServers() }) else { return }
@@ -1076,12 +1086,11 @@ final class NetworkMonitor: NSObject, ObservableObject {
     }
 
     private func matchPreset(servers: [String]) -> String? {
-        let allPresets = Self.allDNSPresets()
-        for preset in allPresets {
-            if preset.servers.isEmpty && servers.isEmpty { return preset.id }
-            if preset.servers == servers { return preset.id }
-        }
-        return nil
+        DNSPresetMatcher.activePresetID(
+            servers: servers,
+            encrypted: encryptedDNS.status,
+            presets: Self.allDNSPresets(includeHidden: true)
+        )
     }
 
     /// User-chosen labels for the built-in presets, keyed by preset id.
@@ -1104,17 +1113,21 @@ final class NetworkMonitor: NSObject, ObservableObject {
         UserDefaults.standard.set(names, forKey: "dnsPresetCustomNames")
     }
 
-    static func allDNSPresets() -> [DNSPreset] {
+    /// Presets in display order. Hidden ones are only for the popover to leave
+    /// out: a rule, a VPN profile or the menu bar label may still name one, so
+    /// those ask for `includeHidden`, which appends them after the visible ones.
+    static func allDNSPresets(includeHidden: Bool = false) -> [DNSPreset] {
         let customNames = dnsPresetCustomNames()
         var presets = DNSPreset.builtIn.map { preset -> DNSPreset in
             guard let name = customNames[preset.id], !name.isEmpty else { return preset }
-            return DNSPreset(id: preset.id, name: name, servers: preset.servers, isBuiltIn: true)
+            return preset.renamed(name)
         }
         if let data = UserDefaults.standard.data(forKey: "customDNSPresets"),
            let custom = try? JSONDecoder().decode([DNSPreset].self, from: data) {
             presets += custom
         }
         let hidden = Set(UserDefaults.standard.stringArray(forKey: "hiddenDNSPresets") ?? [])
+        let hiddenPresets = presets.filter { hidden.contains($0.id) }
         presets.removeAll { hidden.contains($0.id) }
         let order = UserDefaults.standard.stringArray(forKey: "dnsPresetOrder") ?? []
         if !order.isEmpty {
@@ -1125,7 +1138,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
                 return ai < bi
             }
         }
-        return presets
+        return includeHidden ? presets + hiddenPresets : presets
     }
 
     /// Per-service DNS captured when a VPN with custom DNS connects, so the prior
@@ -1134,6 +1147,8 @@ final class NetworkMonitor: NSObject, ObservableObject {
     private var vpnDNSBackup: [String: [String]] = [:]
     /// The write `applyVPNDNS` has in flight; a restore waits for it.
     private var vpnDNSApplyTask: Task<Void, Never>?
+
+    let encryptedDNS = EncryptedDNSController()
 
     private lazy var dnsRuleEngine: DNSRuleEngine = {
         let engine = DNSRuleEngine()
@@ -1178,6 +1193,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         guard Self.dnsAutoSwitchEnabled else {
             if dnsAutoSwitchState != .off { dnsAutoSwitchState = .off }
             dnsRuleEngine.reset()
+            UserDefaults.standard.removeObject(forKey: Self.manualOverrideKey)
             return
         }
         guard !dnsChanging else { return }
@@ -1187,7 +1203,7 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let wifi = adapters.first { $0.type == .wifi && $0.isUp && !($0.wifiSSID ?? "").isEmpty }
         let defaults = UserDefaults.standard
         let fallback = defaults.string(forKey: "dnsRuleFallbackPresetID")
-        let presets = Self.allDNSPresets()
+        let presets = Self.allDNSPresets(includeHidden: true)
         let input = DNSRuleEngine.Input(
             enabled: true,
             helperEnabled: helperEnabledCache,
@@ -1200,14 +1216,52 @@ final class NetworkMonitor: NSObject, ObservableObject {
             activePresetID: activeDNSPresetID,
             // Empty and unmatched means it hasn't been read yet.
             currentServers: activeDNSPresetID == nil && currentDNSServers.isEmpty ? nil : currentDNSServers,
-            presetServers: Dictionary(presets.map { ($0.id, $0.servers) }, uniquingKeysWith: { first, _ in first }),
+            presetTargets: Dictionary(presets.map { ($0.id, $0.target) }, uniquingKeysWith: { first, _ in first }),
+            encrypted: encryptedDNS.status,
+            encryptedRefused: encryptedDNS.saveRefused,
             rules: DNSRule.load(),
-            fallbackPresetID: (fallback?.isEmpty ?? true) ? nil : fallback
+            fallbackPresetID: (fallback?.isEmpty ?? true) ? nil : fallback,
+            manualOverrideNetwork: currentManualOverride(ssid: wifi?.wifiSSID)
         )
 
-        guard let presetID = dnsRuleEngine.evaluate(input) else { return }
-        guard let preset = presets.first(where: { $0.id == presetID }) else { return }
-        applyDNS(preset: preset)
+        switch dnsRuleEngine.evaluate(input) {
+        case nil:
+            return
+        case .apply(let presetID):
+            guard let preset = presets.first(where: { $0.id == presetID }) else { return }
+            applyDNS(preset: preset, userInitiated: false)
+        case .pauseEncrypted:
+            dnsChanging = true
+            Task { [weak self] in
+                guard let self else { return }
+                _ = await self.encryptedDNS.pause()
+                self.dnsChanging = false
+                self.updateCurrentDNS()
+            }
+        }
+    }
+
+    private static let manualOverrideKey = "dnsManualOverrideNetwork"
+
+    /// The stored hand pick, dropped once the Mac is on a different network.
+    /// Only a network that is actually up counts as "different": a Wi-Fi drop
+    /// or a re-association reads as no SSID for a moment and must not clear it.
+    private func currentManualOverride(ssid: String?) -> String? {
+        let defaults = UserDefaults.standard
+        guard let stored = defaults.string(forKey: Self.manualOverrideKey) else { return nil }
+        let current = ssid ?? ""
+        if current != stored, linkStatus.health != .offline, adapters.contains(where: { $0.isUp }) {
+            defaults.removeObject(forKey: Self.manualOverrideKey)
+            return nil
+        }
+        return stored
+    }
+
+    /// Remember a pick from the popover for the network it was made on.
+    private func recordManualOverride() {
+        guard Self.dnsAutoSwitchEnabled else { return }
+        let ssid = adapters.first { $0.type == .wifi && $0.isUp && !($0.wifiSSID ?? "").isEmpty }?.wifiSSID
+        UserDefaults.standard.set(ssid ?? "", forKey: Self.manualOverrideKey)
     }
 
     private func refreshHelperStateIfNeeded() {
@@ -1234,6 +1288,10 @@ final class NetworkMonitor: NSObject, ObservableObject {
         guard !cleaned.isEmpty else { return }
         vpnDNSApplied = true
         vpnDNSApplyTask = Task { [weak self] in
+            // Encrypted DNS overrides the per-service servers, so the tunnel's
+            // resolver would never be asked — internal names would stop
+            // resolving. Pause it for the tunnel's lifetime.
+            await self?.pauseEncryptedDNSForVPN()
             let (services, captured) = await ProcessRunner.offloaded { () -> ([String], [String: [String]]) in
                 let services = Self.dnsTargetServices()
                 var captured: [String: [String]] = [:]
@@ -1269,16 +1327,33 @@ final class NetworkMonitor: NSObject, ObservableObject {
         let backup = vpnDNSBackup
         vpnDNSBackup = [:]
         Self.persistDNSBackup(nil)
-        guard !backup.isEmpty else { return }
         for (service, servers) in backup {
             _ = await PrivilegedHelperManager.shared.setDNS(serviceName: service, servers: servers)
         }
+        await resumeEncryptedDNSAfterVPN()
         updateCurrentDNS()
         // The override is gone, so an SSID rule may apply again.
         evaluateDNSRules()
     }
 
     private static let dnsBackupKey = "vpnDNSBackupV1"
+    /// Set while a VPN DNS override has NetFluss's encrypted DNS paused, and
+    /// persisted so a crash in between still turns it back on at next launch.
+    private static let vpnPausedEncryptedDNSKey = "vpnPausedEncryptedDNS"
+
+    private func pauseEncryptedDNSForVPN() async {
+        await encryptedDNS.refresh()
+        guard encryptedDNS.status.isActive else { return }
+        UserDefaults.standard.set(true, forKey: Self.vpnPausedEncryptedDNSKey)
+        _ = await encryptedDNS.pause()
+    }
+
+    private func resumeEncryptedDNSAfterVPN() async {
+        guard UserDefaults.standard.bool(forKey: Self.vpnPausedEncryptedDNSKey) else { return }
+        UserDefaults.standard.removeObject(forKey: Self.vpnPausedEncryptedDNSKey)
+        await encryptedDNS.refresh()
+        _ = await encryptedDNS.resume()
+    }
 
     private static func persistDNSBackup(_ backup: [String: [String]]?) {
         if let backup, !backup.isEmpty, let data = try? JSONEncoder().encode(backup) {
@@ -1292,6 +1367,12 @@ final class NetworkMonitor: NSObject, ObservableObject {
     /// whose helper died before restoreVPNDNS() ran (issue #48). Call once at
     /// launch, before any connect-on-launch.
     func restoreStaleVPNDNSIfNeeded() {
+        if !vpnDNSApplied, UserDefaults.standard.bool(forKey: Self.vpnPausedEncryptedDNSKey) {
+            Task { [weak self] in
+                await self?.resumeEncryptedDNSAfterVPN()
+                self?.updateCurrentDNS()
+            }
+        }
         guard !vpnDNSApplied,
               let data = UserDefaults.standard.data(forKey: Self.dnsBackupKey),
               let backup = try? JSONDecoder().decode([String: [String]].self, from: data),
@@ -1311,8 +1392,15 @@ final class NetworkMonitor: NSObject, ObservableObject {
         return parseDNSServers(from: result.stdout)
     }
 
-    func applyDNS(preset: DNSPreset) {
+    /// `userInitiated` is false for the rule engine: an automatic switch must not
+    /// put macOS's "allow DNS settings" prompt back up after the user declined it.
+    func applyDNS(preset: DNSPreset, userInitiated: Bool = true) {
         guard !dnsChanging else { return }
+        if userInitiated { recordManualOverride() }
+        if preset.isEncrypted {
+            applyEncryptedDNS(preset: preset, userInitiated: userInitiated)
+            return
+        }
         // Validate server addresses: only allow IP-safe characters
         let validChars = CharacterSet(charactersIn: "0123456789abcdefABCDEF.:[]")
         for s in preset.servers {
@@ -1325,6 +1413,61 @@ final class NetworkMonitor: NSObject, ObservableObject {
         dnsError = nil
 
         let servers = preset.servers
+        Task { [weak self] in
+            guard let self else { return }
+            // Plain servers mean nothing while encrypted DNS overrides them.
+            // Pausing keeps the configuration — and the user's approval — for
+            // the next switch back.
+            let wasEncrypted = self.encryptedDNS.status.isActive
+            if self.encryptedDNS.status.isPausable, let error = await self.encryptedDNS.pause() {
+                self.dnsChanging = false
+                self.dnsError = Self.describeEncryptedDNSFailure(error)
+                self.updateCurrentDNS()
+                return
+            }
+            // Coming off encrypted DNS onto servers that are already set needs
+            // no privileged write (and no password prompt without the helper).
+            if wasEncrypted,
+               let current = await ProcessRunner.offloaded({ Self.currentDNSServers() }),
+               current == servers {
+                self.dnsChanging = false
+                self.updateCurrentDNS()
+                return
+            }
+            self.applyPlainDNS(servers)
+        }
+    }
+
+    private func applyEncryptedDNS(preset: DNSPreset, userInitiated: Bool) {
+        guard DNSEntryValidator.isValid(preset) else {
+            dnsError = L10n.text("Invalid DNS server address.")
+            return
+        }
+        if encryptedDNS.status == .unavailable {
+            dnsError = L10n.text("Encrypted DNS needs the signed NetFluss app from the Releases page.")
+            return
+        }
+        dnsChanging = true
+        dnsError = nil
+        Task { [weak self] in
+            guard let self else { return }
+            let error = await self.encryptedDNS.activate(preset, userInitiated: userInitiated)
+            self.dnsChanging = false
+            self.dnsError = error.map(Self.describeEncryptedDNSFailure)
+            self.updateCurrentDNS()
+        }
+    }
+
+    private static func describeEncryptedDNSFailure(_ error: Error) -> String {
+        let nsError = error as NSError
+        if nsError.domain == NEDNSSettingsErrorDomain,
+           nsError.code == NEDNSSettingsManagerError.configurationDisabled.rawValue {
+            return L10n.format("NetFluss isn't allowed to change DNS settings. Allow it in %@.", EncryptedDNSController.settingsPath)
+        }
+        return L10n.format("Encrypted DNS couldn't be set: %@", nsError.localizedDescription)
+    }
+
+    private func applyPlainDNS(_ servers: [String]) {
         Task { [weak self] in
             let services = await ProcessRunner.offloaded { Self.dnsTargetServices() }
             guard !services.isEmpty else {

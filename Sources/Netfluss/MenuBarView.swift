@@ -1314,6 +1314,11 @@ struct DNSSwitcherSection: View {
 
     private var presets: [DNSPreset] { NetworkMonitor.allDNSPresets() }
 
+    private func isAwaitingUser(_ preset: DNSPreset) -> Bool {
+        guard let pending = monitor.encryptedDNSStatus.awaitingUser else { return false }
+        return preset.target == pending.target
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("DNS")
@@ -1327,12 +1332,45 @@ struct DNSSwitcherSection: View {
                     DNSPresetRow(
                         preset: preset,
                         isActive: monitor.activeDNSPresetID == preset.id,
+                        isAwaitingUser: isAwaitingUser(preset),
+                        isUnavailable: preset.isEncrypted && monitor.encryptedDNSStatus == .unavailable,
                         isChanging: monitor.dnsChanging,
-                        onSelect: { monitor.applyDNS(preset: preset) }
+                        onSelect: {
+                            if isAwaitingUser(preset) {
+                                EncryptedDNSController.openSystemSettings()
+                            } else {
+                                monitor.applyDNS(preset: preset)
+                            }
+                        }
                     )
                 }
             }
             .padding(.horizontal, 8)
+
+            // Shown even when the configured preset is hidden here: a rule may
+            // have picked it, and the switch in System Settings is still needed.
+            if monitor.encryptedDNSStatus.awaitingUser != nil {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "lock.trianglebadge.exclamationmark")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L10n.format("Switch on NetFluss in %@ to use encrypted DNS.", EncryptedDNSController.settingsPath))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button {
+                            EncryptedDNSController.openSystemSettings()
+                        } label: {
+                            LText("Open System Settings")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .buttonStyle(.link)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+            }
 
             if let dnsError = monitor.dnsError, !dnsError.isEmpty {
                 HStack(alignment: .top, spacing: 6) {
@@ -1355,6 +1393,11 @@ struct DNSSwitcherSection: View {
 struct DNSPresetRow: View {
     let preset: DNSPreset
     let isActive: Bool
+    /// Configured as NetFluss's encrypted DNS, waiting for the user's switch in
+    /// System Settings.
+    var isAwaitingUser = false
+    /// Encrypted, in a build that can't configure encrypted DNS.
+    var isUnavailable = false
     let isChanging: Bool
     let onSelect: () -> Void
 
@@ -1366,10 +1409,31 @@ struct DNSPresetRow: View {
                     .foregroundStyle(isActive ? .green : .secondary)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(preset.name)
-                        .font(.system(size: 11, weight: isActive ? .semibold : .regular))
-                        .lineLimit(1)
-                    if !preset.servers.isEmpty {
+                    HStack(spacing: 4) {
+                        Text(preset.name)
+                            .font(.system(size: 11, weight: isActive ? .semibold : .regular))
+                            .lineLimit(1)
+                        if let transport = preset.transport {
+                            DNSTransportBadge(transport: transport, showName: !preset.name.contains(transport.shortName))
+                        }
+                    }
+                    if isAwaitingUser {
+                        LText("Switch on in System Settings")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.orange)
+                            .lineLimit(1)
+                    } else if isUnavailable {
+                        LText("Needs the signed app")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else if let transport = preset.transport {
+                        Text(transport.endpoint)
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    } else if !preset.servers.isEmpty {
                         Text(preset.servers.joined(separator: ", "))
                             .font(.system(size: 9))
                             .foregroundStyle(.secondary)
@@ -1395,7 +1459,29 @@ struct DNSPresetRow: View {
             )
         }
         .buttonStyle(.borderless)
-        .disabled(isActive || isChanging)
+        .disabled(isActive || isChanging || isUnavailable)
+    }
+}
+
+/// Lock plus "DoH"/"DoT", so an encrypted preset reads as one at a glance.
+struct DNSTransportBadge: View {
+    let transport: DNSTransport
+    var showName = true
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 7, weight: .semibold))
+            if showName {
+                Text(transport.shortName)
+                    .font(.system(size: 8, weight: .semibold))
+            }
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, showName ? 4 : 2)
+        .padding(.vertical, 1)
+        .background(Capsule().fill(Color.secondary.opacity(0.15)))
+        .accessibilityLabel(Text(transport.shortName))
     }
 }
 

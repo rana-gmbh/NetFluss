@@ -304,17 +304,130 @@ enum PopoverSection: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// How a preset talks to its resolver.
+///
+/// Encrypted transports go through macOS's own encrypted-DNS configuration
+/// (`NEDNSSettingsManager`), never through a local proxy: the system resolver
+/// speaks DoH/DoT itself, so nothing of NetFluss has to keep running for it.
+/// DNS-over-QUIC is deliberately absent — macOS has no native support for it.
+enum DNSTransport: Codable, Equatable, Hashable, Sendable {
+    case https(url: String)
+    case tls(serverName: String)
+
+    /// Short protocol tag for badges and labels. Not localised: DoH and DoT are
+    /// the names people search for.
+    var shortName: String {
+        switch self {
+        case .https: return "DoH"
+        case .tls: return "DoT"
+        }
+    }
+
+    /// The URL or TLS server name, for the secondary line under a preset.
+    var endpoint: String {
+        switch self {
+        case .https(let url): return url
+        case .tls(let serverName): return serverName
+        }
+    }
+}
+
+/// What a preset points the system at, used to tell whether it is already in
+/// effect. A DoH preset and a plain preset with the same bootstrap IPs are two
+/// different resolvers, so the transport is part of the identity.
+enum DNSResolverTarget: Equatable, Sendable {
+    case plain([String])
+    case encrypted(DNSTransport, servers: [String])
+}
+
 struct DNSPreset: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let name: String
-    let servers: [String]  // empty = system default (DHCP)
+    /// Plain presets: the resolvers, empty = system default (DHCP).
+    /// Encrypted presets: bootstrap addresses for the DoH host / DoT server.
+    let servers: [String]
     let isBuiltIn: Bool
+    /// nil = plain DNS on port 53. Optional so presets saved by older versions
+    /// decode unchanged.
+    let transport: DNSTransport?
 
-    static let builtIn: [DNSPreset] = [
+    init(id: String, name: String, servers: [String], isBuiltIn: Bool, transport: DNSTransport? = nil) {
+        self.id = id
+        self.name = name
+        self.servers = servers
+        self.isBuiltIn = isBuiltIn
+        self.transport = transport
+    }
+
+    var isEncrypted: Bool { transport != nil }
+
+    var target: DNSResolverTarget {
+        if let transport { return .encrypted(transport, servers: servers) }
+        return .plain(servers)
+    }
+
+    /// Same resolver, different label.
+    func renamed(_ newName: String) -> DNSPreset {
+        DNSPreset(id: id, name: newName, servers: servers, isBuiltIn: isBuiltIn, transport: transport)
+    }
+
+    static let builtIn: [DNSPreset] = plainBuiltIn + encryptedBuiltIn
+
+    static let plainBuiltIn: [DNSPreset] = [
         DNSPreset(id: "system",    name: "System Default", servers: [],                              isBuiltIn: true),
         DNSPreset(id: "cloudflare",name: "Cloudflare",     servers: ["1.1.1.1", "1.0.0.1"],          isBuiltIn: true),
         DNSPreset(id: "google",    name: "Google",         servers: ["8.8.8.8", "8.8.4.4"],          isBuiltIn: true),
         DNSPreset(id: "quad9",     name: "Quad9",          servers: ["9.9.9.9", "149.112.112.112"],  isBuiltIn: true),
         DNSPreset(id: "opendns",   name: "OpenDNS",        servers: ["208.67.222.222", "208.67.220.220"], isBuiltIn: true),
     ]
+
+    /// Encrypted built-ins. They start hidden in the popover (see
+    /// `hideNewEncryptedBuiltIns`) so an update doesn't more than double the
+    /// switcher; Preferences › DNS turns them on. OpenDNS has no DoT service.
+    static let encryptedBuiltIn: [DNSPreset] = {
+        let cloudflare = ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"]
+        let google = ["8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"]
+        let quad9 = ["9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"]
+        let openDNS = ["208.67.222.222", "208.67.220.220", "2620:119:35::35", "2620:119:53::53"]
+        let mullvad = ["194.242.2.2", "2a07:e340::2"]
+        let adGuard = ["94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"]
+        return [
+            DNSPreset(id: "cloudflare-doh", name: "Cloudflare (DoH)", servers: cloudflare, isBuiltIn: true,
+                      transport: .https(url: "https://cloudflare-dns.com/dns-query")),
+            DNSPreset(id: "cloudflare-dot", name: "Cloudflare (DoT)", servers: cloudflare, isBuiltIn: true,
+                      transport: .tls(serverName: "one.one.one.one")),
+            DNSPreset(id: "google-doh", name: "Google (DoH)", servers: google, isBuiltIn: true,
+                      transport: .https(url: "https://dns.google/dns-query")),
+            DNSPreset(id: "google-dot", name: "Google (DoT)", servers: google, isBuiltIn: true,
+                      transport: .tls(serverName: "dns.google")),
+            DNSPreset(id: "quad9-doh", name: "Quad9 (DoH)", servers: quad9, isBuiltIn: true,
+                      transport: .https(url: "https://dns.quad9.net/dns-query")),
+            DNSPreset(id: "quad9-dot", name: "Quad9 (DoT)", servers: quad9, isBuiltIn: true,
+                      transport: .tls(serverName: "dns.quad9.net")),
+            DNSPreset(id: "opendns-doh", name: "OpenDNS (DoH)", servers: openDNS, isBuiltIn: true,
+                      transport: .https(url: "https://doh.opendns.com/dns-query")),
+            DNSPreset(id: "mullvad-doh", name: "Mullvad (DoH)", servers: mullvad, isBuiltIn: true,
+                      transport: .https(url: "https://dns.mullvad.net/dns-query")),
+            DNSPreset(id: "mullvad-dot", name: "Mullvad (DoT)", servers: mullvad, isBuiltIn: true,
+                      transport: .tls(serverName: "dns.mullvad.net")),
+            DNSPreset(id: "adguard-doh", name: "AdGuard (DoH)", servers: adGuard, isBuiltIn: true,
+                      transport: .https(url: "https://dns.adguard-dns.com/dns-query")),
+            DNSPreset(id: "adguard-dot", name: "AdGuard (DoT)", servers: adGuard, isBuiltIn: true,
+                      transport: .tls(serverName: "dns.adguard-dns.com")),
+        ]
+    }()
+
+    /// Adds encrypted built-ins this install hasn't seen yet to the hidden set,
+    /// once each, so a later "show" in Preferences sticks. Fresh installs get
+    /// the same treatment: the popover starts with the plain five either way.
+    static func hideNewEncryptedBuiltIns(defaults: UserDefaults = .standard) {
+        let seenKey = "dnsSeenEncryptedBuiltIns"
+        let seen = Set(defaults.stringArray(forKey: seenKey) ?? [])
+        let new = encryptedBuiltIn.map(\.id).filter { !seen.contains($0) }
+        guard !new.isEmpty else { return }
+        var hidden = defaults.stringArray(forKey: "hiddenDNSPresets") ?? []
+        for id in new where !hidden.contains(id) { hidden.append(id) }
+        defaults.set(hidden, forKey: "hiddenDNSPresets")
+        defaults.set(Array(seen) + new, forKey: seenKey)
+    }
 }

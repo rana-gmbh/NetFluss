@@ -14,6 +14,14 @@
     <array>
         <string>allow-vpn</string>
     </array>
+    <!-- Encrypted DNS (NEDNSSettingsManager, DoH/DoT presets). Also restricted:
+         the embedded profile must list `dns-settings` under the Network
+         Extensions capability, or the app fails to launch. No extension target
+         is involved, so Developer ID uses the plain value (no -systemextension). -->
+    <key>com.apple.developer.networking.networkextension</key>
+    <array>
+        <string>dns-settings</string>
+    </array>
     <!-- application-identifier gives the app a data-protection-keychain access
          group, which NEVPNManager needs to resolve the password reference.
          Authorized by the embedded provisioning profile. -->

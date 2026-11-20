@@ -30,6 +30,11 @@ final class PreferencesNetworkState: ObservableObject {
     @Published private(set) var adapters: [AdapterStatus]
     @Published private(set) var recentAppNames: [String]
     @Published private(set) var dnsAutoSwitchState: DNSAutoSwitchState
+    @Published private(set) var encryptedDNSStatus: EncryptedDNSStatus
+    @Published private(set) var activeDNSPresetID: String?
+    @Published private(set) var removingEncryptedDNS = false
+    @Published private(set) var encryptedDNSRemoveError: String?
+    private weak var monitor: NetworkMonitor?
     @Published private(set) var fritzBoxError: String?
     @Published private(set) var unifiError: String?
     @Published private(set) var openWRTError: String?
@@ -40,6 +45,9 @@ final class PreferencesNetworkState: ObservableObject {
         adapters = monitor.adapters.map(\.withoutTraffic)
         recentAppNames = monitor.recentAppNames
         dnsAutoSwitchState = monitor.dnsAutoSwitchState
+        encryptedDNSStatus = monitor.encryptedDNSStatus
+        activeDNSPresetID = monitor.activeDNSPresetID
+        self.monitor = monitor
         fritzBoxError = monitor.fritzBoxError
         unifiError = monitor.unifiError
         openWRTError = monitor.openWRTError
@@ -49,9 +57,24 @@ final class PreferencesNetworkState: ObservableObject {
         monitor.$adapters.map { $0.map(\.withoutTraffic) }.removeDuplicates().assign(to: &$adapters)
         monitor.$recentAppNames.removeDuplicates().assign(to: &$recentAppNames)
         monitor.$dnsAutoSwitchState.removeDuplicates().assign(to: &$dnsAutoSwitchState)
+        monitor.$encryptedDNSStatus.removeDuplicates().assign(to: &$encryptedDNSStatus)
+        monitor.$activeDNSPresetID.removeDuplicates().assign(to: &$activeDNSPresetID)
         monitor.$fritzBoxError.removeDuplicates().assign(to: &$fritzBoxError)
         monitor.$unifiError.removeDuplicates().assign(to: &$unifiError)
         monitor.$openWRTError.removeDuplicates().assign(to: &$openWRTError)
         monitor.$opnsenseError.removeDuplicates().assign(to: &$opnsenseError)
+    }
+
+    /// Take NetFluss's encrypted-DNS configuration out of System Settings
+    /// entirely. Choosing a DoH/DoT preset again sets it up anew, prompt and all.
+    func removeEncryptedDNS() {
+        guard let monitor, !removingEncryptedDNS else { return }
+        removingEncryptedDNS = true
+        encryptedDNSRemoveError = nil
+        Task { [weak self] in
+            let error = await monitor.encryptedDNS.remove()
+            self?.removingEncryptedDNS = false
+            self?.encryptedDNSRemoveError = error?.localizedDescription
+        }
     }
 }

@@ -2059,6 +2059,102 @@
   <data name="OpenVPN and WireGuard need macOS 14 or later. IKEv2 and system VPNs still work." xml:space="preserve">
     <value>OpenVPN 和 WireGuard 需要 Windows 14 或更新版本。IKEv2 和系統 VPN 仍可使用。</value>
   </data>
+  <data name="Encrypted DNS needs the signed NetFluss app from the Releases page." xml:space="preserve">
+    <value>加密 DNS 需要來自 Releases 頁面的已簽署 NetFluss 應用程式。</value>
+  </data>
+  <data name="NetFluss isn&apos;t allowed to change DNS settings. Allow it in {0}." xml:space="preserve">
+    <value>NetFluss 無權更改 DNS 設定。請在{0}中允許。</value>
+  </data>
+  <data name="Encrypted DNS couldn&apos;t be set: {0}" xml:space="preserve">
+    <value>無法設定加密 DNS：{0}</value>
+  </data>
+  <data name="Encrypted DNS" xml:space="preserve">
+    <value>加密 DNS</value>
+  </data>
+  <data name="{0} needs encrypted DNS, which this build of NetFluss can&apos;t set up." xml:space="preserve">
+    <value>{0} 需要加密 DNS，但此版本的 NetFluss 無法設定。</value>
+  </data>
+  <data name="{0} needs encrypted DNS, but macOS wasn&apos;t allowed to add NetFluss&apos;s DNS settings. Choose the preset once by hand to be asked again." xml:space="preserve">
+    <value>{0} 需要加密 DNS，但 Windows 未被允許加入 NetFluss 的 DNS 設定。請手動選擇一次該設定檔，以便再次收到詢問。</value>
+  </data>
+  <data name="{0} is set up. Switch on NetFluss in {1} to use it." xml:space="preserve">
+    <value>{0} 已設定。請在{1}中開啟 NetFluss 以使用它。</value>
+  </data>
+  <data name="DoH and DoT presets use the encrypted DNS built into macOS — no helper and no background service. The first time, macOS asks whether to allow NetFluss&apos;s DNS settings; then switch NetFluss on in {0}. The encrypted presets start hidden in the popover; switch them on in the DNS switcher list." xml:space="preserve">
+    <value>DoH 和 DoT 設定檔使用 Windows 內建的加密 DNS——無需輔助工具，也無需背景服務。首次使用時，Windows 會詢問是否允許 NetFluss 的 DNS 設定；之後請在{0}中開啟 NetFluss。加密設定檔預設不在彈出視窗中顯示，可在 DNS 切換器列表中開啟。</value>
+  </data>
+  <data name="Open System Settings" xml:space="preserve">
+    <value>打開系統設定</value>
+  </data>
+  <data name="Remove DNS Configuration" xml:space="preserve">
+    <value>移除 DNS 設定</value>
+  </data>
+  <data name="Checking…" xml:space="preserve">
+    <value>正在檢查…</value>
+  </data>
+  <data name="Not available in this build. Encrypted DNS needs the signed NetFluss app from the Releases page." xml:space="preserve">
+    <value>此版本無法使用。加密 DNS 需要來自 Releases 頁面的已簽署 NetFluss 應用程式。</value>
+  </data>
+  <data name="Not set up yet. Choose a DoH or DoT preset to set it up." xml:space="preserve">
+    <value>尚未設定。選擇一個 DoH 或 DoT 設定檔即可設定。</value>
+  </data>
+  <data name="Off: a plain DNS preset is in use." xml:space="preserve">
+    <value>關：正在使用未加密的 DNS 設定檔。</value>
+  </data>
+  <data name="On: {0}" xml:space="preserve">
+    <value>開：{0}</value>
+  </data>
+  <data name="Switch on NetFluss in {0} to use encrypted DNS." xml:space="preserve">
+    <value>請在{0}中開啟 NetFluss 以使用加密 DNS。</value>
+  </data>
+  <data name="Switch on in System Settings" xml:space="preserve">
+    <value>在系統設定中開啟</value>
+  </data>
+  <data name="Needs the signed app" xml:space="preserve">
+    <value>需要已簽署的應用程式</value>
+  </data>
+  <data name="Server addresses must be IP addresses, such as 1.1.1.1 or 2606:4700:4700::1111." xml:space="preserve">
+    <value>伺服器位址必須是 IP 位址，例如 1.1.1.1 或 2606:4700:4700::1111。</value>
+  </data>
+  <data name="Enter an https:// address, such as https://dns.example.com/dns-query." xml:space="preserve">
+    <value>請輸入 https:// 位址，例如 https://dns.example.com/dns-query。</value>
+  </data>
+  <data name="Enter the server&apos;s host name, such as dns.example.com." xml:space="preserve">
+    <value>請輸入伺服器的主機名稱，例如 dns.example.com。</value>
+  </data>
+  <data name="Plain DNS" xml:space="preserve">
+    <value>一般 DNS</value>
+  </data>
+  <data name="URL (e.g. https://dns.example.com/dns-query)" xml:space="preserve">
+    <value>URL（例如 https://dns.example.com/dns-query）</value>
+  </data>
+  <data name="Server IP (optional)" xml:space="preserve">
+    <value>伺服器 IP（選填）</value>
+  </data>
+  <data name="Second server IP (optional)" xml:space="preserve">
+    <value>第二個伺服器 IP（選填）</value>
+  </data>
+  <data name="The IPs let macOS reach the server without looking up its name first." xml:space="preserve">
+    <value>有了這些 IP，Windows 無需先查詢伺服器名稱即可連線伺服器。</value>
+  </data>
+  <data name="Server name (e.g. dns.example.com)" xml:space="preserve">
+    <value>伺服器名稱（例如 dns.example.com）</value>
+  </data>
+  <data name="Server IP (e.g. 1.1.1.1)" xml:space="preserve">
+    <value>伺服器 IP（例如 1.1.1.1）</value>
+  </data>
+  <data name="macOS connects to the IP and checks the server name against its certificate." xml:space="preserve">
+    <value>Windows 會連線到該 IP，並根據憑證核對伺服器名稱。</value>
+  </data>
+  <data name="System Settings › Network › VPN &amp; Filters" xml:space="preserve">
+    <value>系統設定 › 網路 › VPN與過濾條件</value>
+  </data>
+  <data name="Chosen by hand on this network. The rules apply again on the next network you join." xml:space="preserve">
+    <value>已在此網路上手動選擇。加入下一個網路時，規則將再次生效。</value>
+  </data>
+  <data name="Chosen by hand on {0}. The rules apply again on the next network you join." xml:space="preserve">
+    <value>已在 {0} 上手動選擇。加入下一個網路時，規則將再次生效。</value>
+  </data>
   <data name="&apos;{0}&apos; already exists." xml:space="preserve">
     <value>「{0}」已存在。</value>
   </data>

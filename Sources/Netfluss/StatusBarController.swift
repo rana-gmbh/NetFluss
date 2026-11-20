@@ -1705,7 +1705,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate, NSMenuDelegate {
 
     private func resolverName(for presetID: String) -> String? {
         if let resolverLabel, resolverLabel.presetID == presetID { return resolverLabel.name }
-        guard let preset = NetworkMonitor.allDNSPresets().first(where: { $0.id == presetID }) else { return nil }
+        guard let preset = NetworkMonitor.allDNSPresets(includeHidden: true).first(where: { $0.id == presetID }) else { return nil }
         resolverLabel = (presetID, preset.name)
         return preset.name
     }
