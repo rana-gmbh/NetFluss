@@ -294,3 +294,17 @@
 "Install Update" = "Install Update";
 "The update could not be installed." = "The update could not be installed.";
 "NetFluss has been updated to %@. Click for what's new." = "NetFluss has been updated to %@. Click for what's new.";
+
+/* Encrypted DNS (DoH/DoT): helper, Windows 11 badges, custom presets; the last overrides a macOS wording */
+"Encrypted DNS needs the NetFluss helper. Installing it asks for approval once." = "Encrypted DNS needs the NetFluss helper. Installing it asks for approval once.";
+"The NetFluss helper is out of date. Update it to use encrypted DNS." = "The NetFluss helper is out of date. Update it to use encrypted DNS.";
+"Needs Windows 11" = "Needs Windows 11";
+"Needs Windows 11 24H2" = "Needs Windows 11 24H2";
+"Turned off by your administrator" = "Turned off by your administrator";
+"Not available on this PC" = "Not available on this PC";
+"DoH and DoT presets use the encrypted DNS built into Windows 11 and are set through the NetFluss helper, which also takes them back. DoT needs Windows 11 24H2 or later. The encrypted presets start hidden in the popover; switch them on in the list above." = "DoH and DoT presets use the encrypted DNS built into Windows 11 and are set through the NetFluss helper, which also takes them back. DoT needs Windows 11 24H2 or later. The encrypted presets start hidden in the popover; switch them on in the list above.";
+"URL" = "URL";
+"Server name" = "Server name";
+"At least one server address is needed. Without an IPv6 address, IPv6 keeps the network's own resolver." = "At least one server address is needed. Without an IPv6 address, IPv6 keeps the network's own resolver.";
+"With an IP address in the URL, use that address as the only server." = "With an IP address in the URL, use that address as the only server.";
+"%@ needs encrypted DNS, which this build of NetFluss can't set up." = "%@ needs encrypted DNS, which isn't available on this PC.";

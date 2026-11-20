@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.NetworkInformation;
 using NetFluss.Core;
+using NetFluss.Native;
 
 namespace NetFluss.App;
 
@@ -13,6 +14,9 @@ internal sealed record DnsState(string AdapterId, string AdapterName, IReadOnlyL
 /// <summary>Outcome of an apply, in a form the UI can show verbatim.</summary>
 internal sealed record DnsApplyResult(bool Succeeded, string Message)
 {
+    /// <summary>Refused because only the helper can do it; the UI offers to install the helper.</summary>
+    internal bool NeedsHelper { get; init; }
+
     internal static DnsApplyResult Ok(string message) => new(true, message);
 
     internal static DnsApplyResult Fail(string message) => new(false, message);
@@ -139,9 +143,31 @@ internal sealed class DnsController : IDnsApplier
         }
     }
 
-    /// <summary>The preset whose servers are exactly the adapter's static list, if any.</summary>
-    internal static string? ActivePresetId(IReadOnlyList<DnsPreset> presets, IReadOnlyList<string> staticServers)
-        => presets.FirstOrDefault(preset => preset.Matches(staticServers))?.Id;
+    /// <summary>
+    /// The adapter's resolver as Windows has it: the static servers, and whether they are
+    /// encrypted — DoH from the adapter's own settings (Windows 11, readable without
+    /// elevation), DoT from NetFluss's entries as the helper reported them.
+    /// </summary>
+    internal static DnsAdapterState ReadState(string adapterId, IReadOnlyList<string> staticServers, IReadOnlyDictionary<string, string> dotServers)
+    {
+        if (staticServers.Count == 0 || !Guid.TryParse(adapterId, out var guid))
+        {
+            return DnsAdapterState.Plain(staticServers);
+        }
+
+        if (EncryptedDnsPlatform.Build < EncryptedDnsCapabilities.DohMinimumBuild)
+        {
+            // Windows 10 has no per-adapter DoH to read, and NetFluss sets no DoT there.
+            return DnsAdapterState.Plain(staticServers);
+        }
+
+        var (doh, ipv4Known, ipv6Known) = InterfaceDns.ReadDoh(guid);
+        return DnsAdapterState.Compose(staticServers, doh, dotServers, ipv4Known, ipv6Known);
+    }
+
+    /// <summary>The preset that is exactly the adapter's resolver — servers and encryption — if any.</summary>
+    internal static string? ActivePresetId(IReadOnlyList<DnsPreset> presets, DnsAdapterState state)
+        => DnsPreset.ActiveId(presets, state);
 
     public async Task<DnsApplyResult> ApplyAsync(string adapterName, IReadOnlyList<string> servers)
     {

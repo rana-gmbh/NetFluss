@@ -21,8 +21,12 @@ public static class HelperProtocol
     /// <summary>The Windows service name.</summary>
     public const string ServiceName = "NetFlussHelper";
 
-    /// <summary>Bumped whenever a message changes shape.</summary>
-    public const int Version = 2;
+    /// <summary>
+    /// Bumped whenever a message changes shape. 2 added the VPN operations; 3 encrypted DNS
+    /// (setDns with a transport, dnsStatus, capabilities in replies). Clients compare with
+    /// "at least", so each step only adds.
+    /// </summary>
+    public const int Version = 3;
 
     /// <summary>A line longer than this is not a NetFluss message, and is dropped unread.</summary>
     public const int MaximumLineLength = 1 << 20;
@@ -51,7 +55,7 @@ public static class HelperProtocol
 /// <summary>Client → helper.</summary>
 public sealed record HelperRequest
 {
-    /// <summary>"hello", "subscribe", "unsubscribe", "setDns", "restartAdapter", "vpnStart", "vpnStop", "vpnLog".</summary>
+    /// <summary>"hello", "subscribe", "unsubscribe", "setDns", "dnsStatus", "restartAdapter", "vpnStart", "vpnStop", "vpnLog".</summary>
     public required string Op { get; init; }
 
     /// <summary>Echoed in the matching result, so a client can await one specific answer.</summary>
@@ -62,8 +66,17 @@ public sealed record HelperRequest
     /// <summary>Interface GUID for setDns and restartAdapter.</summary>
     public string? Adapter { get; init; }
 
-    /// <summary>Resolvers for setDns; empty restores DHCP.</summary>
+    /// <summary>Resolvers for setDns; empty restores DHCP. For encrypted DNS, the addresses Windows connects to.</summary>
     public IReadOnlyList<string>? Servers { get; init; }
+
+    /// <summary>
+    /// setDns (protocol 3): "doh" or "dot" for encrypted DNS, null for plain. A string, not an
+    /// enum, so a value this helper does not know is refused rather than read as another.
+    /// </summary>
+    public string? Transport { get; init; }
+
+    /// <summary>setDns (protocol 3): the DoH URL template or the DoT host name.</summary>
+    public string? Endpoint { get; init; }
 
     /// <summary>Whether a subscription wants per-flow detail (the Network Slice) as well.</summary>
     public bool Flows { get; init; }
@@ -127,7 +140,19 @@ public sealed record HelperMessage
 
     /// <summary>…and the one-time password that interface asks for.</summary>
     public string? Secret { get; init; }
+
+    /// <summary>hello, setDns and dnsStatus (protocol 3): which encrypted transports this PC can use.</summary>
+    public EncryptedDnsCapabilities? Capabilities { get; init; }
+
+    /// <summary>
+    /// setDns and dnsStatus (protocol 3): the DoT entries NetFluss added to Windows'
+    /// machine-wide encryption table — only its own, never ones the user or Windows made.
+    /// </summary>
+    public IReadOnlyList<HelperDotServer>? DotServers { get; init; }
 }
+
+/// <summary>One DoT entry NetFluss configured: the server address and the host name checked against its certificate.</summary>
+public sealed record HelperDotServer(string Server, string Host);
 
 public sealed record HelperProcess(int Pid, string Name, long Rx, long Tx);
 

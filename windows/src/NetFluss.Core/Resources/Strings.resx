@@ -2072,7 +2072,7 @@ No network traffic is sent — only local counters from your machine are recorde
     <value>Encrypted DNS</value>
   </data>
   <data name="{0} needs encrypted DNS, which this build of NetFluss can&apos;t set up." xml:space="preserve">
-    <value>{0} needs encrypted DNS, which this build of NetFluss can't set up.</value>
+    <value>{0} needs encrypted DNS, which isn't available on this PC.</value>
   </data>
   <data name="{0} needs encrypted DNS, but macOS wasn&apos;t allowed to add NetFluss&apos;s DNS settings. Choose the preset once by hand to be asked again." xml:space="preserve">
     <value>{0} needs encrypted DNS, but Windows wasn't allowed to add NetFluss's DNS settings. Choose the preset once by hand to be asked again.</value>
@@ -2976,5 +2976,38 @@ No network traffic is sent — only local counters from your machine are recorde
   </data>
   <data name="NetFluss has been updated to {0}. Click for what&apos;s new." xml:space="preserve">
     <value>NetFluss has been updated to {0}. Click for what's new.</value>
+  </data>
+  <data name="Encrypted DNS needs the NetFluss helper. Installing it asks for approval once." xml:space="preserve">
+    <value>Encrypted DNS needs the NetFluss helper. Installing it asks for approval once.</value>
+  </data>
+  <data name="The NetFluss helper is out of date. Update it to use encrypted DNS." xml:space="preserve">
+    <value>The NetFluss helper is out of date. Update it to use encrypted DNS.</value>
+  </data>
+  <data name="Needs Windows 11" xml:space="preserve">
+    <value>Needs Windows 11</value>
+  </data>
+  <data name="Needs Windows 11 24H2" xml:space="preserve">
+    <value>Needs Windows 11 24H2</value>
+  </data>
+  <data name="Turned off by your administrator" xml:space="preserve">
+    <value>Turned off by your administrator</value>
+  </data>
+  <data name="Not available on this PC" xml:space="preserve">
+    <value>Not available on this PC</value>
+  </data>
+  <data name="DoH and DoT presets use the encrypted DNS built into Windows 11 and are set through the NetFluss helper, which also takes them back. DoT needs Windows 11 24H2 or later. The encrypted presets start hidden in the popover; switch them on in the list above." xml:space="preserve">
+    <value>DoH and DoT presets use the encrypted DNS built into Windows 11 and are set through the NetFluss helper, which also takes them back. DoT needs Windows 11 24H2 or later. The encrypted presets start hidden in the popover; switch them on in the list above.</value>
+  </data>
+  <data name="URL" xml:space="preserve">
+    <value>URL</value>
+  </data>
+  <data name="Server name" xml:space="preserve">
+    <value>Server name</value>
+  </data>
+  <data name="At least one server address is needed. Without an IPv6 address, IPv6 keeps the network&apos;s own resolver." xml:space="preserve">
+    <value>At least one server address is needed. Without an IPv6 address, IPv6 keeps the network's own resolver.</value>
+  </data>
+  <data name="With an IP address in the URL, use that address as the only server." xml:space="preserve">
+    <value>With an IP address in the URL, use that address as the only server.</value>
   </data>
 </root>
