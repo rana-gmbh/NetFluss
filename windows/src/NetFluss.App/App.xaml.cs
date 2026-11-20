@@ -120,6 +120,14 @@ public partial class NetFlussApplication : Application
         var firstLaunch = !System.IO.File.Exists(SettingsStore.DefaultPath);
         _store = new SettingsStore(SettingsStore.DefaultPath);
         ApplyInstallerChoices(_store);
+
+        // Encrypted built-ins start hidden in the popover, each once (macOS does the same), so an
+        // update does not more than double the switcher. Checked first, so a launch with nothing
+        // new writes nothing.
+        if (_store.Settings.HasUnseenEncryptedDnsBuiltIns)
+        {
+            _store.Batch(settings => settings.HideNewEncryptedDnsBuiltIns());
+        }
         NetFluss.Core.Localization.Use(_store.Settings.Language);
         _lastIPv6 = _store.Settings.ExternalIPv6;
 

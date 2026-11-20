@@ -616,8 +616,11 @@ internal sealed class VpnManager : IDisposable
     /// </summary>
     private async Task ApplyProfileDnsAsync(VpnProfile profile, string? assignedIp)
     {
+        // Encrypted presets are left out: they would need the helper's DoT record and Windows'
+        // DoH settings on an adapter that vanishes with the tunnel, and the tunnel already
+        // encrypts the queries on their way to the VPN's resolver.
         if (!profile.Options.UseProfileDns ||
-            _settings.Settings.AllDnsPresets().FirstOrDefault(p => p.Id == profile.Options.DnsPresetId) is not { Servers.Count: > 0 } preset)
+            _settings.Settings.AllDnsPresets().FirstOrDefault(p => p.Id == profile.Options.DnsPresetId) is not { Servers.Count: > 0, IsEncrypted: false } preset)
         {
             return;
         }

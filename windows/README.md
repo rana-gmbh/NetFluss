@@ -8,7 +8,7 @@ Design and rationale live in [../docs/WINDOWS-PORT-PLAN.md](../docs/WINDOWS-PORT
 | Area | Windows |
 |---|---|
 | Live meter | Taskbar overlay, notification-area icon or floating widget; one line, two lines, total, **Dashboard** and **Dashboard Basic** styles; rate alignment left / centred / right; VPN indicator (dot, shield, globe, bars; 10–18 pt), exit-country badge, Wi-Fi / Ethernet link indicator, active-resolver label |
-| DNS | Switcher with renamable built-in profiles; **automatic DNS by Wi-Fi network** (per SSID, optionally pinned to one access point, catch-all for other networks, waits out captive portals) |
+| DNS | Switcher with renamable built-in profiles; **encrypted DNS** (DoH on Windows 11, DoT on 24H2; built-in and custom presets, through the helper); **automatic DNS by Wi-Fi network** (per SSID, optionally pinned to one access point, catch-all for other networks, waits out captive portals) |
 | Statistics | Adapters, apps and **per-node proxy traffic** from the Clash API (sing-box, mihomo, Clash Verge); daily backup restores an unreadable history |
 | Popover | Totals, adapters (rename, reorder, hide, grace period), network flow / IP list, DNS switcher, router, Wi-Fi switcher, VPN, Top Apps, Data Usage, Traffic Timer — reorderable, pinnable, resizable |
 | Windows | Preferences (Windows 11 Settings style), Bandwidth Statistics (1H–1Y, custom ranges), Speed Test (Cloudflare / M-Lab, history with notes), Network Slice, About |
@@ -307,6 +307,81 @@ the switcher targets, so the checkmark, the resolver label and the rules agree. 
 link indicator or automatic DNS is on, addresses and Wi-Fi details stay current with the
 popover closed.
 
+A preset picked by hand — in the popover, or applied in Preferences to the adapter the rules
+act on — holds on the current network until a different one is joined; the rules then take
+over again. The pick is kept in memory only.
+
+## Encrypted DNS
+
+The macOS DoH and DoT presets (Cloudflare, Google, Quad9, OpenDNS — DoH only — Mullvad and
+AdGuard), plus custom ones from Preferences › DNS. The encrypted built-ins start hidden in the
+popover, once each (`DnsSeenEncryptedBuiltIns`), so an update does not more than double the
+switcher. They work in the switcher and in the automatic rules alike.
+
+**How Windows does it.**
+
+- **DoH** is per adapter: `SetInterfaceDnsSettings` with `DNS_INTERFACE_SETTINGS3`
+  (version 3, `DNS_SETTING_DOH`), the servers in `NameServer` and one `DNS_SERVER_PROPERTY`
+  per server pointing at a `DNS_DOH_SERVER_SETTINGS` with the template and
+  `DNS_DOH_SERVER_SETTINGS_ENABLE` — without `FALLBACK_TO_UDP`, which is Settings'
+  "Encrypted only". IPv4 and IPv6 are written separately, each with its own server indexes.
+  Version 3 shipped with Windows 11 (build 22000).
+- **DoT** has no Win32 API. The helper writes it with
+  `netsh dnsclient add encryption server=<ip> dothost=<host>:853 autoupgrade=yes udpfallback=no`
+  (or `set encryption` for an address Windows already lists, such as Cloudflare's) and
+  `netsh dnsclient set global dot=yes`, through `ProcessStartInfo.ArgumentList` and only from
+  validated values. The encryption table is **machine-wide per server address**, so the helper
+  records every entry it adds or changes, and whether it switched global DoT on, in
+  `Program Files\NetFluss Helper\EncryptedDns.json` (SYSTEM and Administrators only). A plain
+  write takes back its entries for those addresses, entries no adapter uses any more go too,
+  and global DoT is switched off again with the last one. DoT is assumed from build 26100 (24H2)
+  and confirmed at run time by `netsh dnsclient show global` succeeding.
+- **Windows 10:** neither. A "Prohibit DoH" Group Policy (`DoHPolicy` = 1 under
+  `HKLM\Software\Policies\Microsoft\Windows NT\DNSClient`) blocks both. Presets the PC
+  cannot use stay in Preferences, greyed out with the reason ("Needs Windows 11", "Needs
+  Windows 11 24H2"); the popover does not offer them, and rules naming them hold.
+
+**Why it needs the helper.** Both are administrator-only writes, and DoT in particular has to
+be undone exactly: an entry left behind would quietly encrypt — or break — every adapter that
+is ever given that address. Only the helper keeps the record that makes that possible, so
+without it an encrypted preset is refused ("Encrypted DNS needs the NetFluss helper") and the
+popover offers to install it; plain presets keep their elevated `netsh` fallback. Uninstalling
+the helper takes back its DoT entries, global DoT and the DoH it set on adapters (their servers
+stay). Helper protocol 3 carries the transport and endpoint, a `dnsStatus` request, and the
+capabilities and DoT entries in every DNS reply; an older helper is never sent an encrypted
+preset, since it would set the addresses as plain DNS.
+
+**Plain means plain.** Windows keeps DoH settings per server address, so on Windows 11 every
+plain write also drops the adapter's DoH settings and NetFluss's DoT entries for those
+addresses — otherwise "Cloudflare" after "Cloudflare (DoH)" would silently stay encrypted.
+
+**The checkmark is read back**, not remembered: the adapter's DoH settings through
+`GetInterfaceDnsSettings` (no elevation needed) and NetFluss's DoT entries from the helper. A
+plain and an encrypted preset with the same addresses are different presets; an adapter
+encrypted in a way no preset describes (DoH with fallback, mixed servers) gets no checkmark.
+
+**`EncryptedDnsValidator`**, in Core and again in the helper: a DoH URL must be `https`, at
+most 512 characters, without user info, query, fragment, `%`, quotes, whitespace or control
+characters (an allowlist, ASCII only); a DoT host must be at least two labels of
+`[A-Za-z0-9-]`, at most 253 characters, and not an IP literal; at least one server address is
+required, because Windows connects to the address and never looks the DoH or DoT host up. A
+custom preset with only IPv4 addresses leaves IPv6 on the network's own resolver.
+
+On a captive portal (link *Limited*) with encryption on, automatic DNS writes the same servers
+without encryption until the portal lets the PC online. VPN profiles offer plain presets only.
+
+**Verifying.** In an elevated PowerShell:
+
+- `Get-DnsClientDohServerAddress` and Settings › Network › the adapter › DNS: DoH presets show
+  "Encrypted only" with the template;
+- `netsh dnsclient show encryption` and `netsh dnsclient show global`: DoT presets show the
+  host name and auto-upgrade on, and DoT switched on globally;
+- `pktmon filter add -p 53`, `pktmon filter add -p 443`, `pktmon filter add -p 853`,
+  `pktmon start --capture`, a few lookups, `pktmon stop`, then `pktmon format PktMon.etl`: DoH
+  traffic to the server on 443, DoT on 853, and nothing to it on 53. Switching back to a plain
+  preset must bring port 53 back and leave `netsh dnsclient show encryption` without
+  NetFluss's entries.
+
 ## The helper service
 
 `NetFluss.Service` is the counterpart of the macOS privileged helper, and optional in the
@@ -323,7 +398,7 @@ VPN configs arrive as file *contents*, never paths, so the service cannot be tal
 reading a file the caller could not read itself.
 
 An older helper keeps serving traffic after the app updates; only the VPN client, which
-needs protocol 2, asks for the helper to be updated.
+needs protocol 2, and encrypted DNS, which needs protocol 3, ask for the helper to be updated.
 
 The helper runs from `Program Files\NetFluss Helper\Bin`: installing it copies its own files
 there (by name, never whatever else lies beside them), because a LocalSystem service must not

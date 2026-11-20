@@ -19,10 +19,13 @@ public class DnsTests
     {
         Assert.Equal(
             ["system", "cloudflare", "google", "quad9", "opendns"],
-            DnsPreset.BuiltIn.Select(p => p.Id));
+            DnsPreset.PlainBuiltIn.Select(p => p.Id));
 
         Assert.Equal(["1.1.1.1", "1.0.0.1"], DnsPreset.BuiltIn.Single(p => p.Id == "cloudflare").Servers);
         Assert.All(DnsPreset.BuiltIn, preset => Assert.True(preset.IsBuiltIn));
+
+        // Plain first, then the encrypted eleven, as Models.swift lists them.
+        Assert.Equal(DnsPreset.PlainBuiltIn.Concat(DnsPreset.EncryptedBuiltIn).Select(p => p.Id), DnsPreset.BuiltIn.Select(p => p.Id));
     }
 
     [Fact]

@@ -290,3 +290,17 @@
 "Install Update" = "Update installieren";
 "The update could not be installed." = "Das Update konnte nicht installiert werden.";
 "NetFluss has been updated to %@. Click for what's new." = "NetFluss wurde auf %@ aktualisiert. Klicke hier für die Neuerungen.";
+
+/* Encrypted DNS (DoH/DoT): helper, Windows 11 badges, custom presets; the last overrides a macOS wording */
+"Encrypted DNS needs the NetFluss helper. Installing it asks for approval once." = "Verschlüsseltes DNS benötigt den NetFluss-Helfer. Für die Installation wird einmal um Freigabe gebeten.";
+"The NetFluss helper is out of date. Update it to use encrypted DNS." = "Der NetFluss-Helfer ist veraltet. Aktualisiere ihn, um verschlüsseltes DNS zu nutzen.";
+"Needs Windows 11" = "Benötigt Windows 11";
+"Needs Windows 11 24H2" = "Benötigt Windows 11 24H2";
+"Turned off by your administrator" = "Von deinem Administrator ausgeschaltet";
+"Not available on this PC" = "Auf diesem PC nicht verfügbar";
+"DoH and DoT presets use the encrypted DNS built into Windows 11 and are set through the NetFluss helper, which also takes them back. DoT needs Windows 11 24H2 or later. The encrypted presets start hidden in the popover; switch them on in the list above." = "DoH- und DoT-Profile nutzen das in Windows 11 eingebaute verschlüsselte DNS und werden über den NetFluss-Helfer eingerichtet, der sie auch wieder entfernt. DoT benötigt Windows 11 24H2 oder neuer. Die verschlüsselten Profile sind im Popover zunächst ausgeblendet; schalte sie in der Liste oben ein.";
+"URL" = "URL";
+"Server name" = "Servername";
+"At least one server address is needed. Without an IPv6 address, IPv6 keeps the network's own resolver." = "Mindestens eine Serveradresse ist nötig. Ohne IPv6-Adresse nutzt IPv6 weiterhin den Resolver des Netzwerks.";
+"With an IP address in the URL, use that address as the only server." = "Steht eine IP-Adresse in der URL, gib genau diese Adresse als einzigen Server an.";
+"%@ needs encrypted DNS, which this build of NetFluss can't set up." = "%@ braucht verschlüsseltes DNS, das auf diesem PC nicht verfügbar ist.";

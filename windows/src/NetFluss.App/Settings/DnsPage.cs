@@ -9,7 +9,8 @@ namespace NetFluss.App.Settings;
 
 /// <summary>
 /// DNS — the macOS DNS Switcher pane: the popover switcher, the presets with visibility and
-/// order, custom presets of up to four servers, and applying one from here.
+/// order, custom presets of up to four servers — plain, DoH or DoT — and applying one from
+/// here. Encrypted presets this PC cannot use stay listed, greyed out with the reason.
 /// </summary>
 internal static class DnsPage
 {
@@ -55,15 +56,62 @@ internal static class DnsPage
         presetPanel.Children.Add(status);
         page.Children.Add(Kit.Panel(presetPanel));
 
+        // ---- Encrypted DNS ----------------------------------------------------------
+        var encryptedState = Kit.Caption(string.Empty);
+        var encryptedText = new StackPanel();
+        encryptedText.Children.Add(Kit.Text(Kit.L("Encrypted DNS")));
+        encryptedText.Children.Add(encryptedState);
+        encryptedText.Children.Add(Kit.Caption(Kit.L("DoH and DoT presets use the encrypted DNS built into Windows 11 and are set through the NetFluss helper, which also takes them back. DoT needs Windows 11 24H2 or later. The encrypted presets start hidden in the popover; switch them on in the list above.")));
+        page.Children.Add(Kit.Card(encryptedText, null));
+
         // ---- Custom preset ---------------------------------------------------------
         page.Children.Add(Kit.Header(Kit.L("Add Custom DNS…")));
         var name = new TextBox { Width = 200 };
+        var endpoint = new TextBox { Width = 300, Margin = new Thickness(0, 6, 0, 0) };
         var servers = Enumerable.Range(0, MaximumCustomServers).Select(_ => new TextBox { Width = 200, Margin = new Thickness(0, 6, 0, 0) }).ToList();
         var addStatus = Kit.Caption(string.Empty);
+
+        // Plain, DoH or DoT, as the macOS sheet's segmented control. The protocol names are
+        // not translated there either.
+        DnsTransport? kind = null;
+        var kinds = new[]
+        {
+            new Choice(string.Empty, Kit.L("Plain DNS")),
+            new Choice(DnsTransports.HttpsWire, "DNS-over-HTTPS"),
+            new Choice(DnsTransports.TlsWire, "DNS-over-TLS"),
+        };
+        var endpointLabel = Kit.Text(string.Empty, 13);
+        endpointLabel.Margin = new Thickness(0, 6, 0, 0);
+        var formCaption = Kit.Caption(string.Empty);
+
+        void ShowKind()
+        {
+            var encrypted = kind is not null;
+            endpointLabel.Visibility = encrypted ? Visibility.Visible : Visibility.Collapsed;
+            endpoint.Visibility = endpointLabel.Visibility;
+            endpointLabel.Text = kind == DnsTransport.Tls ? Kit.L("Server name") : Kit.L("URL");
+            AutomationProperties.SetName(endpoint, kind == DnsTransport.Tls
+                ? Kit.L("Server name (e.g. dns.example.com)")
+                : Kit.L("URL (e.g. https://dns.example.com/dns-query)"));
+            endpoint.ToolTip = AutomationProperties.GetName(endpoint);
+            formCaption.Text = encrypted
+                ? Kit.L("macOS connects to the IP and checks the server name against its certificate.") + " " +
+                  Kit.L("At least one server address is needed. Without an IPv6 address, IPv6 keeps the network's own resolver.")
+                : Kit.L("Up to four IPv4 or IPv6 servers. A preset with only IPv4 also puts IPv6 back on automatic, so a leftover IPv6 resolver cannot keep answering.");
+        }
+
+        var kindCombo = Kit.Combo(kinds, string.Empty, value =>
+        {
+            kind = DnsTransports.FromWire(value as string);
+            addStatus.Text = string.Empty;
+            ShowKind();
+        }, 200);
+        AutomationProperties.SetName(kindCombo, Kit.L("Protocol"));
+
         var add = Kit.Button(Kit.L("Add"), () =>
         {
             var list = servers.Select(box => box.Text.Trim()).Where(text => text.Length > 0).ToList();
-            var result = settings.AddDnsPreset(name.Text, list);
+            var result = settings.AddDnsPreset(name.Text, list, kind, kind is null ? null : endpoint.Text);
             if (!result.IsValid)
             {
                 addStatus.Text = Kit.L(result.Error ?? "Could not add that preset.");
@@ -72,6 +120,7 @@ internal static class DnsPage
             }
 
             name.Text = string.Empty;
+            endpoint.Text = string.Empty;
             servers.ForEach(box => box.Text = string.Empty);
             addStatus.Text = Kit.L("Preset added.");
             addStatus.SetResourceReference(TextBlock.ForegroundProperty, "ActiveBrush");
@@ -79,10 +128,12 @@ internal static class DnsPage
         add.HorizontalAlignment = HorizontalAlignment.Left;
         add.Margin = new Thickness(0, 12, 0, 0);
 
+        // Rows: name, protocol, URL or host, then the servers.
+        const int firstServerRow = 3;
         var form = new Grid();
         form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
         form.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        for (var i = 0; i < MaximumCustomServers + 1; i++)
+        for (var i = 0; i < MaximumCustomServers + firstServerRow; i++)
         {
             form.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         }
@@ -91,19 +142,37 @@ internal static class DnsPage
         form.Children.Add(nameLabel);
         Grid.SetColumn(name, 1);
         form.Children.Add(name);
+
+        var kindLabel = Kit.Text(Kit.L("Protocol"), 13);
+        kindLabel.Margin = new Thickness(0, 6, 0, 0);
+        kindCombo.Margin = new Thickness(0, 6, 0, 0);
+        kindCombo.HorizontalAlignment = HorizontalAlignment.Left;
+        Grid.SetRow(kindLabel, 1);
+        Grid.SetRow(kindCombo, 1);
+        Grid.SetColumn(kindCombo, 1);
+        form.Children.Add(kindLabel);
+        form.Children.Add(kindCombo);
+
+        Grid.SetRow(endpointLabel, 2);
+        Grid.SetRow(endpoint, 2);
+        Grid.SetColumn(endpoint, 1);
+        form.Children.Add(endpointLabel);
+        form.Children.Add(endpoint);
+
         for (var i = 0; i < MaximumCustomServers; i++)
         {
             var label = Kit.Text(Kit.L("Server {0}", i + 1), 13);
             label.Margin = new Thickness(0, 6, 0, 0);
-            Grid.SetRow(label, i + 1);
-            Grid.SetRow(servers[i], i + 1);
+            Grid.SetRow(label, i + firstServerRow);
+            Grid.SetRow(servers[i], i + firstServerRow);
             Grid.SetColumn(servers[i], 1);
             form.Children.Add(label);
             form.Children.Add(servers[i]);
         }
 
+        ShowKind();
         var formPanel = new StackPanel();
-        formPanel.Children.Add(Kit.Caption(Kit.L("Up to four IPv4 or IPv6 servers. A preset with only IPv4 also puts IPv6 back on automatic, so a leftover IPv6 resolver cannot keep answering.")));
+        formPanel.Children.Add(formCaption);
         form.Margin = new Thickness(0, 10, 0, 0);
         formPanel.Children.Add(form);
         formPanel.Children.Add(add);
@@ -121,7 +190,10 @@ internal static class DnsPage
             var target = TargetId();
             var targetName = target is null ? null : DnsController.AdapterName(target);
             var staticServers = target is null ? [] : DnsController.StaticServers(target);
-            var active = DnsController.ActivePresetId(settings.AllDnsPresets(), staticServers);
+            var state = target is null ? DnsAdapterState.Plain(staticServers) : DnsController.ReadState(target, staticServers, context.Privileged.DotServers);
+            var active = DnsController.ActivePresetId(settings.AllDnsPresets(), state);
+            var capabilities = context.Privileged.EncryptedCapabilities;
+            encryptedState.Text = EncryptedDnsText.Status(settings, state, active);
 
             current.Text = targetName is null
                 ? Kit.L("No adapter with an internet connection was found.")
@@ -139,11 +211,23 @@ internal static class DnsPage
                 check.Width = 22;
 
                 var displayName = settings.DnsPresetDisplayName(preset);
+                var blocked = EncryptedDnsText.Block(preset, capabilities);
                 var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
                 text.Children.Add(preset.IsBuiltIn
                     ? RenamableName(settings, preset, displayName, active == preset.Id)
                     : Kit.Text(displayName, 14, "TextBrush", active == preset.Id ? FontWeights.SemiBold : FontWeights.Normal));
-                text.Children.Add(Kit.Caption(preset.IsAutomatic ? Kit.L("Automatic (DHCP)") : string.Join(", ", preset.Servers)));
+                text.Children.Add(Kit.Caption(preset.Encryption is { } encryption
+                    ? $"{DnsTransports.ShortName(encryption.Transport)} · {EncryptedDnsText.Detail(preset)}"
+                    : EncryptedDnsText.Detail(preset)));
+                if (blocked.Length > 0)
+                {
+                    // Kept in the list, greyed, with the reason: hiding it would make the
+                    // preset look like it never existed on this PC.
+                    var badge = Kit.Caption(blocked);
+                    badge.SetResourceReference(TextBlock.ForegroundProperty, "WarningBrush");
+                    text.Children.Add(badge);
+                    text.Opacity = 0.6;
+                }
 
                 var apply = Kit.Button(Kit.L("Apply"), async () =>
                 {
@@ -152,17 +236,25 @@ internal static class DnsPage
                         return;
                     }
 
+                    // A pick from here on the adapter the rules act on holds on this network,
+                    // the same as one from the popover.
+                    if (target == context.Dns.AdapterId)
+                    {
+                        context.AutoDns.RecordManualOverride();
+                    }
+
                     applying = true;
-                    status.Text = context.Privileged.IsSilent
+                    status.Text = context.Privileged.IsSilent || preset.IsEncrypted
                         ? Kit.L("Applying {0}…", displayName)
                         : Kit.L("Applying {0}… confirm the administrator prompt.", displayName);
-                    var result = await context.Privileged.SetDnsAsync(target, targetName, preset.Servers);
+                    var result = await context.Privileged.SetDnsAsync(target, targetName, preset);
                     applying = false;
                     status.Text = result.Message;
                     status.SetResourceReference(TextBlock.ForegroundProperty, result.Succeeded ? "ActiveBrush" : "WarningBrush");
+                    context.Dns.Refresh();
                     Refresh();
                 });
-                apply.IsEnabled = active != preset.Id && targetName is not null;
+                apply.IsEnabled = active != preset.Id && targetName is not null && blocked.Length == 0;
                 apply.Margin = new Thickness(8, 0, 0, 0);
 
                 var actions = Kit.Row(apply);
@@ -197,6 +289,11 @@ internal static class DnsPage
                 Refresh();
             }
         });
+
+        // The helper's word on DoT and on what this PC can do arrives without a settings change.
+        void OnEncryptedStatus(object? sender, EventArgs e) => Refresh();
+        page.Loaded += (_, _) => context.Privileged.EncryptedStatusChanged += OnEncryptedStatus;
+        page.Unloaded += (_, _) => context.Privileged.EncryptedStatusChanged -= OnEncryptedStatus;
 
         Refresh();
         BuildAutomatic(context, page);
@@ -478,6 +575,9 @@ internal static class DnsPage
             DnsAutoSwitchKind.WaitingForNetwork => Kit.L("Waiting for a connection to {0} before changing DNS.", state.Ssid),
             DnsAutoSwitchKind.Applied when string.IsNullOrEmpty(state.Ssid) => Kit.L("Using {0} on this network.", Name(state.PresetId)),
             DnsAutoSwitchKind.Applied => Kit.L("Using {0} on {1}.", Name(state.PresetId), state.Ssid),
+            DnsAutoSwitchKind.EncryptedDnsUnavailable => Kit.L("{0} needs encrypted DNS, which this build of NetFluss can't set up.", Name(state.PresetId)),
+            DnsAutoSwitchKind.ManualOverride when string.IsNullOrEmpty(state.Ssid) => Kit.L("Chosen by hand on this network. The rules apply again on the next network you join."),
+            DnsAutoSwitchKind.ManualOverride => Kit.L("Chosen by hand on {0}. The rules apply again on the next network you join.", state.Ssid),
             _ => Kit.L("No rule applies to the current network."),
         };
     }

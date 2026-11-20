@@ -417,7 +417,9 @@ internal static class VpnPage
 
         if (profile.Options.UseProfileDns)
         {
-            var presets = context.Settings.AllDnsPresets().Where(p => p.Servers.Count > 0)
+            // Plain presets only: VpnManager sets the tunnel's own adapter, where DoH and DoT
+            // would add nothing the tunnel does not already encrypt.
+            var presets = context.Settings.AllDnsPresets().Where(p => p.Servers.Count > 0 && !p.IsEncrypted)
                 .Select(p => new Choice(p.Id, context.Settings.DnsPresetDisplayName(p)))
                 .Prepend(new Choice(string.Empty, Kit.L("Choose a DNS preset")));
             body.Children.Add(Option("DNS preset", Kit.Combo(presets, profile.Options.DnsPresetId ?? string.Empty,

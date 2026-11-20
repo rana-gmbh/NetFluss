@@ -9,6 +9,10 @@ namespace NetFluss.App;
 /// Automatic DNS by Wi-Fi network (macOS 2.7): gathers what <see cref="DnsRuleEngine"/>
 /// needs on every tick and applies its answer through the helper.
 ///
+/// <para>Encrypted presets go through the same path; the engine holds a rule that names one
+/// this PC or this helper cannot set, and on a captive portal it writes the same servers
+/// without encryption until the portal lets the PC online.</para>
+///
 /// <para>Rules act on the adapter the DNS switcher acts on — the one carrying the internet
 /// connection unless the user picked another — so the popover's checkmark, the resolver
 /// label and the rules always agree about which adapter is meant. The network name comes
@@ -25,6 +29,13 @@ internal sealed class DnsAutoSwitcher
     private readonly Func<IReadOnlyList<VpnProfile>> _vpnProfiles;
     private readonly DnsRuleEngine _engine = new();
     private bool _applying;
+
+    /// <summary>
+    /// The network (SSID, empty for wired) on which the user last picked a preset by hand.
+    /// In memory only: a restart hands the network back to the rules, which is the less
+    /// surprising way for a forgotten pick to end.
+    /// </summary>
+    private string? _manualOverrideNetwork;
 
     internal DnsAutoSwitcher(
         SettingsStore store,
@@ -43,6 +54,30 @@ internal sealed class DnsAutoSwitcher
         _vpnStatus = vpnStatus;
         _vpnProfiles = vpnProfiles;
         _engine.StateChanged += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
+        _dns.PickedByHand += (_, _) => RecordManualOverride();
+    }
+
+    /// <summary>
+    /// Remembers a hand pick for the network it was made on: the rules leave that network
+    /// alone until another one is joined. Preferences calls this too when it applies a preset
+    /// to the adapter the rules act on.
+    /// </summary>
+    internal void RecordManualOverride()
+    {
+        if (!_store.Settings.DnsAutoSwitchEnabled)
+        {
+            return;
+        }
+
+        _manualOverrideNetwork = CurrentNetwork?.Ssid ?? string.Empty;
+    }
+
+    /// <summary>The stored hand pick, dropped for good once the PC is on a different network.</summary>
+    private string? CurrentManualOverride()
+    {
+        var networkUp = _link.Status?.Health != LinkHealth.Offline && Target() is { IsUp: true };
+        _manualOverrideNetwork = DnsRuleEngine.CurrentManualOverride(_manualOverrideNetwork, CurrentNetwork?.Ssid, networkUp);
+        return _manualOverrideNetwork;
     }
 
     /// <summary>Raised when <see cref="State"/> changes, for Preferences to explain itself.</summary>
@@ -65,6 +100,7 @@ internal sealed class DnsAutoSwitcher
         var settings = _store.Settings;
         if (!settings.DnsAutoSwitchEnabled)
         {
+            _manualOverrideNetwork = null;
             if (_engine.State != DnsAutoSwitchState.Off)
             {
                 _engine.Reset();
@@ -96,25 +132,39 @@ internal sealed class DnsAutoSwitcher
             PresetServers = presets
                 .GroupBy(preset => preset.Id)
                 .ToDictionary(group => group.Key, group => group.First().Servers),
+            PresetEncryption = presets
+                .Where(preset => preset.Encryption is not null)
+                .GroupBy(preset => preset.Id)
+                .ToDictionary(group => group.Key, group => group.First().Encryption!),
+            CurrentEncryption = _dns.State?.Encryption,
+            CurrentEncryptionMixed = _dns.State?.Mixed ?? false,
+
+            // Only what the helper can actually set: an older helper would write an encrypted
+            // preset's addresses as plain DNS, which is worse than holding.
+            Capabilities = _privileged.CanSetEncryptedDns ? _privileged.EncryptedCapabilities : EncryptedDnsCapabilities.None,
             Rules = settings.DnsRules,
             FallbackPresetId = string.IsNullOrEmpty(settings.DnsRuleFallbackPresetId) ? null : settings.DnsRuleFallbackPresetId,
+            ManualOverrideNetwork = CurrentManualOverride(),
         };
 
-        if (_engine.Evaluate(input, DateTime.UtcNow) is not { } presetId
-            || presets.FirstOrDefault(preset => preset.Id == presetId) is not { } target)
+        switch (_engine.Next(input, DateTime.UtcNow))
         {
-            return;
-        }
+            case { PauseEncryption: true }:
+                _ = RunAsync(_dns.PauseEncryptionAutomaticallyAsync);
+                break;
 
-        _ = ApplyAsync(target);
+            case { PresetId: { } presetId } when presets.FirstOrDefault(preset => preset.Id == presetId) is { } target:
+                _ = RunAsync(() => _dns.ApplyAutomaticallyAsync(target));
+                break;
+        }
     }
 
-    private async Task ApplyAsync(DnsPreset preset)
+    private async Task RunAsync(Func<Task<bool>> write)
     {
         _applying = true;
         try
         {
-            await _dns.ApplyAutomaticallyAsync(preset);
+            await write();
         }
         catch (Exception e)
         {
@@ -149,6 +199,6 @@ internal sealed class DnsAutoSwitcher
         }
 
         return _vpnProfiles().FirstOrDefault(profile => profile.Id == profileId) is { Options.UseProfileDns: true } profile
-               && settings.AllDnsPresets().Any(preset => preset.Id == profile.Options.DnsPresetId && preset.Servers.Count > 0);
+               && settings.AllDnsPresets().Any(preset => preset.Id == profile.Options.DnsPresetId && preset.Servers.Count > 0 && !preset.IsEncrypted);
     }
 }

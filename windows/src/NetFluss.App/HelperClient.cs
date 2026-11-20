@@ -61,14 +61,23 @@ internal sealed class HelperClient : IDisposable
     /// </summary>
     internal bool IsNewerThanApp => HelperVersion is { } version && UpdateLookup.IsNewer(version, AppVersion);
 
-    /// <summary>The protocol the helper speaks; 2 added the VPN operations.</summary>
+    /// <summary>The protocol the helper speaks; 2 added the VPN operations, 3 encrypted DNS.</summary>
     internal int HelperProtocolVersion { get; private set; }
+
+    /// <summary>What the helper said this PC can do with encrypted DNS, in its hello; null before protocol 3.</summary>
+    internal EncryptedDnsCapabilities? HelloCapabilities { get; private set; }
 
     /// <summary>
     /// Whether the helper can run VPN tunnels. Checked separately from the build: an older
     /// helper still serves traffic perfectly well, and must not switch Top Apps off.
     /// </summary>
     internal bool SupportsVpn => IsConnected && HelperProtocolVersion >= 2;
+
+    /// <summary>
+    /// Whether the helper can set DoH and DoT. An older one would ignore the transport and set
+    /// the addresses as plain DNS — encrypted presets must never be sent to it.
+    /// </summary>
+    internal bool SupportsEncryptedDns => IsConnected && HelperProtocolVersion >= 3;
 
     /// <summary>Starts connecting in the background if not already connected or trying.</summary>
     internal void EnsureConnecting()
@@ -243,6 +252,7 @@ internal sealed class HelperClient : IDisposable
 
         HelperVersion = hello.HelperVersion;
         HelperProtocolVersion = hello.Version;
+        HelloCapabilities = hello.Capabilities;
         HelperTraceStatus = hello.TraceStatus;
         IsConnected = true;
         Post(() => ConnectionChanged?.Invoke(this, EventArgs.Empty));

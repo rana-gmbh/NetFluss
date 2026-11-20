@@ -290,3 +290,17 @@
 "Install Update" = "安裝更新";
 "The update could not be installed." = "無法安裝更新。";
 "NetFluss has been updated to %@. Click for what's new." = "NetFluss 已更新至 %@。按一下查看新功能。";
+
+/* Encrypted DNS (DoH/DoT): helper, Windows 11 badges, custom presets; the last overrides a macOS wording */
+"Encrypted DNS needs the NetFluss helper. Installing it asks for approval once." = "加密 DNS 需要 NetFluss 輔助工具。安裝時只需批准一次。";
+"The NetFluss helper is out of date. Update it to use encrypted DNS." = "NetFluss 輔助工具已過時。請更新後再使用加密 DNS。";
+"Needs Windows 11" = "需要 Windows 11";
+"Needs Windows 11 24H2" = "需要 Windows 11 24H2";
+"Turned off by your administrator" = "已被管理員關閉";
+"Not available on this PC" = "在此電腦上無法使用";
+"DoH and DoT presets use the encrypted DNS built into Windows 11 and are set through the NetFluss helper, which also takes them back. DoT needs Windows 11 24H2 or later. The encrypted presets start hidden in the popover; switch them on in the list above." = "DoH 和 DoT 設定檔使用 Windows 11 內建的加密 DNS，由 NetFluss 輔助工具設定，也由它負責復原。DoT 需要 Windows 11 24H2 或更新版本。加密設定檔預設不在彈出視窗中顯示，可在上方列表中開啟。";
+"URL" = "URL";
+"Server name" = "伺服器名稱";
+"At least one server address is needed. Without an IPv6 address, IPv6 keeps the network's own resolver." = "至少需要一個伺服器位址。若沒有 IPv6 位址，IPv6 會繼續使用網路本身的解析器。";
+"With an IP address in the URL, use that address as the only server." = "若 URL 中含有 IP 位址，請將該位址作為唯一的伺服器。";
+"%@ needs encrypted DNS, which this build of NetFluss can't set up." = "%@ 需要加密 DNS，但此電腦不支援。";

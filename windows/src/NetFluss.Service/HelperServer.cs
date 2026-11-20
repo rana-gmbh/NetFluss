@@ -23,9 +23,10 @@ namespace NetFluss.Service;
 /// asked again, which is the point of installing it.</para>
 ///
 /// <para><b>What they may ask.</b> Nothing is free-form. DNS servers must round-trip through
-/// <see cref="DnsValidator"/>, and adapters are named by interface GUID and resolved here
-/// against the interfaces Windows reports — a client never supplies a string that reaches a
-/// command line.</para>
+/// <see cref="DnsValidator"/>, encrypted endpoints through <see cref="EncryptedDnsValidator"/>,
+/// and adapters are named by interface GUID and resolved here against the interfaces Windows
+/// reports. The one client value that reaches a command line — a DoT host name for netsh —
+/// is a validated host name passed as a single argument, never through a shell.</para>
 /// </summary>
 internal sealed class HelperServer : IDisposable
 {
@@ -41,6 +42,7 @@ internal sealed class HelperServer : IDisposable
     private readonly List<Client> _clients = [];
     private readonly ProcessNames _names = new();
     private readonly VpnTunnels _vpn = new();
+    private readonly EncryptedDnsTable _encryptedDns = new(HelperPaths.Current.EncryptedDnsState);
 
     /// <summary>When each adapter was last restarted, for the cooldown between restarts.</summary>
     private readonly Dictionary<string, long> _restarts = new(StringComparer.OrdinalIgnoreCase);
@@ -69,6 +71,7 @@ internal sealed class HelperServer : IDisposable
         {
             _log = value;
             _vpn.Log = value;
+            _encryptedDns.Log = value;
         }
     }
 
@@ -82,6 +85,9 @@ internal sealed class HelperServer : IDisposable
             await _vpn.CleanUpLeftoversAsync();
             await AcceptLoopAsync();
         });
+
+        // The DoT check runs netsh once; started now so the first hello rarely waits for it.
+        _ = Task.Run(() => _encryptedDns.CapabilitiesAsync());
     }
 
     private async Task AcceptLoopAsync()
@@ -227,6 +233,7 @@ internal sealed class HelperServer : IDisposable
                     HelperVersion = Version,
                     TraceStatus = _traceStatus,
                     TraceDetail = _trace?.Diagnostics ?? _traceDetail,
+                    Capabilities = await EncryptedCapabilitiesAsync(),
                 });
                 break;
 
@@ -243,7 +250,11 @@ internal sealed class HelperServer : IDisposable
                 break;
 
             case "setDns":
-                await client.SendAsync(SetDns(request) with { Id = request.Id });
+                await client.SendAsync(await SetDnsAsync(request) with { Id = request.Id });
+                break;
+
+            case "dnsStatus":
+                await client.SendAsync(await DnsResultAsync(true, null) with { Id = request.Id });
                 break;
 
             case "restartAdapter":
@@ -419,24 +430,124 @@ internal sealed class HelperServer : IDisposable
         }
     }
 
-    private HelperMessage SetDns(HelperRequest request)
+    /// <summary>
+    /// Plain DNS, DoH or DoT on one adapter.
+    ///
+    /// <para>On Windows 11 a plain write also drops the adapter's DoH settings and NetFluss's
+    /// DoT entries for those addresses, so "Cloudflare" after "Cloudflare (DoH)" really is plain
+    /// again: Windows keeps both per server address, and a plain write alone would leave the
+    /// adapter silently encrypted.</para>
+    /// </summary>
+    private async Task<HelperMessage> SetDnsAsync(HelperRequest request)
     {
         var servers = request.Servers ?? [];
         var validation = DnsValidator.Validate(servers);
         if (!validation.IsValid)
         {
-            return Result(false, validation.Error);
+            return await DnsResultAsync(false, validation.Error);
         }
 
         if (!TryResolveAdapter(request.Adapter, out var guid, out _))
         {
-            return Result(false, "No such adapter.");
+            return await DnsResultAsync(false, "No such adapter.");
         }
 
-        var status = InterfaceDns.Set(guid, servers);
-        Log?.Invoke($"setDns {guid} [{string.Join(", ", servers)}] -> {status}");
-        return status == 0 ? Result(true, null) : Result(false, $"Windows error {status}.");
+        var capabilities = await EncryptedCapabilitiesAsync();
+
+        // DNS_INTERFACE_SETTINGS3 exists from Windows 11 on; before that there is no DoH to clear.
+        var windows11 = capabilities.Build >= EncryptedDnsCapabilities.DohMinimumBuild;
+
+        if (request.Transport is null)
+        {
+            var status = InterfaceDns.Set(guid, servers, clearEncryption: windows11);
+            Log?.Invoke($"setDns {guid} [{string.Join(", ", servers)}] -> {status}");
+            if (status == 0 && windows11)
+            {
+                await _encryptedDns.ForgetDohAdapterAsync(guid);
+                await _encryptedDns.TidyAsync(servers);
+            }
+
+            return await DnsResultAsync(status == 0, status == 0 ? null : $"Windows error {status}.");
+        }
+
+        // Checked again here, whatever the app did: the endpoint goes into a system-wide
+        // resolver setting, and a DoT host onto a netsh command line.
+        if (DnsTransports.FromWire(request.Transport) is not { } transport)
+        {
+            return await DnsResultAsync(false, "Unknown DNS transport.");
+        }
+
+        var encrypted = EncryptedDnsValidator.Validate(transport, request.Endpoint, servers);
+        if (!encrypted.IsValid || request.Endpoint is not { } endpoint)
+        {
+            return await DnsResultAsync(false, encrypted.Error ?? "Invalid encrypted DNS settings.");
+        }
+
+        if (!capabilities.Supports(transport))
+        {
+            return await DnsResultAsync(false, "Encrypted DNS is not available on this PC.");
+        }
+
+        if (transport == DnsTransport.Https)
+        {
+            var status = InterfaceDns.SetDoh(guid, servers, endpoint);
+            Log?.Invoke($"setDns doh {guid} [{string.Join(", ", servers)}] {endpoint} -> {status}");
+            if (status == 0)
+            {
+                await _encryptedDns.RecordDohAdapterAsync(guid);
+            }
+
+            // DoH and DoT on the same address would leave Windows to pick one.
+            await _encryptedDns.TidyAsync(status == 0 ? servers : Array.Empty<string>());
+            return await DnsResultAsync(status == 0, status == 0 ? null : $"Windows error {status}.");
+        }
+
+        // DoT: the table entries first, so the adapter never asks these servers in plain text;
+        // then the servers themselves, written without DoH.
+        var failure = await _encryptedDns.ApplyAsync(servers, endpoint);
+        if (failure is not null)
+        {
+            Log?.Invoke($"setDns dot {guid} {endpoint} -> {failure}");
+            await _encryptedDns.TidyAsync([]);
+            return await DnsResultAsync(false, failure);
+        }
+
+        var written = InterfaceDns.Set(guid, servers, clearEncryption: true);
+        Log?.Invoke($"setDns dot {guid} [{string.Join(", ", servers)}] {endpoint} -> {written}");
+        if (written == 0)
+        {
+            await _encryptedDns.ForgetDohAdapterAsync(guid);
+        }
+
+        // Entries for servers no adapter uses any more go, this write's included if it failed.
+        await _encryptedDns.TidyAsync([]);
+        return await DnsResultAsync(written == 0, written == 0 ? null : $"Windows error {written}.");
     }
+
+    /// <summary>
+    /// What the helper can set, bounded: the netsh check behind DoT normally finishes long
+    /// before a client asks, and a hello must not wait on it. A slow check reads as "no DoT"
+    /// for that one answer; the next dnsStatus corrects it.
+    /// </summary>
+    private async Task<EncryptedDnsCapabilities> EncryptedCapabilitiesAsync()
+    {
+        try
+        {
+            return await _encryptedDns.CapabilitiesAsync().WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        catch (TimeoutException)
+        {
+            return EncryptedDnsCapabilities.Evaluate(EncryptedDnsPlatform.Build, EncryptedDnsPlatform.DohPolicy(), dotRuntime: false);
+        }
+    }
+
+    /// <summary>A DNS result, carrying what the app needs to show the state it caused.</summary>
+    private async Task<HelperMessage> DnsResultAsync(bool ok, string? message)
+        => Result(ok, message) with
+        {
+            Capabilities = await EncryptedCapabilitiesAsync(),
+            DotServers = _encryptedDns.Servers(),
+        };
 
     private async Task<HelperMessage> RestartAdapterAsync(HelperRequest request)
     {

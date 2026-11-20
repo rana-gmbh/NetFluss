@@ -132,6 +132,20 @@ internal static unsafe class Installer
             _ = CloseServiceHandle(manager);
         }
 
+        // Encrypted DNS the helper set up: its DoT entries in Windows' machine-wide table, the
+        // global DoT switch if it turned that on, and DoH on the adapters it encrypted. Without
+        // the helper the app could no longer take any of it back. Entries the user or Windows
+        // made are not in the record and stay. The service is stopped by now, so nothing else
+        // writes the record meanwhile.
+        try
+        {
+            new EncryptedDnsTable(Paths.EncryptedDnsState) { Log = Console.Error.WriteLine }.RestoreAllAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Console.Error.WriteLine("could not restore encrypted DNS: " + e.Message);
+        }
+
         try
         {
             if (Directory.Exists(InstallDirectory))

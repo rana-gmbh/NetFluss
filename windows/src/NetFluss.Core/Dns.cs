@@ -17,6 +17,7 @@
 
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json.Serialization;
 
 namespace NetFluss.Core;
 
@@ -51,16 +52,51 @@ public sealed record DnsPreset
 
     public required string Name { get; init; }
 
-    /// <summary>Empty means "hand the interface back to DHCP", which is what System Default is.</summary>
+    /// <summary>
+    /// Plain presets: the resolvers, empty meaning "hand the interface back to DHCP", which is
+    /// what System Default is. Encrypted presets: the addresses Windows connects to for the
+    /// DoH or DoT server — never empty, since Windows does not look the server's name up.
+    /// </summary>
     public required IReadOnlyList<string> Servers { get; init; }
 
     public bool IsBuiltIn { get; init; }
 
+    /// <summary>
+    /// Null for plain DNS on port 53. Nullable so presets saved by older versions load
+    /// unchanged.
+    /// </summary>
+    public DnsTransport? Transport { get; init; }
+
+    /// <summary>The DoH URL template or the DoT host name; unused for plain DNS.</summary>
+    public string? Endpoint { get; init; }
+
     /// <summary>True for the preset that restores automatic (DHCP-supplied) DNS.</summary>
     public bool IsAutomatic => Servers.Count == 0;
 
+    [JsonIgnore]
+    public bool IsEncrypted => DnsTransports.IsDefined(Transport) && !string.IsNullOrEmpty(Endpoint);
+
+    /// <summary>
+    /// What makes the preset encrypted, or null. A DoH preset and a plain one with the same
+    /// addresses are two different resolvers, so this is part of the preset's identity.
+    /// </summary>
+    [JsonIgnore]
+    public DnsEncryption? Encryption => IsEncrypted ? new DnsEncryption(Transport!.Value, Endpoint!) : null;
+
+    /// <summary>Plain and encrypted built-ins, in the macOS order.</summary>
+    public static readonly IReadOnlyList<DnsPreset> BuiltIn = [.. PlainBuiltIns(), .. EncryptedBuiltIns()];
+
     /// <summary>The same five the macOS app ships, in the same order.</summary>
-    public static readonly IReadOnlyList<DnsPreset> BuiltIn =
+    public static IReadOnlyList<DnsPreset> PlainBuiltIn => [.. BuiltIn.Where(preset => !preset.IsEncrypted)];
+
+    /// <summary>
+    /// The encrypted built-ins, the same eleven as macOS. They start hidden in the popover
+    /// (<see cref="AppSettings.HideNewEncryptedDnsBuiltIns"/>) so an update does not more than
+    /// double the switcher; Preferences › DNS turns them on. OpenDNS has no DoT service.
+    /// </summary>
+    public static IReadOnlyList<DnsPreset> EncryptedBuiltIn => [.. BuiltIn.Where(preset => preset.IsEncrypted)];
+
+    private static IEnumerable<DnsPreset> PlainBuiltIns() =>
     [
         new() { Id = "system", Name = "System Default", Servers = [], IsBuiltIn = true },
         new() { Id = "cloudflare", Name = "Cloudflare", Servers = ["1.1.1.1", "1.0.0.1"], IsBuiltIn = true },
@@ -68,6 +104,37 @@ public sealed record DnsPreset
         new() { Id = "quad9", Name = "Quad9", Servers = ["9.9.9.9", "149.112.112.112"], IsBuiltIn = true },
         new() { Id = "opendns", Name = "OpenDNS", Servers = ["208.67.222.222", "208.67.220.220"], IsBuiltIn = true },
     ];
+
+    private static IEnumerable<DnsPreset> EncryptedBuiltIns()
+    {
+        string[] cloudflare = ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"];
+        string[] google = ["8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"];
+        string[] quad9 = ["9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"];
+        string[] openDns = ["208.67.222.222", "208.67.220.220", "2620:119:35::35", "2620:119:53::53"];
+        string[] mullvad = ["194.242.2.2", "2a07:e340::2"];
+        string[] adGuard = ["94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"];
+
+        DnsPreset Doh(string id, string name, string[] servers, string url)
+            => new() { Id = id, Name = name, Servers = servers, IsBuiltIn = true, Transport = DnsTransport.Https, Endpoint = url };
+
+        DnsPreset Dot(string id, string name, string[] servers, string host)
+            => new() { Id = id, Name = name, Servers = servers, IsBuiltIn = true, Transport = DnsTransport.Tls, Endpoint = host };
+
+        return
+        [
+            Doh("cloudflare-doh", "Cloudflare (DoH)", cloudflare, "https://cloudflare-dns.com/dns-query"),
+            Dot("cloudflare-dot", "Cloudflare (DoT)", cloudflare, "one.one.one.one"),
+            Doh("google-doh", "Google (DoH)", google, "https://dns.google/dns-query"),
+            Dot("google-dot", "Google (DoT)", google, "dns.google"),
+            Doh("quad9-doh", "Quad9 (DoH)", quad9, "https://dns.quad9.net/dns-query"),
+            Dot("quad9-dot", "Quad9 (DoT)", quad9, "dns.quad9.net"),
+            Doh("opendns-doh", "OpenDNS (DoH)", openDns, "https://doh.opendns.com/dns-query"),
+            Doh("mullvad-doh", "Mullvad (DoH)", mullvad, "https://dns.mullvad.net/dns-query"),
+            Dot("mullvad-dot", "Mullvad (DoT)", mullvad, "dns.mullvad.net"),
+            Doh("adguard-doh", "AdGuard (DoH)", adGuard, "https://dns.adguard-dns.com/dns-query"),
+            Dot("adguard-dot", "AdGuard (DoT)", adGuard, "dns.adguard-dns.com"),
+        ];
+    }
 
     /// <summary>
     /// True when <paramref name="active"/> is exactly this preset's server list.
@@ -80,6 +147,18 @@ public sealed record DnsPreset
         => Servers.Count == active.Count
            && Servers.OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                .SequenceEqual(active.OrderBy(s => s, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True when the adapter is exactly this resolver: the same servers <em>and</em> the same
+    /// encryption. Plain Cloudflare does not match an adapter on Cloudflare's addresses with
+    /// DoH switched on, and the DoH preset does not match it with DoH off.
+    /// </summary>
+    public bool Matches(DnsAdapterState state)
+        => !state.Mixed && Matches(state.Servers) && DnsEncryption.SameAs(Encryption, state.Encryption);
+
+    /// <summary>The first preset that is exactly what the adapter has, if any.</summary>
+    public static string? ActiveId(IEnumerable<DnsPreset> presets, DnsAdapterState state)
+        => presets.FirstOrDefault(preset => preset.Matches(state))?.Id;
 }
 
 /// <summary>Why a set of DNS servers was rejected, if it was.</summary>
