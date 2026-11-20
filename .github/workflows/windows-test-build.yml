@@ -24,7 +24,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: ./windows/Packaging/build-release.ps1 -Version 2.7.3-alpha.1
+        run: ./windows/Packaging/build-release.ps1 -Version 2.7.3-alpha.2
 
       - uses: actions/upload-artifact@v4
         with:
