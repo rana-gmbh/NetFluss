@@ -9,6 +9,8 @@
 ; Per-user and unprivileged, like dropping NetFluss.app into ~/Applications: it installs to
 ; %LOCALAPPDATA%\Programs\NetFluss and never asks for administrator rights. The optional
 ; helper service is the one part that needs them, and the app installs it on request.
+; The exception is a copy in Program Files: Setup then restarts itself with administrator
+; approval (see InitializeSetup).
 ; The same setup, run with /VERYSILENT /LAUNCH, is what the in-app updater uses.
 
 #ifndef AppVersion
@@ -84,8 +86,10 @@ english.UpdateCheck=Check for updates once a day (GitHub)
 german.UpdateCheck=Einmal täglich nach Updates suchen (GitHub)
 english.IpLookups=Look up public IP addresses and countries (ipify, ipwho.is, country.is)
 german.IpLookups=Öffentliche IP-Adressen und Länder abfragen (ipify, ipwho.is, country.is)
-english.NeedsAdmin=NetFluss is installed in %1, which only administrators can change. Run Setup as administrator to update it.
-german.NeedsAdmin=NetFluss ist in %1 installiert, das nur Administratoren ändern können. Führen Sie Setup als Administrator aus, um es zu aktualisieren.
+english.NeedsAdmin=NetFluss is installed in %1, which only administrators can change, so updating it needs administrator approval.
+german.NeedsAdmin=NetFluss ist in %1 installiert, das nur Administratoren ändern können. Zum Aktualisieren ist daher die Zustimmung eines Administrators nötig.
+english.FolderNeedsAdmin=Only administrators can install into %1. Restart Setup with administrator approval?%n%nChoose No to pick another folder.
+german.FolderNeedsAdmin=In %1 können nur Administratoren installieren. Setup mit Zustimmung eines Administrators neu starten?%n%nWählen Sie „Nein“, um einen anderen Ordner auszuwählen.
 english.HelperNotMoved=NetFluss was updated, but its helper could not be moved to its new folder (error %1). Install the helper again in NetFluss's settings.
 german.HelperNotMoved=NetFluss wurde aktualisiert, aber der Helfer konnte nicht in seinen neuen Ordner verschoben werden (Fehler %1). Installieren Sie den Helfer in den Einstellungen von NetFluss erneut.
 english.HelperFolder=This folder belongs to the NetFluss helper. Choose another folder for NetFluss.
@@ -114,11 +118,15 @@ Root: HKCU; Subkey: "Software\NetFluss\InstallerChoices"; ValueType: dword; Valu
 Root: HKCU; Subkey: "Software\NetFluss\InstallerChoices"; ValueType: dword; ValueName: "AllowIpLookups"; ValueData: "0"; Tasks: not iplookups; Check: not WizardSilent; Flags: uninsdeletekey
 
 [Run]
-; runasoriginaluser: a Setup run as administrator (an install in Program Files) must not
-; start NetFluss elevated.
-Filename: "{app}\NetFluss.exe"; Description: "{cm:LaunchNow}"; Flags: nowait postinstall skipifsilent runasoriginaluser
+; A Setup run as administrator (an install in Program Files) must not start NetFluss
+; elevated. runasoriginaluser cannot help there: Setup never elevates itself through Inno
+; Setup (PrivilegesRequired=lowest), so its "original user" is the elevated one too. Explorer
+; hands the start to the signed-in user's own, unelevated shell.
+Filename: "{app}\NetFluss.exe"; Description: "{cm:LaunchNow}"; Flags: nowait postinstall skipifsilent; Check: not IsAdmin
+Filename: "{win}\explorer.exe"; Parameters: """{app}\NetFluss.exe"""; Description: "{cm:LaunchNow}"; Flags: nowait postinstall skipifsilent; Check: IsAdmin
 ; An in-app update runs silently and asks to be relaunched.
-Filename: "{app}\NetFluss.exe"; Flags: nowait runasoriginaluser; Check: LaunchAfterSilentUpdate
+Filename: "{app}\NetFluss.exe"; Flags: nowait; Check: LaunchAfterSilentUpdate and not IsAdmin
+Filename: "{win}\explorer.exe"; Parameters: """{app}\NetFluss.exe"""; Flags: nowait; Check: LaunchAfterSilentUpdate and IsAdmin
 
 [UninstallRun]
 ; The helper is a machine-wide service; removing it needs one administrator approval.
@@ -128,9 +136,18 @@ Filename: "{app}\Helper\NetFluss.Service.exe"; Parameters: "uninstall"; Verb: "r
 Type: dirifempty; Name: "{app}"
 
 [Code]
+const
+  UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F3C9A41-2E7B-4D58-9C1A-5B0E8D2F7A13}_is1';
+  // Marks a Setup this script restarted elevated, so it never restarts again.
+  ElevatedParam = '/NETFLUSSELEVATED';
+  // Also marks that the user already went through the license and privacy pages.
+  AcceptedParam = '/NETFLUSSACCEPTED';
+
 var
   // The helper service ran from the app's own Helper folder (issue #70): moved once the files are in.
   MoveHelper: Boolean;
+  // Set when this Setup handed over to an elevated one and closes without asking.
+  HandedOver: Boolean;
 
 function HelperInstalled: Boolean;
 begin
@@ -164,11 +181,80 @@ begin
   end;
 end;
 
-{ Program Files, or any folder only administrators may change. }
+// Program Files, or any folder only administrators may change.
+function NeedsAdminFor(Dir: String): Boolean;
+begin
+  Result := (Dir <> '')
+    and (SameOrInside(Dir, ExpandConstant('{commonpf}')) or SameOrInside(Dir, ExpandConstant('{commonpf32}')));
+end;
+
 function AppNeedsAdmin: Boolean;
 begin
-  Result := SameOrInside(ExpandConstant('{app}'), ExpandConstant('{commonpf}'))
-    or SameOrInside(ExpandConstant('{app}'), ExpandConstant('{commonpf32}'));
+  Result := NeedsAdminFor(ExpandConstant('{app}'));
+end;
+
+function HasParam(Name: String): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), Name) = 0 then
+      Result := True;
+end;
+
+function StartsWithText(S, Prefix: String): Boolean;
+begin
+  Result := CompareText(Copy(S, 1, Length(Prefix)), Prefix) = 0;
+end;
+
+// Starts this same setup file again with administrator approval, into Dir, with the
+// parameters it was given (an in-app update's /VERYSILENT /LAUNCH among them). False when the
+// user declined or Windows could not start it.
+function RestartElevated(Dir: String; Accepted: Boolean): Boolean;
+var
+  Params, S: String;
+  I, ErrorCode: Integer;
+begin
+  // /DIR names the folder outright: an administrator other than the signed-in user would
+  // otherwise get their own previous folder, or the default one.
+  Params := ElevatedParam + ' /LANG=' + ActiveLanguage + ' /DIR=' + AddQuotes(Dir);
+  if Accepted then
+    Params := Params + ' ' + AcceptedParam;
+  for I := 1 to ParamCount do
+  begin
+    S := ParamStr(I);
+    // /SL5, /SPAWNWND and /NOTIFYWND belong to this run of Setup's loader, not the next.
+    if not (StartsWithText(S, '/SL5=') or StartsWithText(S, '/SPAWNWND=') or StartsWithText(S, '/NOTIFYWND=')
+      or StartsWithText(S, '/LANG=') or StartsWithText(S, '/DIR=')) then
+      Params := Params + ' ' + AddQuotes(S);
+  end;
+
+  Result := ShellExec('runas', ExpandConstant('{srcexe}'), Params, '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
+  Log(Format('Restarting elevated into %s: %d (%d)', [Dir, Ord(Result), ErrorCode]));
+end;
+
+// An update of a copy in Program Files: ask for administrator approval right away, before
+// any page, rather than failing at the end of the wizard.
+function InitializeSetup: Boolean;
+var
+  Dir: String;
+begin
+  Result := True;
+  if IsAdmin or HasParam(ElevatedParam) then
+    Exit;
+  if not RegQueryStringValue(HKCU, UninstallKey, 'Inno Setup: App Path', Dir) or not NeedsAdminFor(Dir) then
+    Exit;
+
+  if not RestartElevated(Dir, False) then
+    SuppressibleMsgBox(FmtMessage(CustomMessage('NeedsAdmin'), [Dir]), mbError, MB_OK, IDOK);
+  Result := False;
+end;
+
+// After a restart from the folder page the user has seen these already.
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := ((PageID = wpLicense) or (PageID = wpInfoBefore)) and HasParam(AcceptedParam);
 end;
 
 { Asks a running NetFluss to quit cleanly — it saves statistics and the timer on the way
@@ -192,7 +278,8 @@ begin
   Result := '';
   MoveHelper := HelperRunsFromApp;
 
-  { Fail here, before a file is touched, rather than halfway through copying. }
+  { Fail here, before a file is touched, rather than halfway through copying. Only when the
+    restart with administrator approval did not happen. }
   if (MoveHelper or AppNeedsAdmin) and not IsAdmin then
   begin
     Result := FmtMessage(CustomMessage('NeedsAdmin'), [ExpandConstant('{app}')]);
@@ -236,12 +323,33 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
-  if (CurPageID = wpSelectDir)
-    and SameOrInside(WizardDirValue, ExpandConstant('{commonpf}\NetFluss Helper')) then
+  if CurPageID <> wpSelectDir then
+    Exit;
+
+  if SameOrInside(WizardDirValue, ExpandConstant('{commonpf}\NetFluss Helper')) then
   begin
     MsgBox(CustomMessage('HelperFolder'), mbError, MB_OK);
     Result := False;
+    Exit;
   end;
+
+  // A new installation into Program Files: carry on in an elevated Setup, on the same folder.
+  if NeedsAdminFor(WizardDirValue) and not IsAdmin then
+  begin
+    Result := False;
+    if MsgBox(FmtMessage(CustomMessage('FolderNeedsAdmin'), [WizardDirValue]), mbConfirmation, MB_YESNO) = IDYES then
+      if RestartElevated(WizardDirValue, True) then
+      begin
+        HandedOver := True;
+        WizardForm.Close;
+      end;
+  end;
+end;
+
+procedure CancelButtonClick(CurPageID: Integer; var Cancel, Confirm: Boolean);
+begin
+  if HandedOver then
+    Confirm := False;
 end;
 
 function InitializeUninstall: Boolean;
