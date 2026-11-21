@@ -82,6 +82,7 @@
 "(auto)" = "(auto)";
 "Connecting…" = "Connecting…";
 "Gathering data…" = "Gathering data…";
+"System Default DNS" = "System Default";
 "Automatic (DHCP)" = "Automatic (DHCP)";
 "Bandwidth Statistics" = "Bandwidth Statistics";
 "Speed Test…" = "Speed Test…";

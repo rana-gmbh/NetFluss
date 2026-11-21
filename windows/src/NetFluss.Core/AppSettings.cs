@@ -373,7 +373,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     public string DnsPresetDisplayName(DnsPreset preset)
         => preset.IsBuiltIn && DnsPresetCustomNames.TryGetValue(preset.Id, out var custom) && !string.IsNullOrWhiteSpace(custom)
             ? custom
-            : preset.IsBuiltIn && !preset.IsEncrypted ? Localization.L(preset.Name) : preset.Name;
+            : preset.IsBuiltIn && !preset.IsEncrypted ? Localization.L(preset.TranslationKey) : preset.Name;
 
     /// <summary>
     /// Renames a built-in profile, or restores its own name when given blank. Custom profiles
@@ -388,11 +388,11 @@ public sealed class AppSettings : INotifyPropertyChanged
 
         var trimmed = name?.Trim();
         var updated = new Dictionary<string, string>(DnsPresetCustomNames, StringComparer.Ordinal);
-        var builtInName = DnsPreset.BuiltIn.First(preset => preset.Id == presetId).Name;
+        var builtIn = DnsPreset.BuiltIn.First(preset => preset.Id == presetId);
 
         // Typing the original name back counts as clearing the rename, so the profile goes on
         // following its translation rather than pinning the English word.
-        if (string.IsNullOrEmpty(trimmed) || trimmed == builtInName || trimmed == Localization.L(builtInName))
+        if (string.IsNullOrEmpty(trimmed) || trimmed == builtIn.Name || trimmed == Localization.L(builtIn.TranslationKey))
         {
             if (!updated.Remove(presetId))
             {

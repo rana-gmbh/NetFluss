@@ -366,6 +366,14 @@ struct DNSPreset: Identifiable, Codable, Equatable, Sendable {
         return .plain(servers)
     }
 
+    /// A built-in's own name in the app language. Only System Default is
+    /// translated, the others are brand names. It has a key of its own because the
+    /// language picker's "System Default" means the system language, which German
+    /// calls "Systemsprache" (#71).
+    var localizedName: String {
+        isBuiltIn && id == "system" ? L10n.text("System Default DNS") : name
+    }
+
     /// Same resolver, different label.
     func renamed(_ newName: String) -> DNSPreset {
         DNSPreset(id: id, name: newName, servers: servers, isBuiltIn: isBuiltIn, transport: transport)

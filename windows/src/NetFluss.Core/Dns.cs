@@ -83,6 +83,14 @@ public sealed record DnsPreset
     [JsonIgnore]
     public DnsEncryption? Encryption => IsEncrypted ? new DnsEncryption(Transport!.Value, Endpoint!) : null;
 
+    /// <summary>
+    /// The string catalogue key for a built-in's translated name: the name itself, except for
+    /// System Default. The language picker's "System Default" means the system language, which
+    /// German calls "Systemsprache", so the DNS preset has a key of its own (issue #71).
+    /// </summary>
+    [JsonIgnore]
+    public string TranslationKey => IsBuiltIn && Id == "system" ? "System Default DNS" : Name;
+
     /// <summary>Plain and encrypted built-ins, in the macOS order.</summary>
     public static readonly IReadOnlyList<DnsPreset> BuiltIn = [.. PlainBuiltIns(), .. EncryptedBuiltIns()];
 

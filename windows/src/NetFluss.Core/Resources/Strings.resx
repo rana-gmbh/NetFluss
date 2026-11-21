@@ -293,6 +293,9 @@
   <data name="Gathering data…" xml:space="preserve">
     <value>Gathering data…</value>
   </data>
+  <data name="System Default DNS" xml:space="preserve">
+    <value>System Default</value>
+  </data>
   <data name="Automatic (DHCP)" xml:space="preserve">
     <value>Automatic (DHCP)</value>
   </data>

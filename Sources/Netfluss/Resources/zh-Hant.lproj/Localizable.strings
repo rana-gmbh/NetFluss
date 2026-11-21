@@ -82,6 +82,7 @@
 "(auto)" = "（自動）";
 "Connecting…" = "正在連接…";
 "Gathering data…" = "正在收集資料…";
+"System Default DNS" = "系統預設";
 "Automatic (DHCP)" = "自動（DHCP）";
 "Bandwidth Statistics" = "頻寬統計";
 "Speed Test…" = "測速…";

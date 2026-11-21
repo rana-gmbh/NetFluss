@@ -313,3 +313,59 @@ public class DnsProfileSettingsTests
         }
     }
 }
+
+/// <summary>
+/// System Default is "Systemstandard" as a DNS profile but "Systemsprache" in the language
+/// picker, so the profile has a catalogue key of its own (issue #71).
+/// </summary>
+[Collection(LocalizationCollection.Name)]
+public class DnsSystemDefaultNameTests : IDisposable
+{
+    private static DnsPreset SystemDefault => DnsPreset.BuiltIn.First(preset => preset.Id == "system");
+
+    public void Dispose() => Localization.Use(AppLanguage.System);
+
+    [Theory]
+    [InlineData(AppLanguage.English, "System Default")]
+    [InlineData(AppLanguage.German, "Systemstandard")]
+    [InlineData(AppLanguage.SimplifiedChinese, "系统默认")]
+    [InlineData(AppLanguage.TraditionalChinese, "系統預設")]
+    public void Profile_UsesTheDnsTranslation(AppLanguage language, string expected)
+    {
+        Localization.Use(language);
+
+        Assert.Equal(expected, new AppSettings().DnsPresetDisplayName(SystemDefault));
+    }
+
+    [Fact]
+    public void LanguagePicker_KeepsItsOwnTranslation()
+    {
+        Localization.Use(AppLanguage.German);
+
+        Assert.Equal("Systemsprache", Localization.DisplayName(AppLanguage.System));
+    }
+
+    [Fact]
+    public void RenamedProfile_KeepsTheUsersName()
+    {
+        Localization.Use(AppLanguage.German);
+        var settings = new AppSettings();
+        settings.RenameDnsPreset("system", "Router");
+
+        Assert.Equal("Router", settings.DnsPresetDisplayName(SystemDefault));
+    }
+
+    [Theory]
+    [InlineData("System Default")]
+    [InlineData("Systemstandard")]
+    public void TypingTheOriginalNameBack_ClearsTheRename(string name)
+    {
+        Localization.Use(AppLanguage.German);
+        var settings = new AppSettings();
+        settings.RenameDnsPreset("system", "Router");
+        settings.RenameDnsPreset("system", name);
+
+        Assert.Empty(settings.DnsPresetCustomNames);
+        Assert.Equal("Systemstandard", settings.DnsPresetDisplayName(SystemDefault));
+    }
+}

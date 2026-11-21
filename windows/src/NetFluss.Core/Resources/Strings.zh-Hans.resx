@@ -293,6 +293,9 @@
   <data name="Gathering data…" xml:space="preserve">
     <value>正在收集数据…</value>
   </data>
+  <data name="System Default DNS" xml:space="preserve">
+    <value>系统默认</value>
+  </data>
   <data name="Automatic (DHCP)" xml:space="preserve">
     <value>自动（DHCP）</value>
   </data>

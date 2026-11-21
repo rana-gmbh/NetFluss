@@ -1943,12 +1943,7 @@ struct PreferencesView: View {
         // Reading the tick is what makes SwiftUI redraw after a rename: the
         // names live in UserDefaults, which the view does not observe.
         _ = dnsPresetRenameTick
-        let names = NetworkMonitor.dnsPresetCustomNames()
-        let builtIn = DNSPreset.builtIn.map { preset -> DNSPreset in
-            guard let name = names[preset.id], !name.isEmpty else { return preset }
-            return preset.renamed(name)
-        }
-        return builtIn + customDNSPresets
+        return NetworkMonitor.displayedBuiltInDNSPresets() + customDNSPresets
     }
 
     private var hiddenAppsButtonTitle: String {

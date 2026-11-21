@@ -1105,7 +1105,10 @@ final class NetworkMonitor: NSObject, ObservableObject {
     static func setDNSPresetName(_ name: String?, for presetID: String) {
         var names = dnsPresetCustomNames()
         let trimmed = (name ?? "").trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty {
+        let builtIn = DNSPreset.builtIn.first { $0.id == presetID }
+        // Typing the original name back clears the rename, so the preset goes on
+        // following its translation rather than pinning one language's word.
+        if trimmed.isEmpty || trimmed == builtIn?.name || trimmed == builtIn?.localizedName {
             names.removeValue(forKey: presetID)
         } else {
             names[presetID] = trimmed
@@ -1113,15 +1116,21 @@ final class NetworkMonitor: NSObject, ObservableObject {
         UserDefaults.standard.set(names, forKey: "dnsPresetCustomNames")
     }
 
+    /// The built-ins as they are shown: the user's name for one, otherwise its own
+    /// name in the app language.
+    static func displayedBuiltInDNSPresets() -> [DNSPreset] {
+        let customNames = dnsPresetCustomNames()
+        return DNSPreset.builtIn.map { preset in
+            if let name = customNames[preset.id], !name.isEmpty { return preset.renamed(name) }
+            return preset.renamed(preset.localizedName)
+        }
+    }
+
     /// Presets in display order. Hidden ones are only for the popover to leave
     /// out: a rule, a VPN profile or the menu bar label may still name one, so
     /// those ask for `includeHidden`, which appends them after the visible ones.
     static func allDNSPresets(includeHidden: Bool = false) -> [DNSPreset] {
-        let customNames = dnsPresetCustomNames()
-        var presets = DNSPreset.builtIn.map { preset -> DNSPreset in
-            guard let name = customNames[preset.id], !name.isEmpty else { return preset }
-            return preset.renamed(name)
-        }
+        var presets = displayedBuiltInDNSPresets()
         if let data = UserDefaults.standard.data(forKey: "customDNSPresets"),
            let custom = try? JSONDecoder().decode([DNSPreset].self, from: data) {
             presets += custom
