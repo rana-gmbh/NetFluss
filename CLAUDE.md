@@ -132,11 +132,17 @@ Both are read in `MenuBarView.filteredAdapters()` and `PreferencesView.sortedAda
 
 ## Releasing
 
-1. Commit and push to `main`
-2. `gh release create vX.Y.Z --title "Netfluss X.Y.Z" --latest --notes "..."`
-   (this pushes the tag, triggering the workflow which builds, signs, notarizes, staples, and uploads the zip)
-3. After the workflow completes, get the SHA256:
-   `curl -sL https://github.com/rana-gmbh/netfluss/releases/download/vX.Y.Z/Netfluss-X.Y.Z.zip | shasum -a 256`
+Every version ships for macOS and Windows together, from the same commit.
+
+1. Commit and push to `main`; Windows CI must pass on the commit
+2. `Tools/release.sh X.Y.Z notes.md` (`--dry-run` checks only). It creates two GitHub releases from the same notes:
+   `vX.Y.Z` "NetFluss X.Y.Z" (latest) and `win-vX.Y.Z` "NetFluss X.Y.Z for Windows" (never latest). Their tags start
+   `release.yml` (builds, signs, notarizes, staples, uploads the zip and the Sparkle appcast) and `windows-release.yml`.
+   Keep them two releases: Sparkle reads `releases/latest/download/appcast.xml`, and Windows installs only look for
+   `win-v` tags. `--mac-only` / `--windows-only` release one platform; Windows betas are `X.Y.Z-beta.N --windows-only`.
+   Run it locally: a tag pushed by a workflow's `GITHUB_TOKEN` starts no other workflow
+3. After the Mac workflow completes, get the SHA256:
+   `curl -sL https://github.com/rana-gmbh/netfluss/releases/download/vX.Y.Z/NetFluss-X.Y.Z.zip | shasum -a 256`
 4. Update `Casks/netfluss.rb` in the `rana-gmbh/homebrew-netfluss` tap with the new version and SHA256
 
 ## Commit style

@@ -68,14 +68,23 @@ of the same name holds the key, and a copy must be kept offline — without it, 
 copies can no longer update themselves. Set `NETFLUSS_SIGN_PFX` and
 `NETFLUSS_SIGN_PASSWORD` to also Authenticode-sign the executables and installers.
 
-Releases are cut by tag; `.github/workflows/windows-release.yml` does the rest:
+Releases are cut by tag; `.github/workflows/windows-release.yml` does the rest. Every
+version ships for macOS and Windows together, from the same commit, with
+`Tools/release.sh` at the repository root:
 
 ```
-gh release create win-v1.0.0 --title "NetFluss for Windows 1.0.0" --latest=false --notes "…"
+Tools/release.sh 2.7.3 notes.md            # v2.7.3 (Mac, latest) + win-v2.7.3 (Windows)
+Tools/release.sh 2.7.3 notes.md --dry-run  # checks only
 ```
+
+It refuses unless `main` is clean and pushed, the tags are new on GitHub and Windows CI
+passed on the commit, then creates both releases; their tags start both workflows. They
+stay two releases because the Mac's Sparkle feed must come from the "latest" release and
+Windows installs only look for `win-v` tags (`UpdateLookup`). `--windows-notes` gives
+Windows its own notes; `--mac-only` and `--windows-only` release one platform.
 
 **Betas** are tagged `win-vX.Y.Z-beta.N` (also `alpha`/`rc`) and published as GitHub
-pre-releases, with `--prerelease`. Versions are ordered by semver (2.6.0-beta.1 <
+pre-releases: `Tools/release.sh 2.7.4-beta.1 notes.md --windows-only`. Versions are ordered by semver (2.6.0-beta.1 <
 2.6.0-beta.2 < 2.6.0). Only a pre-release build is offered pre-releases, so stable users
 never see a beta and beta testers get the next beta and then the release, which returns
 them to the stable channel. `NETFLUSS_UPDATE_PRERELEASES=1` opts any build into
