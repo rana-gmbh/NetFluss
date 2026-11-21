@@ -10,6 +10,8 @@
 #   Tools/release.sh 2.7.3 notes.md --mac-only           a Mac-only release
 #   Tools/release.sh 2.7.3 notes.md --dry-run            checks only, creates nothing
 #
+# A two-part version (2.8) is v2.8 on the Mac and win-v2.8.0 on Windows.
+#
 # Why two GitHub releases rather than one: the Mac's Sparkle feed is
 # releases/latest/download/appcast.xml, so the Mac release must be "latest", and Windows
 # installs only look for releases tagged win-v… (windows/src/NetFluss.Core/UpdateLookup.cs).
@@ -26,7 +28,7 @@ REPO="rana-gmbh/NetFluss"
 die() { echo "error: $*" >&2; exit 1; }
 
 usage() {
-    sed -n '4,11p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '4,13p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
 }
 
@@ -66,8 +68,12 @@ elif [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.[0-9]+$ ]]; then
 else
     die "version must be X.Y.Z, or X.Y.Z-beta.N with --windows-only; got '$VERSION'."
 fi
-if [[ $WINDOWS -eq 1 && ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-    die "Windows versions need three parts (X.Y.Z); got '$VERSION'."
+# Windows versions have three parts (the installer and the updater compare X.Y.Z), so a Mac
+# "2.8" ships as Windows 2.8.0, still titled "NetFluss 2.8 for Windows".
+if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+    WIN_VERSION="$VERSION.0"
+else
+    WIN_VERSION="$VERSION"
 fi
 
 cd "$(git rev-parse --show-toplevel)"
@@ -90,7 +96,7 @@ SHA="$(git rev-parse HEAD)"
 
 # Tags are checked on GitHub, not locally: local tags can be stale or differ from GitHub's.
 MAC_TAG="v$VERSION"
-WIN_TAG="win-v$VERSION"
+WIN_TAG="win-v$WIN_VERSION"
 tag_exists() {
     [[ -n "$(git ls-remote --tags origin "refs/tags/$1")" ]] || gh release view "$1" --repo "$REPO" >/dev/null 2>&1
 }
