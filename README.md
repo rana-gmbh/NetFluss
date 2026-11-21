@@ -4,34 +4,31 @@
 [![Downloads](https://img.shields.io/github/downloads/rana-gmbh/NetFluss/total)](https://github.com/rana-gmbh/NetFluss/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-A native macOS menubar app showing real-time upload and download rates, router-wide bandwidth, historical traffic statistics, and built-in speed testing.
+A native network monitor for **macOS and Windows**: real-time upload and download rates in the menu bar or on the taskbar, the apps using your bandwidth, router-wide traffic, historical statistics, DNS switching with encrypted DNS, a built-in VPN client and speed testing.
 
-Latest release: **NetFluss 2.7.2**
+Latest release: **NetFluss 2.8**, for Mac and Windows
 
-## NetFluss for Windows — public beta
+## NetFluss for Mac and Windows
 
-NetFluss now runs on Windows too: a native Windows 10 and 11 app with the same feature set as NetFluss 2.7.2 for Mac — live rates on the taskbar, the popover, Bandwidth Statistics, Speed Test, Network Slice, router monitoring, automatic DNS and the built-in VPN client.
+NetFluss is a native app on both platforms, with the same features and released together under the same version number.
 
-**[Download NetFluss 2.7.2 Beta 2 for Windows](https://github.com/rana-gmbh/NetFluss/releases/tag/win-v2.7.2-beta.2)** — the installer needs no administrator rights and keeps itself up to date. It is code-signed by Rana GmbH; while the new publisher builds up a reputation, SmartScreen may still ask you to confirm the first start (**More info → Run anyway**). Feedback is very welcome: [open an issue](https://github.com/rana-gmbh/NetFluss/issues/new) and mention Windows. Building it yourself is described in [windows/README.md](windows/README.md).
+- **Mac:** download `NetFluss-2.8.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), or install it with [Homebrew](#install). Signed and notarized with Rana GmbH's Apple Developer ID.
+- **Windows:** download the installer from [NetFluss 2.8 for Windows](https://github.com/rana-gmbh/NetFluss/releases/tag/win-v2.8.0) (x64 or Arm). It needs no administrator rights, keeps itself up to date, and is code-signed by Rana GmbH with Microsoft's Azure Artifact Signing. While the publisher builds up a reputation, SmartScreen may still ask you to confirm the first start (**More info → Run anyway**). Building it yourself is described in [windows/README.md](windows/README.md).
 
-### New in Windows 2.7.2 Beta
-
-- **Automatic DNS by Wi-Fi network**, with rules pinned to an access point if you like, a catch-all for other networks, and patience for hotel and café logins.
-- **A connection indicator** next to the rates (connected, no internet, not connected), the **active resolver's name**, two new VPN marks (**Globe** and **Bars**) and a **rate alignment** setting. The two-line layout now keeps upload and download together.
-- **Renamable DNS profiles**, **per-node proxy statistics** for Clash-API clients, **Search settings** in Preferences and a short welcome on new installs.
-- **Disconnect really disconnects:** quitting, updating or signing out takes the VPN down, a tunnel left by a crash is cleaned up, and Windows VPN connections are followed live.
-- **Imported WireGuard configs are checked:** script lines that could run with administrator rights are refused, naming the line. Unreadable statistics are restored from a daily backup.
-- **Updates like on the Mac:** a found update opens a window with its release notes and **Install Update**, **Remind Me Later** and **Skip This Version** — already downloaded and verified, so installing is quick. Or let updates install themselves while NetFluss isn't in use.
-- **M-Lab speed test measures upload again** ([#64](https://github.com/rana-gmbh/NetFluss/issues/64)).
-- **Code-signed by Rana GmbH** (Beta 2): Windows shows the publisher, and Smart App Control no longer blocks NetFluss.
-
-Updating: 2.7.2 Beta 1 offers Beta 2 in its update window; 2.6 Beta 2 offers it under About → Install and Relaunch, and NetFluss then asks once to update the helper, which needs administrator approval.
-
-### Code signing
-
-NetFluss for Windows is signed by Rana GmbH with Microsoft's Azure Artifact Signing; the macOS app is signed and notarized with Rana GmbH's Apple Developer ID. Every Windows release is built from this repository by [GitHub Actions](.github/workflows/windows-release.yml) and signed there, from a release tag only.
+Every release is built from this repository by GitHub Actions ([Mac](.github/workflows/release.yml), [Windows](.github/workflows/windows-release.yml)) and signed there, from a release tag only.
 
 **Privacy:** see the privacy policy for [Windows](PRIVACY.md) or [Mac](PRIVACY-macOS.md). NetFluss sends no telemetry. The few online lookups it makes on its own — the daily update check and the public IP and country lookups — are listed there, and each can be switched off in Preferences, and on Windows in the installer too.
+
+## New in 2.8
+
+- **Encrypted DNS: DNS-over-HTTPS and DNS-over-TLS.** The DNS switcher now offers DoH and DoT versions of Cloudflare, Google, Quad9, Mullvad and AdGuard, plus OpenDNS over DoH, and you can add your own server. They work in the popover and in the automatic DNS rules per Wi-Fi network. Plain DNS lookups travel unencrypted, so the café's Wi-Fi or your provider can read them and even send you to a fake address; with DoH or DoT they are encrypted and the server's certificate is checked. On the Mac it is built into macOS (switch NetFluss on once in System Settings → Network → VPN & Filters); on Windows, DoH needs Windows 11 and DoT Windows 11 24H2.
+- **NetFluss for Windows is out of beta:** the first stable release, code-signed and at feature parity with the Mac. From now on both are released together.
+- **Lighter on the Mac.** Top Apps, app statistics and the Network Slice read the kernel's own network statistics; NetFluss no longer starts `nettop`, which could take more than a full CPU core on macOS 27. Per-app download figures are correct again (on macOS 27 `netstat` reports downloads twice as large).
+- **Fixes:** on Windows, the M-Lab speed test measures upload at full speed, and updating an installation in Program Files no longer fails ([#70](https://github.com/rana-gmbh/NetFluss/issues/70)). On the Mac, the M-Lab upload no longer shows 0 Mbit/s ([#64](https://github.com/rana-gmbh/NetFluss/issues/64)).
+
+<p align="center">
+  <img src="Screenshots/NetFluss%20DoH%20DoT.png" width="380" alt="The NetFluss popover with Cloudflare (DoH) active, shown in the menu bar">
+</p>
 
 ## New in 2.7.2
 
@@ -363,16 +360,17 @@ OpenVPN and WireGuard now need macOS 14 or later; IKEv2 and system VPNs still wo
 
 ## Requirements
 
-- macOS 13 Ventura or later (OpenVPN and WireGuard need macOS 14 Sonoma or later)
-- Xcode 15+ or Swift 5.10+ toolchain (to build from source)
+- **Mac:** macOS 13 Ventura or later (OpenVPN and WireGuard need macOS 14 Sonoma or later)
+- **Windows:** Windows 10 version 2004 or later, or Windows 11, on x64 or Arm. Encrypted DNS needs Windows 11 (DNS-over-TLS: 24H2)
+- To build from source: Xcode 15+ or a Swift 5.10+ toolchain for the Mac; the .NET 10 SDK for Windows ([windows/README.md](windows/README.md))
 
 ## Install
 
-Download `NetFluss-2.5.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
+**Mac:** download `NetFluss-2.8.zip` from the [latest release](https://github.com/rana-gmbh/NetFluss/releases/latest), unzip it, and move `NetFluss.app` to `/Applications`.
 
 NetFluss is notarized and signed with a Developer ID certificate, so Gatekeeper should clear it automatically on first launch.
 
-You can also use Homebrew to install NetFluss:
+You can also use Homebrew to install NetFluss on the Mac:
 
 ```bash
 brew tap rana-gmbh/netfluss
@@ -381,6 +379,8 @@ brew install --cask netfluss
 ```
 
 Homebrew requires third-party taps to be trusted before it will load them, so the `brew trust` step is needed once. Without it, the install stops with `Error: Refusing to load cask rana-gmbh/netfluss/netfluss from untrusted tap`. Later updates come through `brew upgrade --cask netfluss`.
+
+**Windows:** run `NetFluss-Setup-2.8.0-x64.exe` (or `-arm64`) from [NetFluss 2.8 for Windows](https://github.com/rana-gmbh/NetFluss/releases/tag/win-v2.8.0). A portable zip is there too.
 
 ## Build from source
 
@@ -405,7 +405,7 @@ Or open `Package.swift` in Xcode and run the executable scheme.
 
 Thanks to everyone who has improved NetFluss with their code:
 
-- [ninelives233](https://github.com/ninelives233): NetFluss no longer falls back to a CPU-heavy `nettop` when macOS reports harmless network-statistics errors ([#66](https://github.com/rana-gmbh/NetFluss/pull/66), in 2.7.3).
+- [ninelives233](https://github.com/ninelives233): NetFluss no longer falls back to a CPU-heavy `nettop` when macOS reports harmless network-statistics errors ([#66](https://github.com/rana-gmbh/NetFluss/pull/66), in 2.8).
 
 ## Buy me a coffee
 
