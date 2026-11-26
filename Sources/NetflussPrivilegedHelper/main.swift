@@ -147,9 +147,10 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         // user's Library, where anything running as the user could change it
         // after the check.
         let stage: String
+        let notes: [String]
         do {
             Self.cleanupStaleStages(keeping: tunnelsQueue.sync { Set(ovpnStages.values) })
-            stage = try Self.stageOpenVPNProfile(from: configPath)
+            (stage, notes) = try Self.stageOpenVPNProfile(from: configPath)
         } catch {
             let message = Self.refusalMessage(error, kind: "OpenVPN")
             Self.writeVPNLog("Refused config: \(message)", to: logPath)
@@ -161,13 +162,15 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
         // reason (openvpn validates options and exits before the socket exists on
         // many config errors). script-security 1 lets openvpn call its built-in
         // ifconfig/route but not user-defined up/down scripts from the config.
+        // The helper starts the log with what staging changed, so openvpn appends.
+        Self.writeVPNLog(notes.map { "NetFluss: \($0)\n" }.joined(), to: logPath)
         let args = [
             "--config", stagedConfig,
             "--management", managementSocketPath, "unix",
             "--management-client-user", socketOwner,
             "--management-hold",
             "--management-query-passwords",
-            "--log", logPath,
+            "--log-append", logPath,
             "--verb", "3",
             "--script-security", "1"
         ]
@@ -374,11 +377,17 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
     }
 
     /// Check an OpenVPN config and copy it, with the side files it names, into a
-    /// fresh private folder. Returns that folder. openvpn reads everything from
-    /// there, so nothing the user can reach is looked at again after the check.
-    private static func stageOpenVPNProfile(from configPath: String) throws -> String {
-        let bytes = try readProfileFile(atPath: configPath)
-        let sideFiles = try OpenVPNConfigPolicy.referencedFiles(in: bytes)
+    /// fresh private folder. Returns that folder and what the copy changed.
+    /// openvpn reads everything from there, so nothing the user can reach is
+    /// looked at again after the check.
+    private static func stageOpenVPNProfile(from configPath: String) throws -> (stage: String, notes: [String]) {
+        let original = try readProfileFile(atPath: configPath)
+        let sideFiles = try OpenVPNConfigPolicy.referencedFiles(in: original)
+        // Routes for networks the Mac is directly connected to (#72). The result
+        // goes through the policy again: what runs as root is what was checked.
+        let guarded = try OpenVPNRouteGuard.guarded(original, connected: OpenVPNRouteGuard.connectedSubnets())
+        let bytes = guarded.config
+        _ = try OpenVPNConfigPolicy.referencedFiles(in: bytes)
 
         let source = (configPath as NSString).deletingLastPathComponent
         let stage = try stageRoot() + "/\(ovpnStagePrefix)\(UUID().uuidString)"
@@ -399,7 +408,7 @@ private final class NetflussPrivilegedHelper: NSObject, NetflussPrivilegedHelper
             try? fm.removeItem(atPath: stage)
             throw error
         }
-        return stage
+        return (stage, guarded.notes)
     }
 
     /// A side file's contents, or nil if it doesn't exist, which is left for

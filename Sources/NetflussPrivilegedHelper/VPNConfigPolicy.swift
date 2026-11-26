@@ -108,8 +108,8 @@ enum OpenVPNConfigPolicy {
         "[[INLINE]]", "[inline]", "auto", "auto-nct", "none", "stdin"
     ]
 
-    private static let utf8BOM: [UInt8] = [0xEF, 0xBB, 0xBF]
-    private static let connectionClose = Array("</connection>".utf8)
+    static let utf8BOM: [UInt8] = [0xEF, 0xBB, 0xBF]
+    static let connectionClose = Array("</connection>".utf8)
 
     /// Checks a config and returns the side files it needs, relative to it.
     static func referencedFiles(in config: [UInt8]) throws -> [String] {
@@ -206,14 +206,14 @@ enum OpenVPNConfigPolicy {
 
     /// `read_inline_file`: a block ends at the first line that, after leading
     /// whitespace, *starts with* its close tag.
-    private static func closes(_ line: ArraySlice<UInt8>, tag: [UInt8]) -> Bool {
+    static func closes(_ line: ArraySlice<UInt8>, tag: [UInt8]) -> Bool {
         line.drop(while: isSpace).starts(with: tag)
     }
 
     /// `parse_line`, state for state, without its 256-byte parameter limit (which
     /// the line limit above already covers). Returns the line's parameters; a
     /// line openvpn would reject is refused here too.
-    private static func tokens(of line: ArraySlice<UInt8>, lineNumber: Int) throws -> [[UInt8]] {
+    static func tokens(of line: ArraySlice<UInt8>, lineNumber: Int) throws -> [[UInt8]] {
         enum State { case initial, unquoted, quoted, singleQuoted }
 
         var parameters: [[UInt8]] = []
@@ -270,7 +270,7 @@ enum OpenVPNConfigPolicy {
     }
 
     /// `space()` in options.c: NUL or C-locale `isspace`.
-    private static func isSpace(_ byte: UInt8) -> Bool {
+    static func isSpace(_ byte: UInt8) -> Bool {
         byte == 0 || byte == 0x20 || (0x09...0x0D).contains(byte)
     }
 }
@@ -380,6 +380,6 @@ enum HelperInputPolicy {
 }
 
 /// A short, safe rendering of config bytes for comparisons and error messages.
-private func printable<Bytes: Collection>(_ bytes: Bytes) -> String where Bytes.Element == UInt8 {
+func printable<Bytes: Collection>(_ bytes: Bytes) -> String where Bytes.Element == UInt8 {
     String(String(decoding: bytes, as: UTF8.self).prefix(64))
 }
